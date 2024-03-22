@@ -2,13 +2,14 @@
 
 ## Introduction
 
-This issuer service is designed to implement the OpenID Foundation's workflow for Verifiable Credential Issuance (OID4VCI), adhering to the specifications set forth by the European Wallet Consortium (EWC). By following the detailed requirements and guidelines of the EWC project, specifically as outlined in the [EWC RFC001](https://github.com/EWC-consortium/eudi-wallet-rfcs/blob/main/ewc-rfc001-issue-verifiable-credential.md), this service aims to streamline the issuance of verifiable credentials across the European Wallet Ecosystem.
+This issuer service is designed to implement the OpenID Foundation's workflow for Verifiable Credential Issuance (OID4VCI), adhering to the specifications set forth by the EU Digital Identity
+Wallet Consortium (EWC). By following the detailed requirements and guidelines of the EWC project, specifically as outlined in the [EWC RFC001](https://github.com/EWC-consortium/eudi-wallet-rfcs/blob/main/ewc-rfc001-issue-verifiable-credential.md), this service aims to streamline the issuance of verifiable credentials across the European Wallet Ecosystem.
 
 ## Features
 
 - **OID4VCI Compliance**: Implements the OID4VCI workflow, ensuring a standardized approach to verifiable credential issuance across any issuer within the European Wallet Ecosystem.
-- **Interoperability**: Designed with interoperability at its core, this service minimizes risks and promotes seamless integration within the EUDI wallet ecosystem, adhering to the specifications and requirements of the ARF.
-- **Security and Privacy**: Prioritizes the security and privacy of credential data, aligning with the European Digital Identity Wallet Architecture and Reference Framework's guidelines.
+- **Interoperability**: Designed with interoperability at its core, this service promotes seamless integration within the EUDI wallet ecosystem, adhering to the specifications and requirements of the ARF.
+ 
 
 ## Reference Specifications
 
@@ -19,12 +20,14 @@ This issuer service is designed to implement the OpenID Foundation's workflow fo
 ## Getting Started
 
 To get started with the issuer service, follow these steps:
-
-(Provide installation and setup instructions here)
+update package.json with the url that the services will run on (requires https)
+e.g. `"dev": "SERVER_URL=https://6522-2001-648-2050-6021-4965-2baf-2b20-4a1.ngrok-free.app node server.js"`
+start the issuer service
+`npm run dev`
 
 ## Usage
 
-(Provide basic usage instructions, such as how to issue a credential)
+TBD
 
 ## Contributing
 
