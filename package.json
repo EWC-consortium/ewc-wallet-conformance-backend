@@ -1,0 +1,22 @@
+{
+  "name": "rfc-issuer-v1",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "SERVER_URL=https://6522-2001-648-2050-6021-4965-2baf-2b20-4a1.ngrok-free.app node server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@sd-jwt/core": "^0.6.1",
+    "@sd-jwt/crypto-nodejs": "^0.6.1",
+    "@sd-jwt/sd-jwt-vc": "^0.6.1",
+    "express": "^4.18.3",
+    "jsonwebtoken": "^9.0.2",
+    "node-jose": "^2.2.0",
+    "waltid-sd-jwt": "^1.2311200231.0"
+  }
+}

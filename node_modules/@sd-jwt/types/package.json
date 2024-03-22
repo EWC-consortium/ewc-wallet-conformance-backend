@@ -1,0 +1,57 @@
+{
+  "name": "@sd-jwt/types",
+  "version": "0.6.1",
+  "description": "sd-jwt draft 7 implementation in typescript",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "rm -rf **/dist && tsup",
+    "lint": "biome lint ./src",
+    "test": "pnpm run test:node && pnpm run test:browser && pnpm run test:cov",
+    "test:node": "vitest run ./src/test/*.spec.ts",
+    "test:browser": "vitest run ./src/test/*.spec.ts --environment jsdom",
+    "test:cov": "vitest run --coverage"
+  },
+  "keywords": [
+    "sd-jwt",
+    "sdjwt",
+    "sd-jwt-vc"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openwallet-foundation-labs/sd-jwt-js"
+  },
+  "author": "Lukas.J.Han <lukas.j.han@gmail.com>",
+  "homepage": "https://github.com/openwallet-foundation-labs/sd-jwt-js/wiki",
+  "bugs": {
+    "url": "https://github.com/openwallet-foundation-labs/sd-jwt-js/issues"
+  },
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "tsup": {
+    "entry": [
+      "./src/index.ts"
+    ],
+    "sourceMap": true,
+    "splitting": false,
+    "clean": true,
+    "dts": true,
+    "format": [
+      "cjs",
+      "esm"
+    ]
+  },
+  "gitHead": "f19b76c7c3a66c539a5eac06ff20ad2ac17dcf47"
+}
