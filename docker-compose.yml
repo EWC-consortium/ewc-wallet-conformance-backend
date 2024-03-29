@@ -1,0 +1,9 @@
+version: '3'
+
+services:
+
+  redis:
+    image: endimion13/rfc-100-issuer:0.0.1 
+    container_name: rfc-100
+    ports:
+      - "3000:3000"

@@ -1,7 +1,6 @@
 import express from "express";
 import fs from "fs";
-import jose from "node-jose";
-import sdlib from "waltid-sd-jwt";
+import { v4 as uuidv4 } from "uuid";
 import { pemToJWK, generateNonce } from "./utils/cryptoUtils.js";
 import {
   buildAccessToken,
@@ -15,6 +14,10 @@ import {
   generateSalt,
 } from "./utils/sdjwtUtils.js";
 
+import qr from "qr-image";
+import imageDataURI from "image-data-uri";
+import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
+
 const router = express.Router();
 
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
@@ -22,9 +25,8 @@ const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
 
-console.log("privateKey")
-console.log(privateKey)
-
+console.log("privateKey");
+console.log(privateKey);
 
 const issuerConfig = JSON.parse(
   fs.readFileSync("./data/issuer-config.json", "utf-8")
@@ -34,6 +36,10 @@ const oauthConfig = JSON.parse(
 );
 
 const jwks = pemToJWK(publicKeyPem, "public");
+
+//TODO  move this into a service that caches these (e.g via redis or something)
+let sessions = [];
+let issuanceResults = [];
 
 router.get("/.well-known/openid-credential-issuer", async (req, res) => {
   // console.log("1 ROUTE /.well-known/openid-credential-issuer CALLED!!!!!!");
@@ -69,16 +75,38 @@ router.get(["/", "/jwks"], (req, res) => {
 });
 
 ///credential-offer
-router.get(["/offer"], (req, res) => {
+router.get(["/offer"], async (req, res) => {
   console.log("4 ROUTE ./offer CALLED!!!!!!");
+  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  sessions.push(uuid);
+  issuanceResults.push({ sessionId: uuid, status: "pending" });
+  // res.json({
+  //   request: `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer/${uuid}`,
+  // });
+
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer/${uuid}`;
+
+  let code = qr.image(credentialOffer, {
+    type: "png",
+    ec_level: "H",
+    size: 10,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
   res.json({
-    request: `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer/123`,
+    qr: encodedQR,
+    deepLink: credentialOffer,
+    sessionId: uuid,
   });
 });
 
 router.get(["/credential-offer/:id"], (req, res) => {
   // console.log("5 ROUTE ./credential-offer CALLED!!!!!!");
   // console.log(`id ${req.params.id}`);
+
+  //TODO assosiate the code with the credential offer
+
   res.json({
     credential_issuer: serverURL,
     credentials: ["VerifiablePortableDocumentA1"],
@@ -96,13 +124,20 @@ router.post("/token_endpoint", async (req, res) => {
   const grantType = req.body.grant_type;
   const preAuthorizedCode = req.body.pre_authorized_code;
   const userPin = req.body.user_pin;
+
+  let index = sessions.indexOf(preAuthorizedCode);
+  if (index > 0) {
+    sessions.splice(index, 1);
+    issuanceResults[index].status = "completed";
+  }
+
   res.json({
     access_token: buildAccessToken(serverURL, privateKey),
     refresh_token: generateRefreshToken(),
     token_type: "bearer",
     expires_in: 86400,
     id_token: buildIdToken(serverURL, privateKey),
-    c_nonce: generateNonce(), 
+    c_nonce: generateNonce(),
     c_nonce_expires_in: 86400,
   });
 });
@@ -118,8 +153,8 @@ router.post("/credential", async (req, res) => {
   // console.log("Token:", token);
   // console.log("Request Body:", requestBody);
   const { signer, verifier } = await createSignerVerifier(
-    pemToJWK(privateKey,"private"),
-    pemToJWK(publicKeyPem,"public")
+    pemToJWK(privateKey, "private"),
+    pemToJWK(publicKeyPem, "public")
   );
   const sdjwt = new SDJwtVcInstance({
     signer,
@@ -154,5 +189,18 @@ router.post("/credential", async (req, res) => {
   });
 });
 //issuerConfig.credential_endpoint = serverURL + "/credential";
+
+//ITB
+router.get(["/issueStatus"], (req, res) => {
+  let sessionId = req.query.sessionId;
+  let index = sessions.indexOf(sessionId);
+  let status = issuanceResults[index].status;
+
+  res.json({
+    status: status,
+    reason: "ok",
+    sessionId: sessionId,
+  });
+});
 
 export default router;
