@@ -57,6 +57,7 @@ router.get(
   [
     "/.well-known/oauth-authorization-server",
     "/.well-known/openid-configuration",
+    "/oauth-authorization-server/rfc-issuer" //this is required in case the issuer is behind a reverse proxy: see https://www.rfc-editor.org/rfc/rfc8414.html
   ],
   async (req, res) => {
     // console.log("2 ROUTE /.well-known/oauth-authorization-server CALLED!!!!!!");
@@ -74,61 +75,87 @@ router.get(["/", "/jwks"], (req, res) => {
   res.json({ keys: jwks });
 });
 
-///credential-offer
-router.get(["/offer"], async (req, res) => {
-  console.log("4 ROUTE ./offer CALLED!!!!!!");
-  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  sessions.push(uuid);
-  issuanceResults.push({ sessionId: uuid, status: "pending" });
-  // res.json({
-  //   request: `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer/${uuid}`,
-  // });
-
-  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer/${uuid}`;
-
-  let code = qr.image(credentialOffer, {
-    type: "png",
-    ec_level: "H",
-    size: 10,
-    margin: 10,
-  });
-  let mediaType = "PNG";
-  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
-  res.json({
-    qr: encodedQR,
-    deepLink: credentialOffer,
-    sessionId: uuid,
-  });
-});
-
 router.get(["/credential-offer/:id"], (req, res) => {
-  // console.log("5 ROUTE ./credential-offer CALLED!!!!!!");
-  // console.log(`id ${req.params.id}`);
-
   //TODO assosiate the code with the credential offer
-
   res.json({
     credential_issuer: serverURL,
     credentials: ["VerifiablePortableDocumentA1"],
     grants: {
       "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
-        "pre-authorized_code": "adhjhdjajkdk1hjhdj",
+        "pre-authorized_code": req.params.id,//"adhjhdjajkdk1hjhdj",
         user_pin_required: true,
       },
     },
   });
 });
 
+router.get(["/credential-offer-code/:id"], (req, res) => {
+  //TODO assosiate the code with the credential offer
+  res.json({
+    credential_issuer: serverURL,
+    credentials: ["VerifiablePortableDocumentA1"],
+    grants: {
+      authorization_code: {
+        issuer_state:  req.params.id,//"adhjhdjajkdk1hjhdj", //TODO fix this to something meaningfull
+      },
+    },
+  });
+});
+
+router.get("/authorize", async (req, res) => {
+  const responseType = req.query.response_type;
+  const scope = req.query.scope;
+  const issuerState = decodeURIComponent(req.query.issuer_state);
+  const state = req.query.state;
+  const clientId = decodeURIComponent(req.query.client_id); //DID of the holder requesting the credential
+  const authorizationDetails = JSON.parse(
+    decodeURIComponent(req.query.authorization_details) //TODO this contains the credentials requested
+  );
+  const redirectUri = decodeURIComponent(req.query.redirect_uri);
+  const nonce = req.query.nonce;
+  const codeChallenge = decodeURIComponent(req.query.code_challenge);
+  const codeChallengeMethod = req.query.code_challenge_method;
+  const clientMetadata = JSON.parse(
+    decodeURIComponent(req.query.client_metadata)
+  );
+  //validations
+  let errors = [];
+  if (responseType !== "code") {
+    errors.push("Invalid response_type");
+  }
+  if (!scope.includes("openid")) {
+    errors.push("Invalid scope");
+  }
+
+  // If there are errors, log errors
+  if (errors.length > 0) {
+    console.error("Validation errors:", errors);
+  }
+
+  // If validations pass, redirect with a 302 Found response
+  const authorizationCode = "SplxlOBeZQQYbYS6WxSbIA"; //TODO make this dynamic
+  const redirectUrl = `https://Wallet.example.org/cb?code=${authorizationCode}`;
+
+  // This sets the HTTP status to 302 and the Location header to the redirectUrl
+  return res.redirect(302, redirectUrl);
+});
+
 router.post("/token_endpoint", async (req, res) => {
   // console.log("6 ROUTE /token_endpoint CALLED!!!!!!");
   const grantType = req.body.grant_type;
-  const preAuthorizedCode = req.body.pre_authorized_code;
-  const userPin = req.body.user_pin;
+  const preAuthorizedCode = req.body["pre-authorized_code"]; // req.body["pre-authorized_code"]
+  const userPin = req.body["user_pin"]
+
+  console.log("token_endpoint parameters received")
+  console.log(grantType)
+  console.log(preAuthorizedCode)
+  console.log(userPin)
+  console.log("---------")
 
   let index = sessions.indexOf(preAuthorizedCode);
-  if (index > 0) {
-    sessions.splice(index, 1);
-    issuanceResults[index].status = "completed";
+  if (index >= 0) {
+    issuanceResults[index].status = "success";
+    console.log(issuanceResults[index].status)
   }
 
   res.json({
@@ -191,15 +218,83 @@ router.post("/credential", async (req, res) => {
 //issuerConfig.credential_endpoint = serverURL + "/credential";
 
 //ITB
+//TODO move these to a separate route
 router.get(["/issueStatus"], (req, res) => {
   let sessionId = req.query.sessionId;
+  console.log("sessions found");
+  console.log(sessions);
+  console.log("searching for sessionId" + sessionId);
   let index = sessions.indexOf(sessionId);
-  let status = issuanceResults[index].status;
+  console.log("index is");
+  console.log(index);
+  if (index >= 0) {
+    let status = issuanceResults[index].status;
+    console.log("sending status")
+    console.log(status)
+    sessions.splice(index, 1);
+    res.json({
+      status: status,
+      reason: "ok",
+      sessionId: sessionId,
+    });
+  } else {
+    res.json({
+      status: "failed",
+      reason: "not found",
+      sessionId: sessionId,
+    });
+  }
+});
 
+///credential-offer
+router.get(["/offer"], async (req, res) => {
+  console.log("4 ROUTE ./offer CALLED!!!!!!");
+  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  sessions.push(uuid);
+  issuanceResults.push({ sessionId: uuid, status: "pending" });
+  // res.json({
+  //   request: `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer/${uuid}`,
+  // });
+
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer/${uuid}`;
+
+  let code = qr.image(credentialOffer, {
+    type: "png",
+    ec_level: "H",
+    size: 10,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
   res.json({
-    status: status,
-    reason: "ok",
-    sessionId: sessionId,
+    qr: encodedQR,
+    deepLink: credentialOffer,
+    sessionId: uuid,
+  });
+});
+
+router.get(["/offer-code"], async (req, res) => {
+  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  sessions.push(uuid);
+  issuanceResults.push({ sessionId: uuid, status: "pending" });
+  // res.json({
+  //   request: `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer/${uuid}`,
+  // });
+
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-code/${uuid}`;
+
+  let code = qr.image(credentialOffer, {
+    type: "png",
+    ec_level: "H",
+    size: 10,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  res.json({
+    qr: encodedQR,
+    deepLink: credentialOffer,
+    sessionId: uuid,
   });
 });
 
