@@ -1,0 +1,23 @@
+{
+  "name": "split-skip",
+  "version": "0.0.1",
+  "description": "Splits a String into an Array of substrings with the option to skip some cases where the separator is found, based on some truthy condition.",
+  "main": "lib/split-skip.js",
+  "author": {
+    "name": "Diego ZoracKy",
+    "email": "diego.zoracky@gmail.com",
+    "url": "https://github.com/DiegoZoracKy/"
+  },
+  "scripts": {
+    "test": "mocha ./test/main.test.js"
+  },
+  "keywords": [
+    "split",
+    "skip"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "chai": "^4.0.0",
+    "mocha": "^3.4.2"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "object-to-arguments",
+  "version": "0.0.8",
+  "description": "Transforms object's properties into an array of arguments tailored for a specific function, respecting the expected order and handling destructuring and rest parameters when needed.",
+  "main": "./lib/object-to-arguments.js",
+  "bin": "./bin/cli.js",
+  "scripts": {
+    "test": "mocha ./test/main.test.js"
+  },
+  "author": {
+    "name": "Diego ZoracKy",
+    "email": "diego.zoracky@gmail.com",
+    "url": "https://github.com/DiegoZoracKy/"
+  },
+  "keywords": [
+    "object",
+    "parameters",
+    "orders"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "inspect-parameters-declaration": "0.0.10",
+    "magicli": "0.0.5",
+    "split-skip": "0.0.2",
+    "stringify-parameters": "0.0.4",
+    "unpack-string": "0.0.2"
+  },
+  "devDependencies": {
+    "mocha": "^3.5.0"
+  }
+}
