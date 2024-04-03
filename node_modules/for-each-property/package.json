@@ -1,0 +1,42 @@
+{
+  "name": "for-each-property",
+  "version": "0.0.4",
+  "description": "Executes a callback for each property found on a object, with options regarding enumerability (enumerable or non-enumerable) and ownership (inherited or only own properties). It excludes built-in properties from Object and Function prototypes by default, and this behaviour can also be configured via options.",
+  "main": "lib/for-each-property.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "mocha ./test"
+  },
+  "keywords": [
+    "for",
+    "each",
+    "prop",
+    "property",
+    "object",
+    "function",
+    "enumerable",
+    "non-enumerable",
+    "nonenumerable",
+    "inherited",
+    "proto",
+    "prototype",
+    "prototype-chain",
+    "class",
+    "static"
+  ],
+  "author": {
+    "name": "Diego ZoracKy",
+    "email": "diego.zoracky@gmail.com",
+    "url": "https://github.com/DiegoZoracKy/"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "get-prototype-chain": "^1.0.1"
+  },
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "mocha": "^3.4.2"
+  }
+}

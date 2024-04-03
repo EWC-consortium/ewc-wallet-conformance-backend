@@ -1,0 +1,29 @@
+{
+  "name": "magicli",
+  "version": "0.0.5",
+  "description": "Automagically generates command-line interfaces (CLI), for any module",
+  "main": "lib/magicli.js",
+  "scripts": {
+    "test": "mocha ./tests"
+  },
+  "author": {
+    "name": "Diego ZoracKy",
+    "email": "diego.zoracky@gmail.com",
+    "url": "https://github.com/DiegoZoracKy/"
+  },
+  "keywords": [
+    "bin",
+    "cli"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^2.9.0",
+    "get-stdin": "^5.0.1",
+    "inspect-function": "^0.2.1",
+    "pipe-functions": "^1.2.0"
+  },
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "mocha": "^3.0.2"
+  }
+}

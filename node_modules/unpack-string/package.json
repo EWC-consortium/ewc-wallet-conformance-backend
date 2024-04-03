@@ -1,0 +1,25 @@
+{
+  "name": "unpack-string",
+  "version": "0.0.2",
+  "description": "Unpacks the content found within a text, delimited by an opening char and a closing char, e.g., 'Can extract (only the content found here within these parentheses)'",
+  "main": "lib/unpack-string.js",
+  "author": {
+    "name": "Diego ZoracKy",
+    "email": "diego.zoracky@gmail.com",
+    "url": "https://github.com/DiegoZoracKy/"
+  },
+  "scripts": {
+    "test": "mocha ./test/main.test.js"
+  },
+  "keywords": [
+    "unpack",
+    "string",
+    "brackets",
+    "parentheses"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "chai": "^4.0.0",
+    "mocha": "^3.4.2"
+  }
+}
