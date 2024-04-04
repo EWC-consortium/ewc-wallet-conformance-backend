@@ -45,7 +45,8 @@ router.get("/.well-known/openid-credential-issuer", async (req, res) => {
   // console.log("1 ROUTE /.well-known/openid-credential-issuer CALLED!!!!!!");
   // issuerConfig.authorization_servers = [serverURL];
   issuerConfig.credential_issuer = serverURL;
-  issuerConfig.authorization_servers = [serverURL];
+  // issuerConfig.authorization_servers = [serverURL];
+  issuerConfig.authorization_server = serverURL;
   issuerConfig.credential_endpoint = serverURL + "/credential";
   issuerConfig.deferred_credential_endpoint =
     serverURL + "/credential_deferred";
@@ -221,9 +222,11 @@ router.post("/credential", async (req, res) => {
 //TODO move these to a separate route
 router.get(["/issueStatus"], (req, res) => {
   let sessionId = req.query.sessionId;
-  console.log("sessions found");
-  console.log(sessions);
-  console.log("searching for sessionId" + sessionId);
+  // console.log("sessions found");
+  // console.log(sessions);
+  // console.log("searching for sessionId" + sessionId);
+// issuanceSession itbSession[sessionId] == offerUUID
+
   let index = sessions.indexOf(sessionId);
   console.log("index is");
   console.log(index);
@@ -256,7 +259,10 @@ router.get(["/offer"], async (req, res) => {
   //   request: `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer/${uuid}`,
   // });
 
-  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer/${uuid}`;
+  // generateGreOff...  offerUUID 
+  // itbSession.push({itbSession, offerUUID})
+
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer/${uuid}`; //OfferUUID
 
   let code = qr.image(credentialOffer, {
     type: "png",
