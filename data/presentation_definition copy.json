@@ -1,0 +1,29 @@
+{
+  "id": "testId",
+  "format": {
+    "sd_jwt": {
+      "alg": ["ES256"]
+    },
+    "kb_jwt": {
+      "alg": ["ES256"]
+    }
+  },
+  "input_descriptors": [
+    {
+      "id": "id card credential",
+      "constraints": {
+        "fields": [
+          {
+            "path": ["$.type"],
+            "filter": {
+              "type": "array",
+              "contains": {
+                "const": "PortableDocumentA1"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

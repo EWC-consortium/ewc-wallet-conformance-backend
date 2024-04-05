@@ -1,0 +1,37 @@
+{
+  "id": "d49ee616-0e8d-4698-aff5-2a8a2362652d",
+  "name": "id-card-proof",
+  "format": {
+    "vc+sd-jwt": {
+      "alg": ["ES256", "ES384"]
+    }
+  },
+  "input_descriptors": [
+    {
+      "id": "abd4acb1-1dcb-41ad-8596-ceb1401a69c7",
+      "format": {
+        "vc+sd-jwt": {
+          "alg": ["ES256", "ES384"]
+        }
+      },
+      "constraints": {
+        "fields": [
+          {
+            "path": ["$.given_name"]
+          },
+          {
+            "path": ["$.last_name"]
+          },
+          {
+            "path": ["$.vct"],
+            "filter": {
+              "type": "string",
+              "const": "VerifiablePortableDocumentA1"
+            }
+          }
+        ]
+      },
+      "limit_disclosure": "required"
+    }
+  ]
+}
