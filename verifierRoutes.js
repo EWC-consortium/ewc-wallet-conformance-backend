@@ -29,12 +29,11 @@ let verificationSessions = []; //TODO these should be redis or something a prope
 let sessions = [];
 
 verifierRouter.get("/generateVPRequest", async (req, res) => {
-  const uuid = uuidv4();
-  const stateParam = uuidv4();
+  const stateParam = req.query.id ? req.query.id : uuidv4();
   const nonce = generateNonce(16);
 
-  let request_uri = serverURL + "/vpRequest";
-  const response_uri = serverURL + "/direct_post";
+  let request_uri = serverURL + "/vpRequest/" + stateParam;
+  const response_uri = serverURL + "/direct_post"; //not used
 
   const vpRequest = buildVP(
     serverURL,
@@ -56,16 +55,16 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
   res.json({
     qr: encodedQR,
     deepLink: vpRequest,
-    sessionId: uuid,
+    sessionId: stateParam,
   });
 
   // res.json({ vpRequest: vpRequest });
 });
 
-verifierRouter.get("/vpRequest", async (req, res) => {
+verifierRouter.get("/vpRequest/:id", async (req, res) => {
   console.log("VPRequest called Will send JWT");
   // console.log(jwtToken);
-  const uuid = uuidv4();
+  const uuid = req.params.id ? req.params.id : uuidv4();
 
   //url.searchParams.get("presentation_definition");
   const stateParam = uuidv4();
@@ -98,26 +97,64 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
   const sessionId = req.params.id;
 
   let sdjwt = req.body["vp_token"];
-  let presentationSubmission = req.body["presentation_submission"];
-  let state = req.body["state"];
-  console.log(state);
-  // console.log(response);
-  const decodedSdJwt = await decodeSdJwt(sdjwt, digest);
-  const claims = await getClaims(
-    decodedSdJwt.jwt.payload,
-    decodedSdJwt.disclosures,
-    digest
-  );
-  console.log(claims);
+  if (sdjwt) {
+    let presentationSubmission = req.body["presentation_submission"];
+    let state = req.body["state"];
+    console.log(state);
+    // console.log(response);
+    const decodedSdJwt = await decodeSdJwt(sdjwt, digest);
+    const claims = await getClaims(
+      decodedSdJwt.jwt.payload,
+      decodedSdJwt.disclosures,
+      digest
+    );
+    console.log(claims);
+    let index = sessions.indexOf(sessionId);
+    console.log("index is");
+    console.log(index);
+    if (index >= 0) {
+      verificationSessions[index].status = "success";
+      verificationSessions[index].claims = claims;
+      console.log(`verificatiton success`);
+      console.log(verificationSessions[index]);
+    }
+    res.sendStatus(200);
+  } else {
+    res.sendStatus(500);
+  }
+});
+
+verifierRouter.get(["/verificationStatus"], (req, res) => {
+  let sessionId = req.query.sessionId;
   let index = sessions.indexOf(sessionId);
   console.log("index is");
   console.log(index);
+  let result = null;
   if (index >= 0) {
-    verificationSessions[index].status = "success";
-    verificationSessions[index].claims = claims;
+    let status = verificationSessions[index].status;
+    console.log(`sending status ${status} for session ${sessionId}`);
+    if (status === "success") {
+      result = verificationSessions[index].claims;
+      sessions.splice(index, 1);
+      verificationSessions.splice(index, 1);
+    }
+    // console.log(`new sessions`);
+    // console.log(sessions);
+    // console.log("new session statuses");
+    // console.log(issuanceResults);
+    res.json({
+      status: status,
+      reason: "ok",
+      sessionId: sessionId,
+      claims: result,
+    });
+  } else {
+    res.json({
+      status: "failed",
+      reason: "not found",
+      sessionId: sessionId,
+    });
   }
-
-  res.sendStatus(200);
 });
 
 function buildVP(
@@ -136,18 +173,18 @@ function buildVP(
     // "&redirect_uri=" +
     // encodeURIComponent(redirect_uri) +
     "&request_uri=" +
-    encodeURIComponent(request_uri) ;
-    // "&response_uri=" +
-    // encodeURIComponent(redirect_uri) +
-    // "&response_mode=direct_post" +
-    // "&state=" +
-    // state +
-    // "&nonce=" +
-    // nonce  
-    // "&presentation_definition_uri="+ngrok+"/presentation_definition"
-    // +
-    // "&presentation_definition=" +
-    // presentation_definition;
+    encodeURIComponent(request_uri);
+  // "&response_uri=" +
+  // encodeURIComponent(redirect_uri) +
+  // "&response_mode=direct_post" +
+  // "&state=" +
+  // state +
+  // "&nonce=" +
+  // nonce
+  // "&presentation_definition_uri="+ngrok+"/presentation_definition"
+  // +
+  // "&presentation_definition=" +
+  // presentation_definition;
 
   return result;
 }
