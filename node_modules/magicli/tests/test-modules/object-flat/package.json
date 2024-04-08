@@ -1,8 +1,0 @@
-{
-  "name": "object-flat",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Test object-flat",
-  "main": "./lib/index.js",
-  "bin": "./bin/cli.js"
-}
