@@ -1,6 +1,7 @@
 // main file
 import express from "express";
 import router from "./routes.js";
+import verifierRouter from "./verifierRoutes.js";
 import bodyParser from 'body-parser'; // Body parser middleware
 
 
@@ -19,6 +20,7 @@ app.use((req, res, next) => {
   next(); // Pass control to the next middleware function
 });
 app.use("/", router);
+app.use("/", verifierRouter);
 
 // Start the server
 app.listen(port, () => {
