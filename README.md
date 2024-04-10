@@ -1,38 +1,53 @@
-# Issuer Service for the European Wallet Ecosystem
+# EWC Wallet Conformance Backend Service
 
 ## Introduction
 
-This issuer service is designed to implement the OpenID Foundation's workflow for Verifiable Credential Issuance (OID4VCI), adhering to the specifications set forth by the EU Digital Identity
-Wallet Consortium (EWC). By following the detailed requirements and guidelines of the EWC project, specifically as outlined in the [EWC RFC001](https://github.com/EWC-consortium/eudi-wallet-rfcs/blob/main/ewc-rfc001-issue-verifiable-credential.md), this service aims to streamline the issuance of verifiable credentials across the European Wallet Ecosystem.
+This service implements two crucial RFCs specified by the EU Digital Identity Wallet Consortium (EWC), contributing to the large-scale pilot for the European Digital Identity Wallet as part of the eIDAS 2.0 regulation. By adhering to these RFCs, this service aims to ensure interoperability within the European Digital Identity Wallet Consortium (EWC) Ecosystem, facilitating a standardized approach for both credential issuance and presentation.
+
+### RFCs Implemented
+
+- [**RFC001**](https://github.com/EWC-consortium/eudi-wallet-rfcs/blob/main/ewc-rfc001-issue-verifiable-credential.md): Implements the OID4VCI (OpenID for Verifiable Credential Issuance) workflow for credential issuers.
+- [**RFC002**](https://github.com/EWC-consortium/eudi-wallet-rfcs/blob/main/ewc-rfc002-present-verifiable-credentials.md): Implements the OIDC4VP (OpenID for Verifiable Presentations) workflow for verifiers (relying parties).
 
 ## Features
 
-- **OID4VCI Compliance**: Implements the OID4VCI workflow, ensuring a standardized approach to verifiable credential issuance across any issuer within the European Wallet Ecosystem.
+- **Credential Issuance**:  Implements the OID4VCI workflow, ensuring a standardized approach to verifiable credential issuance across any issuer within the EWC Ecosystem. Supports both authorization code flow and pre-authorized code flow for issuing credentials to wallet holders.
+- **Credential Presentation**:  Implements the OIDC4VP workflow, ensuring a standardized approach to verifiable credential presentation across any verifier within the EWC Ecosystem. Facilitates the presentation of credentials by wallet holders to verifiers using both same-device and cross-device verification flows.
 - **Interoperability**: Designed with interoperability at its core, this service promotes seamless integration within the EUDI wallet ecosystem, adhering to the specifications and requirements of the ARF.
- 
-
-## Reference Specifications
-
-1. **OpenID for Verifiable Credential Issuance (OID4VCI)**: Follows the OpenID Foundation's specifications for verifiable credential issuance. For more details, see the [OpenID Foundation (2023), 'OpenID for Verifiable Credential Issuance (OID4VCI)'](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-12.html). Accessed: January 10, 2024.
-
-2. **The European Digital Identity Wallet Architecture and Reference Framework (ARF)**: Adheres to the European Commission's specifications for digital identity wallets. For additional information, consult the [European Commission (2023) The European Digital Identity Wallet Architecture and Reference Framework (2023-04, v1.1.0)](https://github.com/eu-digital-identity-wallet/eudi-doc-architecture-and-reference-framework/releases). Accessed: October 16, 2023.
 
 ## Getting Started
 
-To get started with the issuer service, follow these steps:
-update package.json with the url that the services will run on (requires https)
-e.g. `"dev": "SERVER_URL=https://6522-2001-648-2050-6021-4965-2baf-2b20-4a1.ngrok-free.app node server.js"`
-start the issuer service
-`npm run dev`
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+2. Navigate to the project directory:
+   ```bash
+    cd ewc-wallet-conformance-backend
+3. Install dependencies
+   ```bash
+    npm install
+4. Start the service 
+   ```bash
+    npm start
 
-## Usage
+Optionally, if you want to use a tunneling provider for local deployment to ensure https is enabled (which is required by the spec) you can configure your tunnel
+endpoint inside package.json:
+     ```bash
+     "dev": "SERVER_URL=https://4150-2a02-587-8701-de00-c100-84c1-e7c9-8738.ngrok-free.app node server.js" 
 
-TBD
+## Getting Started
+Refer to the individual RFC documentation for detailed usage instructions:
+- [**RFC001**](https://github.com/EWC-consortium/eudi-wallet-rfcs/blob/main/ewc-rfc001-issue-verifiable-credential.md)
+- [**RFC002**](https://github.com/EWC-consortium/eudi-wallet-rfcs/blob/main/ewc-rfc002-present-verifiable-credentials.md)
 
 ## Contributing
-
-Contributions are welcome to enhance the functionalities of the issuer service, ensuring it remains up-to-date with the evolving standards of the European Wallet Ecosystem.
+Contributions to enhance the functionality and interoperability of the wallet provider service are welcome. Please submit pull requests with a clear explanation of your changes or open issues for bugs and feature requests.
 
 ## License
+TBD
 
-(Include license information here, e.g., MIT, GPL, etc.)
+## References
+
+1. OpenID Foundation: [OpenID for Verifiable Credential Issuance (OID4VCI)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-12.html)
+2. OpenID Foundation: [OpenID for Verifiable Presentations (OID4VP)](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html )
+3. European Commission: [The European Digital Identity Wallet Architecture and Reference Framework (ARF)](https://github.com/eu-digital-identity-wallet/eudi-doc-architecture-and-reference-framework/releases)
