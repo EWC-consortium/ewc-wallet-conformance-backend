@@ -19,7 +19,7 @@ This service implements two crucial RFCs specified by the EU Digital Identity Wa
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone git@github.com:EWC-consortium/ewc-wallet-conformance-backend.git
 2. Navigate to the project directory:
    ```bash
     cd ewc-wallet-conformance-backend
