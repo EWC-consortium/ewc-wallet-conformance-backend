@@ -1,7 +1,11 @@
 import express from "express";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
-import { pemToJWK, generateNonce } from "./utils/cryptoUtils.js";
+import {
+  pemToJWK,
+  generateNonce,
+  base64UrlEncodeSha256,
+} from "./utils/cryptoUtils.js";
 import {
   buildAccessToken,
   generateRefreshToken,
@@ -40,6 +44,8 @@ const jwks = pemToJWK(publicKeyPem, "public");
 //TODO  move this into a service that caches these (e.g via redis or something)
 let sessions = [];
 let issuanceResults = [];
+let codeFlowSessions = [];
+let codeFlowSessionsResults = [];
 
 router.get("/.well-known/openid-credential-issuer", async (req, res) => {
   // console.log("1 ROUTE /.well-known/openid-credential-issuer CALLED!!!!!!");
@@ -121,13 +127,27 @@ router.get("/authorize", async (req, res) => {
   );
   const redirectUri = decodeURIComponent(req.query.redirect_uri);
   const nonce = req.query.nonce;
-  const codeChallenge = decodeURIComponent(req.query.code_challenge);
-  const codeChallengeMethod = req.query.code_challenge_method;
+  const codeChallenge = decodeURIComponent(req.query.code_challenge); //secret TODO cache this with challenge method under client state.
+  const codeChallengeMethod = req.query.code_challenge_method; //challenge method
+
   const clientMetadata = JSON.parse(
     decodeURIComponent(req.query.client_metadata)
   );
   //validations
   let errors = [];
+  if (authorizationDetails.credential_definition) {
+    console.log(
+      `credential ${authorizationDetails.credential_definition.type} was requested`
+    );
+  } else {
+    if (authorizationDetails.types) {
+      //EBSI style
+      console.log(`credential ${authorizationDetails.types} was requested`);
+    } else {
+      errors.push("no credentials requested");
+    }
+  }
+
   if (responseType !== "code") {
     errors.push("Invalid response_type");
   }
@@ -135,24 +155,45 @@ router.get("/authorize", async (req, res) => {
     errors.push("Invalid scope");
   }
 
+  // If validations pass, redirect with a 302 Found response
+  const authorizationCode = "SplxlOBeZQQYbYS6WxSbIA"; //TODO make this dynamic
+  codeFlowSessions.push({
+    challenge: codeChallenge,
+    method: codeChallengeMethod,
+    sessionId: authorizationCode,
+  });
+  codeFlowSessionsResults.push({
+    sessionId: authorizationCode,
+    status: "pending",
+  });
+
+  const redirectUrl = `${redirectUri}?code=${authorizationCode}`;
   // If there are errors, log errors
   if (errors.length > 0) {
     console.error("Validation errors:", errors);
+    let error_description = "";
+    error.array.forEach((element) => {
+      error_description += element + " ";
+    });
+    const errorRedirectUrl = `${redirectUri}?error=invalid_request
+    &error_description=${error_description}`;
+    return res.redirect(302, errorRedirectUrl);
+  } else {
+    // This sets the HTTP status to 302 and the Location header to the redirectUrl
+    return res.redirect(302, redirectUrl);
   }
-
-  // If validations pass, redirect with a 302 Found response
-  const authorizationCode = "SplxlOBeZQQYbYS6WxSbIA"; //TODO make this dynamic
-  const redirectUrl = `https://Wallet.example.org/cb?code=${authorizationCode}`;
-
-  // This sets the HTTP status to 302 and the Location header to the redirectUrl
-  return res.redirect(302, redirectUrl);
 });
 
 router.post("/token_endpoint", async (req, res) => {
   // console.log("6 ROUTE /token_endpoint CALLED!!!!!!");
+  //pre-auth code flow
   const grantType = req.body.grant_type;
   const preAuthorizedCode = req.body["pre-authorized_code"]; // req.body["pre-authorized_code"]
   const userPin = req.body["user_pin"];
+  //code flow
+  const code = req.body["code"]; //TODO check the code ...
+  const code_verifier = req.body["code_verifier"];
+  const redirect_uri = req.body["redirect_uri"];
 
   console.log("token_endpoint parameters received");
   console.log(grantType);
@@ -160,13 +201,34 @@ router.post("/token_endpoint", async (req, res) => {
   console.log(userPin);
   console.log("---------");
 
-  let index = sessions.indexOf(preAuthorizedCode);
-  if (index >= 0) {
-    console.log(`credential for session ${preAuthorizedCode} has been issued`);
-    issuanceResults[index].status = "success";
-    console.log(issuanceResults[index].status);
+  if (grantType == "urn:ietf:params:oauth:grant-type:pre-authorized_code") {
+    console.log("pre-auth code flow");
+    let index = sessions.indexOf(preAuthorizedCode);
+    if (index >= 0) {
+      console.log(
+        `credential for session ${preAuthorizedCode} has been issued`
+      );
+      issuanceResults[index].status = "success";
+      console.log("pre-auth code flow" + issuanceResults[index].status);
+    }
+  } else {
+    if (grantType == "authorization_code") {
+      //check PKCE
+      for (let i = 0; i < codeFlowSessions.array.length; i++) {
+        let element = codeFlowSessions.array[i];
+        if (code === element.sessionId) {
+          let challenge = element.challenge;
+          // let method = element.method;
+          if (base64UrlEncodeSha256(code_verifier) === challenge) {
+            index = i;
+            codeFlowSessionsResults[i].status = "success";
+            console.log("code flow" + issuanceResults[index].status);
+          }
+        }
+      }
+    }
   }
-
+  //TODO return error if code flow validation fails and is not a pre-auth flow
   res.json({
     access_token: buildAccessToken(serverURL, privateKey),
     refresh_token: generateRefreshToken(),

@@ -113,6 +113,27 @@ export async function decryptJWE(jweToken, privateKeyPEM) {
   }
 }
 
+
+export async function base64UrlEncodeSha256(codeVerifier) {
+  // Convert the code verifier string to an ArrayBuffer with ASCII encoding
+  const encoder = new TextEncoder();
+  const data = encoder.encode(codeVerifier);
+
+  // Calculate the SHA-256 hash of the ArrayBuffer
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+
+  // Convert the ArrayBuffer to a Uint8Array
+  const hashArray = new Uint8Array(hashBuffer);
+
+  // Convert the bytes to a Base64 string
+  const base64String = btoa(String.fromCharCode.apply(null, hashArray));
+
+  // Convert Base64 to Base64URL by replacing '+' with '-', '/' with '_', and stripping '='
+  const base64UrlString = base64String.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  return base64UrlString;
+}
+
 function parseVP(vp_token) {
   let vpPartsArray = vp_token.split(".");
   let disclosuresPart = vpPartsArray[2]; //this is the actual sd-jdt from the vpToken
