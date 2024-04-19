@@ -5,6 +5,7 @@ import {
   pemToJWK,
   generateNonce,
   base64UrlEncodeSha256,
+  buildVpRequestJwt
 } from "../utils/cryptoUtils.js";
 import {
   buildAccessToken,
@@ -220,8 +221,9 @@ router.get("/authorize", async (req, res) => {
 
 
   //5.1.5. Dynamic Credential Request https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-12.html#name-successful-authorization-re
-  const redirectUrl = `http://localhost:8080?state=${state}&client_id=${clientId}&redirect_uri=${serverURL}/direct_post_vci&response_type=id_token&
-  response_mode=direct_post&scope=openid&nonce=${nonce}&request_uri=http://localhost:8080`
+  const request_uri = buildVpRequestJwt(state,nonce,clientId,"response_uri",null,"jwk",serverURL,privateKey);
+  const redirectUrl = `http://localhost:8080?state=${state}&client_id=${clientId}&redirect_uri=${serverURL}/direct_post_vci&response_type=id_token&response_mode=direct_post&scope=openid&nonce=${nonce}&request=${request_uri}`
+
 
 
   if (errors.length > 0) {
@@ -240,6 +242,9 @@ router.get("/authorize", async (req, res) => {
     return res.redirect(302, redirectUrl);
   }
 });
+
+
+
 
 router.post("/direct_post_vci", async (req, res) => {
   console.log("direct_post VP for VCI is below!");
