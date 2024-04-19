@@ -6,7 +6,7 @@ import {
   generateNonce,
   decryptJWE,
   buildVpRequestJwt,
-} from "./utils/cryptoUtils.js";
+} from "../utils/cryptoUtils.js";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
 import { digest } from "@sd-jwt/crypto-nodejs";
 import qr from "qr-image";
@@ -123,6 +123,16 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     res.sendStatus(500);
   }
 });
+
+
+
+
+
+
+
+
+
+
 
 verifierRouter.get(["/verificationStatus"], (req, res) => {
   let sessionId = req.query.sessionId;

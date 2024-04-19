@@ -1,7 +1,7 @@
 // main file
 import express from "express";
-import router from "./routes.js";
-import verifierRouter from "./verifierRoutes.js";
+import router from "./routes/routes.js";
+import verifierRouter from "./routes/verifierRoutes.js";
 import bodyParser from 'body-parser'; // Body parser middleware
 
 
