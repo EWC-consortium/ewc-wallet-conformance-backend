@@ -20,6 +20,6 @@ jobs:
       run: |
           cd /home/nikos/itb/ewc-poc/ewc-wallet-conformance-backend
           git pull origin main
-          docker-compose down
-          docker-compose build
-          docker-compose up -d
+          docker compose down
+          docker compose build
+          docker compose up -d
