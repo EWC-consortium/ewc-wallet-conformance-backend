@@ -2,9 +2,10 @@
 import express from "express";
 import router from "./routes/routes.js";
 import verifierRouter from "./routes/verifierRoutes.js";
-import bodyParser from 'body-parser'; // Body parser middleware
-
-
+import metadataRouter from "./routes/metadataroutes.js";
+import codeFlowRouter from "./routes/codeFlowJwtRoutes.js"
+import codeFlowRouterSDJWT from "./routes/codeFlowSdJwtRoutes.js"
+import bodyParser from "body-parser"; // Body parser middleware
 
 const app = express();
 const port = 3000;
@@ -21,8 +22,11 @@ app.use((req, res, next) => {
 });
 app.use("/", router);
 app.use("/", verifierRouter);
+app.use("/", metadataRouter);
+app.use("/", codeFlowRouter);
+app.use("/", codeFlowRouterSDJWT);
 
 // Start the server
 app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
-  });
+  console.log(`Server is running on http://localhost:${port}`);
+});
