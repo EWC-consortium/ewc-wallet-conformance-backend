@@ -10,6 +10,9 @@ jobs:
     runs-on: self-hosted  # Using the same VM that hosts the service
 
     steps:
+    - name: Configure Safe Directory
+      run: git config --global --add safe.directory /home/nikos/itb/ewc-poc/ewc-wallet-conformance-backend
+
     - uses: actions/checkout@v2
       name: Checkout code
 
