@@ -1,4 +1,4 @@
-name: Build and Deploy Locally
+name: Local Deployment
 
 on:
   push:
@@ -6,19 +6,15 @@ on:
       - main
 
 jobs:
-  deploy:
-    runs-on: self-hosted
+  build-and-deploy:
+    runs-on: self-hosted  # Using the same VM that hosts the service
 
     steps:
     - uses: actions/checkout@v2
+      name: Checkout code
 
-    - name: SSH and Deploy
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.SERVER_IP }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        script: |
+    - name: Build and Deploy
+      run: |
           cd /home/nikos/itb/ewc-poc/ewc-wallet-conformance-backend
           git pull origin main
           docker-compose down
