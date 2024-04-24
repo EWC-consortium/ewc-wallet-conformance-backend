@@ -4,5 +4,7 @@ services:
   rfc-issuer:
     container_name: rfc-100
     build: .
+    environment:
+      SERVER_URL: https://dss.aegean.gr/rfc-issuer
     ports:
       - "3000:3000"
