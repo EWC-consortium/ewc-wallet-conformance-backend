@@ -5,7 +5,7 @@ import {
   pemToJWK,
   generateNonce,
   base64UrlEncodeSha256,
-  buildVpRequestJwt
+  buildVpRequestJwt,
 } from "../utils/cryptoUtils.js";
 import {
   buildAccessToken,
@@ -18,6 +18,7 @@ import {
   digest,
   generateSalt,
 } from "../utils/sdjwtUtils.js";
+import jwt from "jsonwebtoken";
 
 import qr from "qr-image";
 import imageDataURI from "image-data-uri";
@@ -45,7 +46,8 @@ const jwks = pemToJWK(publicKeyPem, "public");
 //TODO  move this into a service that caches these (e.g via redis or something)
 let sessions = [];
 let issuanceResults = [];
-let codeSessions = [];
+let walletCodeSessions = [];
+let issuerCodeSessions = [];
 let codeFlowRequests = [];
 let codeFlowRequestsResults = [];
 
@@ -152,7 +154,7 @@ router.get(["/credential-offer/:id"], (req, res) => {
 router.get(["/credential-offer-code/:id"], (req, res) => {
   res.json({
     credential_issuer: serverURL,
-    credentials: ["VerifiablePortableDocumentA1"],
+    credentials: ["VerifiablePortableDocumentA2"],
     grants: {
       authorization_code: {
         issuer_state: req.params.id,
@@ -202,29 +204,38 @@ router.get("/authorize", async (req, res) => {
   }
 
   // If validations pass, redirect with a 302 Found response
-  const authorizationCode = generateNonce(16); //"SplxlOBeZQQYbYS6WxSbIA";
+  const authorizationCode = null; //"SplxlOBeZQQYbYS6WxSbIA";
   codeFlowRequests.push({
     challenge: codeChallenge,
     method: codeChallengeMethod,
     sessionId: authorizationCode,
     issuerState: issuerState,
+    state: state,
   });
   codeFlowRequestsResults.push({
     sessionId: authorizationCode,
     issuerState: issuerState,
+    state: state,
     status: "pending",
   });
-  codeSessions.push(issuerState); // push issuerState
+  walletCodeSessions.push(state); // push state as send by wallet
+  issuerCodeSessions.push(issuerState);
 
-  // for normal response not requesting VP from wallet 
+  // for normal response not requesting VP from wallet
   //const redirectUrl = `${redirectUri}?code=${authorizationCode}&state=${state}`;
 
-
   //5.1.5. Dynamic Credential Request https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-12.html#name-successful-authorization-re
-  const request_uri = buildVpRequestJwt(state,nonce,clientId,"response_uri",null,"jwk",serverURL,privateKey);
-  const redirectUrl = `http://localhost:8080?state=${state}&client_id=${clientId}&redirect_uri=${serverURL}/direct_post_vci&response_type=id_token&response_mode=direct_post&scope=openid&nonce=${nonce}&request=${request_uri}`
-
-
+  const vpRequestJWT = buildVpRequestJwt(
+    state,
+    nonce,
+    clientId,
+    "response_uri",
+    null,
+    "jwk",
+    serverURL,
+    privateKey
+  );
+  const redirectUrl = `http://localhost:8080?state=${state}&client_id=${clientId}&redirect_uri=${serverURL}/direct_post_vci&response_type=id_token&response_mode=direct_post&scope=openid&nonce=${nonce}&request=${vpRequestJWT}`;
 
   if (errors.length > 0) {
     console.error("Validation errors:", errors);
@@ -243,21 +254,41 @@ router.get("/authorize", async (req, res) => {
   }
 });
 
-
-
-
 router.post("/direct_post_vci", async (req, res) => {
   console.log("direct_post VP for VCI is below!");
-  let state = req.body["state"]
+  let state = req.body["state"];
   let jwt = req.body["id_token"];
   if (jwt) {
-    const authorizationCode = generateNonce(16);  
+    const authorizationCode = generateNonce(16);
+    updateIssuerStateWithAuthCode(
+      authorizationCode,
+      state,
+      walletCodeSessions,
+      codeFlowRequestsResults,
+      codeFlowRequests
+    );
     const redirectUrl = `http://localhost:8080?code=${authorizationCode}&state=${state}`;
     return res.redirect(302, redirectUrl);
   } else {
     return res.sendStatus(500);
   }
 });
+
+function updateIssuerStateWithAuthCode(
+  code,
+  walletState,
+  walletSessions,
+  codeFlowRequestsResults,
+  codeFlowRequests
+) {
+  let index = walletSessions.indexOf(walletState);
+  if (index >= 0) {
+    codeFlowRequestsResults[index].sessionId = code;
+    codeFlowRequests[index].sessionId = code;
+  } else {
+    console.log("issuer state will not be updated");
+  }
+}
 
 router.post("/token_endpoint", async (req, res) => {
   //pre-auth code flow
@@ -269,11 +300,11 @@ router.post("/token_endpoint", async (req, res) => {
   const code_verifier = req.body["code_verifier"];
   const redirect_uri = req.body["redirect_uri"];
 
-  console.log("token_endpoint parameters received");
-  console.log(grantType);
-  console.log(preAuthorizedCode);
-  console.log(userPin);
-  console.log("---------");
+  // console.log("token_endpoint parameters received");
+  // console.log(grantType);
+  // console.log(preAuthorizedCode);
+  // console.log(userPin);
+  // console.log("---------");
 
   if (grantType == "urn:ietf:params:oauth:grant-type:pre-authorized_code") {
     console.log("pre-auth code flow");
@@ -314,6 +345,14 @@ router.post("/credential", async (req, res) => {
   // Accessing the body data
   const requestBody = req.body;
   //TODO valiate bearer header
+  let decodedWithHeader;
+  let decodedHeaderSubjectDID;
+  if (requestBody.proof && requestBody.proof.jwt) {
+    // console.log(requestBody.proof.jwt)
+    decodedWithHeader = jwt.decode(requestBody.proof.jwt, { complete: true });
+    // console.log(decodedWithHeader.payload.iss);
+    decodedHeaderSubjectDID = decodedWithHeader.payload.iss;
+  }
 
   // console.log("Token:", token);
   // console.log("Request Body:", requestBody);
@@ -345,13 +384,70 @@ router.post("/credential", async (req, res) => {
     },
     disclosureFrame
   );
-  console.log(credential);
+  // console.log(credential);
+
+  //sign as jwt
+  const payload = {
+    iss: serverURL,
+    sub: decodedHeaderSubjectDID || "",
+    exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
+    iat: Math.floor(Date.now() / 1000), // Token issued at time
+    // nbf: Math.floor(Date.now() / 1000),
+    jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
+    vc: {
+      credentialSubject: {
+        id: null,
+        given_name: "John",
+        last_name: "Doe",
+      },
+      expirationDate: new Date(
+        (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
+      ).toISOString(),
+      id: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
+      issuanceDate: new Date(
+        Math.floor(Date.now() / 1000) * 1000
+      ).toISOString(),
+      issued: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
+      issuer: serverURL,
+      type: ["VerifiablePortableDocumentA2"],
+      validFrom: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
+    },
+    // Optional claims
+  };
+
+  const signOptions = {
+    algorithm: "ES256", // Specify the signing algorithm
+  };
+
+  // Define additional JWT header fields
+  const additionalHeaders = {
+    kid: "aegean#authentication-key",
+    typ: "JWT",
+  };
+  // Sign the token
+  const idtoken = jwt.sign(payload, privateKey, {
+    ...signOptions,
+    header: additionalHeaders, // Include additional headers separately
+  });
+
+  // console.log(idtoken);
+
+  /* jwt format */
+  res.json({
+    format: "jwt_vc",
+    credential: idtoken,
+    c_nonce: generateNonce(),
+    c_nonce_expires_in: 86400,
+  });
+
+  /*sd-jwt formatt */
+  /*
   res.json({
     format: "vc+sd-jwt",
     credential: credential,
     c_nonce: generateNonce(),
     c_nonce_expires_in: 86400,
-  });
+  });*/
 });
 //issuerConfig.credential_endpoint = serverURL + "/credential";
 
@@ -359,27 +455,16 @@ router.post("/credential", async (req, res) => {
 router.get(["/issueStatus"], (req, res) => {
   let sessionId = req.query.sessionId;
 
-  // let index = sessions.indexOf(sessionId);
-  // console.log("index is");
-  // console.log(index);
-  // if (index >= 0) {
-  //   let status = issuanceResults[index].status;
-  //   console.log(`sending status ${status} for session ${sessionId}`);
-  //   if (status === "success") {
-  //     sessions.splice(index, 1);
-  //     issuanceResults.splice(index, 1);
-  //   }
-  //   console.log(`new sessions`);
-  //   console.log(sessions);
-  //   console.log("new session statuses");
-  //   console.log(issuanceResults);
+  // walletCodeSessions,codeFlowRequestsResults,codeFlowRequests
 
   let result =
     checkIfExistsIssuanceStatus(sessionId, sessions, issuanceResults) ||
     checkIfExistsIssuanceStatus(
       sessionId,
-      codeSessions,
-      codeFlowRequestsResults
+      issuerCodeSessions,
+      codeFlowRequestsResults,
+      walletCodeSessions,
+      codeFlowRequests
     );
   if (result) {
     res.json({
@@ -396,7 +481,13 @@ router.get(["/issueStatus"], (req, res) => {
   }
 });
 
-function checkIfExistsIssuanceStatus(sessionId, sessions, sessionResults) {
+function checkIfExistsIssuanceStatus(
+  sessionId,
+  sessions,
+  sessionResults,
+  walletCodeSessions = null,
+  codeFlowRequests = null
+) {
   let index = sessions.indexOf(sessionId);
   console.log("index is");
   console.log(index);
@@ -410,6 +501,8 @@ function checkIfExistsIssuanceStatus(sessionId, sessions, sessionResults) {
     if (status === "success") {
       sessions.splice(index, 1);
       sessionResults.splice(index, 1);
+      if (walletCodeSessions) walletCodeSessions.splice(index, 1);
+      if (codeFlowRequests) codeFlowRequests.splice(index, 1);
     }
     return status;
   }

@@ -58,6 +58,53 @@
           }
         }
       }
+    },
+    "VerifiablePortableDocumentA2": {
+      "format": "vc_jwt",
+      "scope": "VerifiablePortableDocumentA2",
+      "cryptographic_binding_methods_supported": [
+        "jwk"
+      ],
+      "cryptographic_suites_supported": [
+        "ES256"
+      ],
+      "display": [
+        {
+          "name": "Portable Document A2",
+          "locale": "en-GB",
+          "background_color": "#12107c",
+          "text_color": "#FFFFFF"
+        }
+      ],
+      "credential_definition": {
+        "vct": "VerifiablePortableDocumentA2",
+        "claims": {
+          "given_name": {
+            "display": [
+              {
+                "name": "Given Name",
+                "locale": "en-GB"
+              },
+              {
+                "name": "Vorname",
+                "locale": "de-DE"
+              }
+            ]
+          },
+          "last_name": {
+            "display": [
+              {
+                "name": "Surname",
+                "locale": "en-GB"
+              },
+              {
+                "name": "Nachname",
+                "locale": "de-DE"
+              }
+            ]
+          }
+        }
+      }
     }
   }
 }
