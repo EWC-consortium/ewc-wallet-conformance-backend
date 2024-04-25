@@ -43,7 +43,7 @@ console.log(privateKey);
 router.get(["/offer"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const preSessions = getPreCodeSessions();
-  if (preSessions.indexOf(uuid) < 0) {
+  if (preSessions.sessions.indexOf(uuid) < 0) {
     preSessions.sessions.push(uuid);
     preSessions.results.push({ sessionId: uuid, status: "pending" });
   }

@@ -17,7 +17,7 @@ const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const codeSessions = getAuthCodeSessions();
-  if (codeSessions.indexOf(uuid) < 0) {
+  if (codeSessions.sessions.indexOf(uuid) < 0) {
     codeSessions.sessions.push(uuid);
     codeSessions.results.push({ sessionId: uuid, status: "pending" });
   }
