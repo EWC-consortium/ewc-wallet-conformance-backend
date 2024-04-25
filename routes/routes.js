@@ -238,8 +238,6 @@ router.post("/credential", async (req, res) => {
       c_nonce_expires_in: 86400,
     });
   }
-
- 
 });
 //issuerConfig.credential_endpoint = serverURL + "/credential";
 
@@ -264,6 +262,12 @@ router.get(["/issueStatus"], (req, res) => {
       codeSessions.requests
     );
   if (result) {
+    console.log("wi9ll send result");
+    console.log({
+      status: result,
+      reason: "ok",
+      sessionId: sessionId,
+    });
     res.json({
       status: result,
       reason: "ok",
@@ -290,11 +294,11 @@ function checkIfExistsIssuanceStatus(
   console.log(index);
   if (index >= 0) {
     let status = sessionResults[index].status;
-    // console.log(`sending status ${status} for session ${sessionId}`);
-    // console.log(`new sessions`);
-    // console.log(sessions);
-    // console.log("new session statuses");
-    // console.log(sessionResults);
+    console.log(`sending status ${status} for session ${sessionId}`);
+    console.log(`new sessions`);
+    console.log(sessions);
+    console.log("new session statuses");
+    console.log(sessionResults);
     if (status === "success") {
       sessions.splice(index, 1);
       sessionResults.splice(index, 1);
