@@ -99,8 +99,8 @@ codeFlowRouter.get("/authorize", async (req, res) => {
 
   // If validations pass, redirect with a 302 Found response
   const authorizationCode = null; //"SplxlOBeZQQYbYS6WxSbIA";
+  const codeSessions = getAuthCodeSessions();
   if (codeSessions.sessions.indexOf(issuerState)) {
-    const codeSessions = getAuthCodeSessions();
     codeSessions.requests.push({
       challenge: codeChallenge,
       method: codeChallengeMethod,
@@ -115,8 +115,8 @@ codeFlowRouter.get("/authorize", async (req, res) => {
       status: "pending",
     });
     codeSessions.walletSessions.push(state); // push state as send by wallet
-  }else{
-    console.log("ITB session not found")
+  } else {
+    console.log("ITB session not found");
   }
 
   // codeSessions.sessions.push(issuerState);
