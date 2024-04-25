@@ -100,7 +100,7 @@ codeFlowRouter.get("/authorize", async (req, res) => {
   // If validations pass, redirect with a 302 Found response
   const authorizationCode = null; //"SplxlOBeZQQYbYS6WxSbIA";
   const codeSessions = getAuthCodeSessions();
-  if (codeSessions.sessions.indexOf(issuerState)) {
+  if (codeSessions.sessions.indexOf(issuerState) >=0 ) {
     codeSessions.requests.push({
       challenge: codeChallenge,
       method: codeChallengeMethod,
