@@ -43,8 +43,11 @@ console.log(privateKey);
 router.get(["/offer"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const preSessions = getPreCodeSessions();
-  preSessions.sessions.push(uuid);
-  preSessions.results.push({ sessionId: uuid, status: "pending" });
+  if (preSessions.indexOf(uuid) < 0) {
+    preSessions.sessions.push(uuid);
+    preSessions.results.push({ sessionId: uuid, status: "pending" });
+  }
+
   // console.log("active sessions");
   // console.log(issuanceResults);
   let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer/${uuid}`; //OfferUUID

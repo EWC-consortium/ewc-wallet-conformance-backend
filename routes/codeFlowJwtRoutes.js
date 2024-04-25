@@ -18,9 +18,13 @@ const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
 // auth code flow
 codeFlowRouter.get(["/offer-code"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+
   const codeSessions = getAuthCodeSessions();
-  codeSessions.sessions.push(uuid);
-  codeSessions.results.push({ sessionId: uuid, status: "pending" });
+  if (codeSessions.indexOf(uuid) < 0) {
+    codeSessions.sessions.push(uuid);
+    codeSessions.results.push({ sessionId: uuid, status: "pending" });
+  }
+
   // console.log("active sessions");
   // console.log(issuanceResults);
   let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-code/${uuid}`;

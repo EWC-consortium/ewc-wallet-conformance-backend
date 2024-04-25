@@ -17,8 +17,10 @@ const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const codeSessions = getAuthCodeSessions();
-  codeSessions.sessions.push(uuid);
-  codeSessions.results.push({ sessionId: uuid, status: "pending" });
+  if (codeSessions.indexOf(uuid) < 0) {
+    codeSessions.sessions.push(uuid);
+    codeSessions.results.push({ sessionId: uuid, status: "pending" });
+  }
   let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-code-sd-jwt/${uuid}`;
 
   let code = qr.image(credentialOffer, {
