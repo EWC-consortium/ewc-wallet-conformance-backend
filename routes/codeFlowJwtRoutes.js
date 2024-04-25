@@ -22,7 +22,7 @@ codeFlowRouter.get(["/offer-code"], async (req, res) => {
   const codeSessions = getAuthCodeSessions();
   if (codeSessions.sessions.indexOf(uuid) < 0) {
     codeSessions.sessions.push(uuid);
-    codeSessions.results.push({ sessionId: uuid, status: "pending" });
+    // codeSessions.results.push({ sessionId: uuid, status: "pending" });
   }
 
   // console.log("active sessions");
@@ -99,22 +99,27 @@ codeFlowRouter.get("/authorize", async (req, res) => {
 
   // If validations pass, redirect with a 302 Found response
   const authorizationCode = null; //"SplxlOBeZQQYbYS6WxSbIA";
-  const codeSessions = getAuthCodeSessions();
-  codeSessions.requests.push({
-    challenge: codeChallenge,
-    method: codeChallengeMethod,
-    sessionId: authorizationCode,
-    issuerState: issuerState,
-    state: state,
-  });
-  codeSessions.results.push({
-    sessionId: authorizationCode,
-    issuerState: issuerState,
-    state: state,
-    status: "pending",
-  });
-  codeSessions.walletSessions.push(state); // push state as send by wallet
-  codeSessions.sessions.push(issuerState);
+  if (codeSessions.sessions.indexOf(issuerState)) {
+    const codeSessions = getAuthCodeSessions();
+    codeSessions.requests.push({
+      challenge: codeChallenge,
+      method: codeChallengeMethod,
+      sessionId: authorizationCode,
+      issuerState: issuerState,
+      state: state,
+    });
+    codeSessions.results.push({
+      sessionId: authorizationCode,
+      issuerState: issuerState,
+      state: state,
+      status: "pending",
+    });
+    codeSessions.walletSessions.push(state); // push state as send by wallet
+  }else{
+    console.log("ITB session not found")
+  }
+
+  // codeSessions.sessions.push(issuerState);
 
   // for normal response not requesting VP from wallet
   //const redirectUrl = `${redirectUri}?code=${authorizationCode}&state=${state}`;

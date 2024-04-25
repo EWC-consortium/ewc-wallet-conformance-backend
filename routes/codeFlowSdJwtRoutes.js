@@ -19,7 +19,7 @@ codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
   const codeSessions = getAuthCodeSessions();
   if (codeSessions.sessions.indexOf(uuid) < 0) {
     codeSessions.sessions.push(uuid);
-    codeSessions.results.push({ sessionId: uuid, status: "pending" });
+    // codeSessions.results.push({ sessionId: uuid, status: "pending" });
   }
   let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-code-sd-jwt/${uuid}`;
 
