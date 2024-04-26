@@ -77,7 +77,7 @@
         }
       ],
       "credential_definition": {
-        "vct": "VerifiablePortableDocumentA2",
+        "type": "VerifiablePortableDocumentA2",
         "claims": {
           "given_name": {
             "display": [
