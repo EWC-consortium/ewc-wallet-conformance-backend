@@ -229,7 +229,7 @@ router.post("/credential", async (req, res) => {
       {
         iss: serverURL,
         iat: new Date().getTime(),
-        vct: "VerifiablePortableDocumentA1",
+        type: "VerifiablePortableDocumentA1",
         ...claims,
       },
       disclosureFrame
