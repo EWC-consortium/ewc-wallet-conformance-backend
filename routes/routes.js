@@ -39,7 +39,7 @@ const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
 console.log("privateKey");
 console.log(privateKey);
 
-///pre-auth flow
+///pre-auth flow sd-jwt
 router.get(["/offer"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const preSessions = getPreCodeSessions();
@@ -67,7 +67,7 @@ router.get(["/offer"], async (req, res) => {
   });
 });
 
-//pre-auth flow request
+//pre-auth flow request sd-jwt
 router.get(["/credential-offer/:id"], (req, res) => {
   res.json({
     credential_issuer: serverURL,
@@ -80,6 +80,48 @@ router.get(["/credential-offer/:id"], (req, res) => {
     },
   });
 });
+
+// ***************
+///pre-auth flow jwt_ve
+router.get(["/pre-offer-jwt"], async (req, res) => {
+  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  const preSessions = getPreCodeSessions();
+  if (preSessions.sessions.indexOf(uuid) < 0) {
+    preSessions.sessions.push(uuid);
+    preSessions.results.push({ sessionId: uuid, status: "pending" });
+  }
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-pre-jwt/${uuid}`; //OfferUUID
+  let code = qr.image(credentialOffer, {
+    type: "png",
+    ec_level: "H",
+    size: 10,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  res.json({
+    qr: encodedQR,
+    deepLink: credentialOffer,
+    sessionId: uuid,
+  });
+});
+
+//pre-auth flow request sd-jwt
+router.get(["/credential-offer-pre-jwt/:id"], (req, res) => {
+  res.json({
+    credential_issuer: serverURL,
+    credentials: ["VerifiablePortableDocumentA2"],
+    grants: {
+      "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
+        "pre-authorized_code": req.params.id,
+        user_pin_required: true,
+      },
+    },
+  });
+});
+
+
+
 
 router.post("/token_endpoint", async (req, res) => {
   //pre-auth code flow
