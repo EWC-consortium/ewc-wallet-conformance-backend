@@ -17,10 +17,10 @@
       "constraints": {
         "fields": [
           {
-            "path": ["$.credentialSubject.given_name"]
+            "path": ["$.vc.credentialSubject.given_name"]
           },
           {
-            "path": ["$.credentialSubject.last_name"]
+            "path": ["$.vc.credentialSubject.last_name"]
           }
         ]
       },
