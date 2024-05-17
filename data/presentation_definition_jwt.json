@@ -17,12 +17,10 @@
       "constraints": {
         "fields": [
           {
-            "path": ["$.vc.credentialSubject.given_name"],
-            "purpose": "To ensure the credential has a given name"
+            "path": ["$.credentialSubject.given_name"]
           },
           {
-            "path": ["$.vc.credentialSubject.last_name"],
-            "purpose": "To ensure the credential has a last name"
+            "path": ["$.credentialSubject.last_name"]
           }
         ]
       },
