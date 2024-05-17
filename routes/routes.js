@@ -67,6 +67,8 @@ router.get(["/offer"], async (req, res) => {
   });
 });
 
+
+
 //pre-auth flow request sd-jwt
 router.get(["/credential-offer/:id"], (req, res) => {
   res.json({
@@ -82,7 +84,7 @@ router.get(["/credential-offer/:id"], (req, res) => {
 });
 
 // ***************
-///pre-auth flow jwt_ve
+///pre-auth flow jwt_vc
 router.get(["/pre-offer-jwt"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const preSessions = getPreCodeSessions();

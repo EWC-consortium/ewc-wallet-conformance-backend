@@ -21,7 +21,7 @@ const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
 
-const presentation_definition = JSON.parse(
+const presentation_definition_sdJwt = JSON.parse(
   fs.readFileSync("./data/presentation_definition.json", "utf-8")
 );
 
@@ -47,7 +47,7 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
     request_uri,
     stateParam,
     nonce,
-    encodeURIComponent(JSON.stringify(presentation_definition))
+    encodeURIComponent(JSON.stringify(presentation_definition_sdJwt))
   );
 
   let code = qr.image(vpRequest, {
@@ -90,7 +90,7 @@ verifierRouter.get("/vpRequest/:id", async (req, res) => {
     nonce,
     clientId,
     response_uri,
-    presentation_definition,
+    presentation_definition_sdJwt,
     jwks,
     serverURL,
     privateKey

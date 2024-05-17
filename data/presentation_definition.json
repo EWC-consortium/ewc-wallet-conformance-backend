@@ -23,7 +23,7 @@
             "path": ["$.last_name"]
           },
           {
-            "path": ["$.type"],
+            "path": ["$.vct"],
             "filter": {
               "type": "string",
               "const": "VerifiablePortableDocumentA1"
