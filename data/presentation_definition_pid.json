@@ -1,0 +1,50 @@
+{
+  "id": "d49ee616-0e8d-4698-aff5-2a8a2362652d",
+  "name": "id-card-proof",
+  "format": {
+    "jwt_vc": {
+      "alg": ["ES256", "ES384"]
+    }
+  },
+  "input_descriptors": [
+    {
+      "id": "abd4acb1-1dcb-41ad-8596-ceb1401a69c7",
+      "format": {
+        "jwt_vc": {
+          "alg": ["ES256", "ES384"]
+        }
+      },
+      "constraints": {
+        "fields": [
+          {
+            "path": ["$.credentialSubject.given_name","$.vc.credentialSubject.given_name"]
+          },
+          {
+            "path": ["$.credentialSubject.family_name","$.vc.credentialSubject.family_name"]
+          },
+          {
+            "path": ["$.credentialSubject.birth_date","$.vc.credentialSubject.birth_date"]
+          },
+          {
+            "path": ["$.credentialSubject.age_over_18","$.vc.credentialSubject.age_over_18"]
+          },
+          {
+            "path": ["$.credentialSubject.issuance_date","$.vc.credentialSubject.issuance_date"]
+          },
+          {
+            "path": ["$.credentialSubject.expiry_date","$.vc.credentialSubject.expiry_date"]
+          },
+          {
+            "path": ["$.credentialSubject.issuing_authority","$.vc.credentialSubject.issuing_authority"]
+          },
+          {
+            "path": ["$.credentialSubject.issuing_country","$.vc.credentialSubject.issuing_country"]
+          }
+
+
+        ]
+      },
+      "limit_disclosure": "required"
+    }
+  ]
+}

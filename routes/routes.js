@@ -330,38 +330,119 @@ router.post("/credential", async (req, res) => {
           },
         };
       } else {
-        //sign as jwt
-        payload = {
-          iss: serverURL,
-          sub: decodedHeaderSubjectDID || "",
-          exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
-          iat: Math.floor(Date.now() / 1000), // Token issued at time
-          // nbf: Math.floor(Date.now() / 1000),
-          jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
-          vc: {
-            credentialSubject: {
-              id: null,
-              given_name: "John",
-              last_name: "Doe",
+        if (
+          requestedCredentials != null &&
+          requestedCredentials[0] === "EducationalID"
+        ) {
+          payload = {
+            iss: serverURL,
+            sub: decodedHeaderSubjectDID || "",
+            iat: Math.floor(Date.now() / 1000), // Token issued at time
+            exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
+            jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
+            vc: {
+              type: ["EducationalID"],
+              credentialSubject: {
+                id: decodedHeaderSubjectDID || "",
+                identifier: "john.doe@university.edu",
+                schacPersonalUniqueCode: [
+                  "urn:schac:personalUniqueCode:int:esi:university.edu:12345",
+                ],
+                schacPersonalUniqueID: "urn:schac:personalUniqueID:us:12345",
+                schacHomeOrganization: "university.edu",
+                familyName: "Doe",
+                firstName: "John",
+                displayName: "John Doe",
+                dateOfBirth: "1990-01-01",
+                commonName: "Johnathan Doe",
+                mail: "john.doe@university.edu",
+                eduPersonPrincipalName: "john.doe@university.edu",
+                eduPersonPrimaryAffiliation: "student",
+                eduPersonAffiliation: ["member", "student"],
+                eduPersonScopedAffiliation: ["student@university.edu"],
+                eduPersonAssurance: [
+                  "https://wiki.refeds.org/display/ASS/REFEDS+Assurance+Framework+ver+1.0",
+                ],
+              },
+              issuanceDate: new Date(
+                Math.floor(Date.now() / 1000) * 1000
+              ).toISOString(),
+              expirationDate: new Date(
+                (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
+              ).toISOString(),
+              validFrom: new Date(
+                Math.floor(Date.now() / 1000) * 1000
+              ).toISOString(),
             },
-            expirationDate: new Date(
-              (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
-            ).toISOString(),
-            id: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
-            issuanceDate: new Date(
-              Math.floor(Date.now() / 1000) * 1000
-            ).toISOString(),
-            issued: new Date(
-              Math.floor(Date.now() / 1000) * 1000
-            ).toISOString(),
-            issuer: serverURL,
-            type: ["VerifiablePortableDocumentA2"],
-            validFrom: new Date(
-              Math.floor(Date.now() / 1000) * 1000
-            ).toISOString(),
-          },
-          // Optional claims
-        };
+          };
+        } else {
+          if (
+            requestedCredentials != null &&
+            requestedCredentials[0] === "allianceIDCredential"
+          ) {
+            payload = {
+              iss: serverURL,
+              sub: decodedHeaderSubjectDID || "",
+              iat: Math.floor(Date.now() / 1000), // Token issued at time
+              exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
+              jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
+              vc: {
+                type: ["allianceIDCredential"],
+                credentialSubject: {
+                  id: decodedHeaderSubjectDID, // Replace with the actual subject DID
+                  identifier: {
+                    schemeID: "European Student Identifier",
+                    value:
+                      "urn:schac:europeanUniversityAllianceCode:int:euai:ERUA:universityXYZ",
+                    id: "urn:schac:europeanUniversityAllianceCode:int:euai:ERUA:universityXYZ",
+                  },
+                },
+                issuanceDate: new Date(
+                  Math.floor(Date.now() / 1000) * 1000
+                ).toISOString(),
+                expirationDate: new Date(
+                  (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
+                ).toISOString(),
+                validFrom: new Date(
+                  Math.floor(Date.now() / 1000) * 1000
+                ).toISOString(),
+              },
+            };
+          } else {
+            //sign as jwt
+            payload = {
+              iss: serverURL,
+              sub: decodedHeaderSubjectDID || "",
+              exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
+              iat: Math.floor(Date.now() / 1000), // Token issued at time
+              // nbf: Math.floor(Date.now() / 1000),
+              jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
+              vc: {
+                credentialSubject: {
+                  id: null,
+                  given_name: "John",
+                  last_name: "Doe",
+                },
+                expirationDate: new Date(
+                  (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
+                ).toISOString(),
+                id: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
+                issuanceDate: new Date(
+                  Math.floor(Date.now() / 1000) * 1000
+                ).toISOString(),
+                issued: new Date(
+                  Math.floor(Date.now() / 1000) * 1000
+                ).toISOString(),
+                issuer: serverURL,
+                type: ["VerifiablePortableDocumentA2"],
+                validFrom: new Date(
+                  Math.floor(Date.now() / 1000) * 1000
+                ).toISOString(),
+              },
+              // Optional claims
+            };
+          }
+        }
       }
     }
 

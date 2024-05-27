@@ -7,6 +7,7 @@ import codeFlowRouter from "./routes/codeFlowJwtRoutes.js";
 import codeFlowRouterSDJWT from "./routes/codeFlowSdJwtRoutes.js";
 import pidRouter from "./routes/pidroutes.js";
 import passportRouter from "./routes/passportRoutes.js";
+import educationalRouter from "./routes/educationalRoutes.js";
 import bodyParser from "body-parser"; // Body parser middleware
 
 const app = express();
@@ -29,6 +30,7 @@ app.use("/", codeFlowRouter);
 app.use("/", codeFlowRouterSDJWT);
 app.use("/", pidRouter);
 app.use("/", passportRouter);
+app.use("/", educationalRouter);
 
 // Start the server
 app.listen(port, () => {

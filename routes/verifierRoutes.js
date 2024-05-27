@@ -29,6 +29,16 @@ const presentation_definition_jwt = JSON.parse(
   fs.readFileSync("./data/presentation_definition_jwt.json", "utf-8")
 );
 
+const presentation_definition_pid = JSON.parse(
+  fs.readFileSync("./data/presentation_definition_pid.json", "utf-8")
+);
+const presentation_definition_epass = JSON.parse(
+  fs.readFileSync("./data/presentation_definition_epass.json", "utf-8")
+);
+const presentation_definition_educational_id = JSON.parse(
+  fs.readFileSync("./data/presentation_definition_education_id.json", "utf-8")
+);
+
 const jwks = pemToJWK(publicKeyPem, "public");
 
 let verificationSessions = []; //TODO these should be redis or something a proper cache...
@@ -186,6 +196,80 @@ verifierRouter.get("/vpRequestJwt/:id", async (req, res) => {
     clientId,
     response_uri,
     presentation_definition_jwt,
+    jwks,
+    serverURL,
+    privateKey
+  );
+  res.type("text/plain").send(jwtToken);
+});
+
+// *******************PID******************************
+verifierRouter.get("/vp-request/:type", async (req, res) => {
+  const { type } = req.params;
+  const stateParam = req.query.id ? req.query.id : uuidv4();
+  const nonce = generateNonce(16);
+
+  let request_uri = `${serverURL}/vpRequest/${type}/${stateParam}`;
+  const response_uri = `${serverURL}/direct_post_jwt`; // not used
+
+  const vpRequest = buildVP(
+    serverURL,
+    response_uri,
+    request_uri,
+    stateParam,
+    nonce,
+    null
+  );
+
+  let code = qr.image(vpRequest, {
+    type: "png",
+    ec_level: "H",
+    size: 10,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  res.json({
+    qr: encodedQR,
+    deepLink: vpRequest,
+    sessionId: stateParam,
+  });
+});
+
+verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
+  const { type, id } = req.params;
+  const uuid = id ? id : uuidv4();
+  const stateParam = uuidv4();
+  const nonce = generateNonce(16);
+
+  const response_uri = `${serverURL}/direct_post_jwt/${uuid}`;
+  let clientId = `${serverURL}/direct_post_jwt/${uuid}`;
+  sessions.push(uuid);
+  verificationSessions.push({
+    uuid: uuid,
+    status: "pending",
+    claims: null,
+  });
+
+  let presentationDefinition;
+  if (type === "pid") {
+    presentationDefinition = presentation_definition_pid;
+  } else if (type === "epassport") {
+    presentationDefinition = presentation_definition_epass;
+  } else if (type === "educationId" || type === "educationid" ) {
+    presentationDefinition = presentation_definition_educational_id;
+  } else if(type==="allianceId" || type === "allianceid"){
+    presentationDefinition = presentation_definition_alliance_id;
+  }else {
+    return res.status(400).type("text/plain").send("Invalid type parameter");
+  }
+
+  let jwtToken = buildVpRequestJwt(
+    stateParam,
+    nonce,
+    clientId,
+    response_uri,
+    presentationDefinition,
     jwks,
     serverURL,
     privateKey

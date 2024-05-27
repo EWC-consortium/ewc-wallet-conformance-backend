@@ -689,6 +689,200 @@
           }
         }
       }
+    },
+
+    "EducationalID": {
+      "format": "vc_jwt",
+      "scope": "EducationalID",
+      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_suites_supported": ["ES256"],
+      "display": [
+        {
+          "name": "EducationalID",
+          "locale": "en-GB",
+          "background_color": "#12107c",
+          "text_color": "#FFFFFF"
+        }
+      ],
+      "credential_definition": {
+        "type": ["EducationalID"],
+        "claims": {
+          "identifier": {
+            "display": [
+              {
+                "name": "Identifier",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "schacPersonalUniqueCode": {
+            "display": [
+              {
+                "name": "SCHAC Personal Unique Code",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "schacPersonalUniqueID": {
+            "display": [
+              {
+                "name": "SCHAC Personal Unique ID",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "schacHomeOrganization": {
+            "display": [
+              {
+                "name": "SCHAC Home Organization",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "familyName": {
+            "display": [
+              {
+                "name": "Family Name",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "firstName": {
+            "display": [
+              {
+                "name": "First Name",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "displayName": {
+            "display": [
+              {
+                "name": "Display Name",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "dateOfBirth": {
+            "display": [
+              {
+                "name": "Date of Birth",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "commonName": {
+            "display": [
+              {
+                "name": "Common Name",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "mail": {
+            "display": [
+              {
+                "name": "Email",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "eduPersonPrincipalName": {
+            "display": [
+              {
+                "name": "eduPerson Principal Name",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "eduPersonPrimaryAffiliation": {
+            "display": [
+              {
+                "name": "eduPerson Primary Affiliation",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "eduPersonAffiliation": {
+            "display": [
+              {
+                "name": "eduPerson Affiliation",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "eduPersonScopedAffiliation": {
+            "display": [
+              {
+                "name": "eduPerson Scoped Affiliation",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "eduPersonAssurance": {
+            "display": [
+              {
+                "name": "eduPerson Assurance",
+                "locale": "en-GB"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "allianceIDCredential": {
+      "format": "vc_jwt",
+      "scope": "allianceIDCredential",
+      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_suites_supported": ["ES256"],
+      "display": [
+        {
+          "name": "AllianceIDCredential",
+          "locale": "en-GB",
+          "background_color": "#12107c",
+          "text_color": "#FFFFFF"
+        }
+      ],
+      "credential_definition": {
+        "type": ["allianceIDCredential"],
+        "claims": {
+          "identifier": {
+            "display": [
+              {
+                "name": "Identifier",
+                "locale": "en-GB"
+              }
+            ],
+            "properties": {
+              "schemeID": {
+                "display": [
+                  {
+                    "name": "Scheme ID",
+                    "locale": "en-GB"
+                  }
+                ]
+              },
+              "value": {
+                "display": [
+                  {
+                    "name": "Value",
+                    "locale": "en-GB"
+                  }
+                ]
+              },
+              "id": {
+                "display": [
+                  {
+                    "name": "ID",
+                    "locale": "en-GB"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
     }
+
   }
 }
