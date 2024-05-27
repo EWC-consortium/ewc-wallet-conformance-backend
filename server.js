@@ -3,8 +3,10 @@ import express from "express";
 import router from "./routes/routes.js";
 import verifierRouter from "./routes/verifierRoutes.js";
 import metadataRouter from "./routes/metadataroutes.js";
-import codeFlowRouter from "./routes/codeFlowJwtRoutes.js"
-import codeFlowRouterSDJWT from "./routes/codeFlowSdJwtRoutes.js"
+import codeFlowRouter from "./routes/codeFlowJwtRoutes.js";
+import codeFlowRouterSDJWT from "./routes/codeFlowSdJwtRoutes.js";
+import pidRouter from "./routes/pidroutes.js";
+import passportRouter from "./routes/passportRoutes.js";
 import bodyParser from "body-parser"; // Body parser middleware
 
 const app = express();
@@ -25,6 +27,8 @@ app.use("/", verifierRouter);
 app.use("/", metadataRouter);
 app.use("/", codeFlowRouter);
 app.use("/", codeFlowRouterSDJWT);
+app.use("/", pidRouter);
+app.use("/", passportRouter);
 
 // Start the server
 app.listen(port, () => {

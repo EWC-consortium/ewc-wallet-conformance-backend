@@ -67,8 +67,6 @@ router.get(["/offer"], async (req, res) => {
   });
 });
 
-
-
 //pre-auth flow request sd-jwt
 router.get(["/credential-offer/:id"], (req, res) => {
   res.json({
@@ -121,9 +119,6 @@ router.get(["/credential-offer-pre-jwt/:id"], (req, res) => {
     },
   });
 });
-
-
-
 
 router.post("/token_endpoint", async (req, res) => {
   //pre-auth code flow
@@ -182,6 +177,7 @@ router.post("/credential", async (req, res) => {
   // Accessing the body data
   const requestBody = req.body;
   const format = requestBody.format;
+  const requestedCredentials = requestBody.types;
   //TODO valiate bearer header
   let decodedWithHeader;
   let decodedHeaderSubjectDID;
@@ -194,34 +190,180 @@ router.post("/credential", async (req, res) => {
 
   // console.log(credential);
   if (format === "jwt_vc") {
-    //sign as jwt
-    const payload = {
-      iss: serverURL,
-      sub: decodedHeaderSubjectDID || "",
-      exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
-      iat: Math.floor(Date.now() / 1000), // Token issued at time
-      // nbf: Math.floor(Date.now() / 1000),
-      jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
-      vc: {
-        credentialSubject: {
-          id: null,
-          given_name: "John",
-          last_name: "Doe",
+    let payload = {};
+    if (requestedCredentials != null && requestedCredentials[0] === "PID") {
+      payload = {
+        iss: serverURL,
+        sub: decodedHeaderSubjectDID || "",
+        exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
+        iat: Math.floor(Date.now() / 1000), // Token issued at time
+        // nbf: Math.floor(Date.now() / 1000),
+        jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
+        vc: {
+          credentialSubject: {
+            id: decodedHeaderSubjectDID,
+            family_name: "Doe",
+            given_name: "John",
+            birth_date: "1990-01-01",
+            age_over_18: true,
+            issuance_date: new Date(
+              Math.floor(Date.now() / 1000) * 1000
+            ).toISOString(),
+            expiry_date: new Date(
+              Math.floor(Date.now() + 60 / 1000) * 1000
+            ).toISOString(),
+            issuing_authority: "https://authority.example.com",
+            issuing_country: "GR",
+          },
+          expirationDate: new Date(
+            (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
+          ).toISOString(),
+          id: decodedHeaderSubjectDID,
+          issuanceDate: new Date(
+            Math.floor(Date.now() / 1000) * 1000
+          ).toISOString(),
+          issued: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
+          issuer: serverURL,
+          type: ["PID"],
+          validFrom: new Date(
+            Math.floor(Date.now() / 1000) * 1000
+          ).toISOString(),
         },
-        expirationDate: new Date(
-          (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
-        ).toISOString(),
-        id: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
-        issuanceDate: new Date(
-          Math.floor(Date.now() / 1000) * 1000
-        ).toISOString(),
-        issued: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
-        issuer: serverURL,
-        type: ["VerifiablePortableDocumentA2"],
-        validFrom: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
-      },
-      // Optional claims
-    };
+        // Optional claims
+      };
+    } else {
+      if (
+        requestedCredentials != null &&
+        requestedCredentials[0] === "ePassportCredential"
+      ) {
+        payload = {
+          iss: serverURL,
+          sub: decodedHeaderSubjectDID || "",
+          iat: Math.floor(Date.now() / 1000), // Token issued at time
+          exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
+          jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
+          vc: {
+            credentialSubject: {
+              id: decodedHeaderSubjectDID || "", // Replace with the actual subject DID
+              electronicPassport: {
+                dataGroup1: {
+                  birthdate: "1990-01-01",
+                  docTypeCode: "P",
+                  expiryDate: "2030-01-01",
+                  genderCode: "M",
+                  holdersName: "John Doe",
+                  issuerCode: "GR",
+                  natlText: "Hellenic",
+                  passportNumberIdentifier: "123456789",
+                },
+                dataGroup15: {
+                  activeAuthentication: {
+                    publicKeyBinaryObject: "somePublicKeyUri",
+                  },
+                },
+                dataGroup2EncodedFaceBiometrics: {
+                  faceBiometricDataEncodedPicture: "someBiometricUri",
+                },
+                digitalTravelCredential: {
+                  contentInfo: {
+                    versionNumber: 1,
+                    signatureInfo: {
+                      digestHashAlgorithmIdentifier: "SHA-256",
+                      signatureAlgorithmIdentifier: "RS256",
+                      signatureCertificateText: "someCertificateText",
+                      signatureDigestResultBinaryObject: "someDigestResultUri",
+                      signedAttributes: {
+                        attributeTypeCode: "someTypeCode",
+                        attributeValueText: "someValueText",
+                      },
+                    },
+                  },
+                  dataCapabilitiesInfo: {
+                    dataTransferInterfaceTypeCode: "NFC",
+                    securityAssuranceLevelIndText: "someSecurityLevel",
+                    userConsentInfoText: "userConsentRequired",
+                    virtualComponentPresenceInd: true,
+                  },
+                  dataContent: {
+                    dataGroup1: {
+                      birthdate: "1990-01-01",
+                      docTypeCode: "P",
+                      expiryDate: "2030-01-01",
+                      genderCode: "M",
+                      holdersName: "John Doe",
+                      issuerCode: "GR",
+                      natlText: "Hellenic",
+                      passportNumberIdentifier: "123456789",
+                      personalNumberIdentifier: "987654321",
+                    },
+                    dataGroup2EncodedFaceBiometrics: {
+                      faceBiometricDataEncodedPicture: "someBiometricUri",
+                    },
+                    docSecurityObject: {
+                      dataGroupHash: [
+                        {
+                          dataGroupNumber: 1,
+                          valueBinaryObject: "someHashUri",
+                        },
+                      ],
+                      digestHashAlgorithmIdentifier: "SHA-256",
+                      versionNumber: 1,
+                    },
+                  },
+                  docSecurityObject: {
+                    dataGroupHash: [
+                      {
+                        dataGroupNumber: 1,
+                        valueBinaryObject: "someHashUri",
+                      },
+                    ],
+                    digestHashAlgorithmIdentifier: "SHA-256",
+                    versionNumber: 1,
+                  },
+                },
+              },
+            },
+            type: ["ePassportCredential"],
+            validFrom: new Date(
+              Math.floor(Date.now() / 1000) * 1000
+            ).toISOString(),
+          },
+        };
+      } else {
+        //sign as jwt
+        payload = {
+          iss: serverURL,
+          sub: decodedHeaderSubjectDID || "",
+          exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
+          iat: Math.floor(Date.now() / 1000), // Token issued at time
+          // nbf: Math.floor(Date.now() / 1000),
+          jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
+          vc: {
+            credentialSubject: {
+              id: null,
+              given_name: "John",
+              last_name: "Doe",
+            },
+            expirationDate: new Date(
+              (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
+            ).toISOString(),
+            id: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
+            issuanceDate: new Date(
+              Math.floor(Date.now() / 1000) * 1000
+            ).toISOString(),
+            issued: new Date(
+              Math.floor(Date.now() / 1000) * 1000
+            ).toISOString(),
+            issuer: serverURL,
+            type: ["VerifiablePortableDocumentA2"],
+            validFrom: new Date(
+              Math.floor(Date.now() / 1000) * 1000
+            ).toISOString(),
+          },
+          // Optional claims
+        };
+      }
+    }
 
     const signOptions = {
       algorithm: "ES256", // Specify the signing algorithm
