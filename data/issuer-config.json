@@ -105,6 +105,93 @@
           }
         }
       }
+    },
+    "PID": {
+      "format": "vc_jwt",
+      "scope": "PID",
+      "cryptographic_binding_methods_supported": [
+        "jwk"
+      ],
+      "cryptographic_suites_supported": [
+        "ES256"
+      ],
+      "display": [
+        {
+          "name": "Personal Identification Information",
+          "locale": "en-GB",
+          "background_color": "#12107c",
+          "text_color": "#FFFFFF"
+        }
+      ],
+      "credential_definition": {
+        "type": ["PID"],
+        "claims": {
+          "given_name": {
+            "display": [
+              {
+                "name": "Given Name",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "family_name": {
+            "display": [
+              {
+                "name": "Surname",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "birth_date": {
+            "display": [
+              {
+                "name": "Birth Date",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "age_over_18": {
+            "display": [
+              {
+                "name": "Age Over 18",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "issuance_date": {
+            "display": [
+              {
+                "name": "Issuance Date",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "expiry_date": {
+            "display": [
+              {
+                "name": "Expiry Date",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "issuing_authority": {
+            "display": [
+              {
+                "name": "Issuing Authority",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "issuing_country": {
+            "display": [
+              {
+                "name": "Issuing Country",
+                "locale": "en-GB"
+              }
+            ]
+          }
+        }
+      }
     }
   }
 }
