@@ -38,6 +38,10 @@ const presentation_definition_epass = JSON.parse(
 const presentation_definition_educational_id = JSON.parse(
   fs.readFileSync("./data/presentation_definition_education_id.json", "utf-8")
 );
+const presentation_definition_alliance_id = JSON.parse(
+  fs.readFileSync("./data/presentation_definition_alliance_id.json", "utf-8")
+);
+//
 
 const jwks = pemToJWK(publicKeyPem, "public");
 
@@ -203,7 +207,7 @@ verifierRouter.get("/vpRequestJwt/:id", async (req, res) => {
   res.type("text/plain").send(jwtToken);
 });
 
-// *******************PID******************************
+// *******************PILOT USE CASES ******************************
 verifierRouter.get("/vp-request/:type", async (req, res) => {
   const { type } = req.params;
   const stateParam = req.query.id ? req.query.id : uuidv4();
