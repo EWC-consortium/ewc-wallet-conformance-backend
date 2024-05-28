@@ -28,6 +28,7 @@ import jwt from "jsonwebtoken";
 import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
+import { request } from "http";
 
 const router = express.Router();
 
@@ -177,7 +178,7 @@ router.post("/credential", async (req, res) => {
   // Accessing the body data
   const requestBody = req.body;
   const format = requestBody.format;
-  const requestedCredentials = requestBody.types;
+  const requestedCredentials = requestBody.types || requestBody.credential_definition.type;
   //TODO valiate bearer header
   let decodedWithHeader;
   let decodedHeaderSubjectDID;
