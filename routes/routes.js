@@ -225,6 +225,11 @@ router.post("/credential", async (req, res) => {
           issued: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
           issuer: serverURL,
           type: ["PID"],
+          "@context": [
+            "https://www.w3.org/2018/credentials/v1",
+            "https://europa.eu/2018/credentials/eudi/pid/v1",
+          ],
+          issuer: serverURL,
           validFrom: new Date(
             Math.floor(Date.now() / 1000) * 1000
           ).toISOString(),
@@ -324,6 +329,11 @@ router.post("/credential", async (req, res) => {
               },
             },
             type: ["ePassportCredential"],
+            "@context": [
+              "https://www.w3.org/2018/credentials/v1",
+              "https://schemas.prod.digitalcredentials.iata.org/contexts/iata_credential.jsonld",
+            ],
+            issuer: serverURL,
             validFrom: new Date(
               Math.floor(Date.now() / 1000) * 1000
             ).toISOString(),
@@ -342,6 +352,8 @@ router.post("/credential", async (req, res) => {
             jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
             vc: {
               type: ["EducationalID"],
+              "@context": ["https://www.w3.org/2018/credentials/v1"],
+              issuer: serverURL,
               credentialSubject: {
                 id: decodedHeaderSubjectDID || "",
                 identifier: "john.doe@university.edu",
@@ -388,6 +400,8 @@ router.post("/credential", async (req, res) => {
               jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
               vc: {
                 type: ["allianceIDCredential"],
+                "@context": ["https://www.w3.org/2018/credentials/v1"],
+                issuer: serverURL,
                 credentialSubject: {
                   id: decodedHeaderSubjectDID, // Replace with the actual subject DID
                   identifier: {
