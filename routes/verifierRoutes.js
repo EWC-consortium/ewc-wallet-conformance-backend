@@ -41,6 +41,13 @@ const presentation_definition_educational_id = JSON.parse(
 const presentation_definition_alliance_id = JSON.parse(
   fs.readFileSync("./data/presentation_definition_alliance_id.json", "utf-8")
 );
+
+const presentation_definition_ferryboardingpass = JSON.parse(
+  fs.readFileSync(
+    "./data/presentation_definition_ferryboardingpass.json",
+    "utf-8"
+  )
+);
 //
 
 const jwks = pemToJWK(publicKeyPem, "public");
@@ -260,11 +267,13 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
     presentationDefinition = presentation_definition_pid;
   } else if (type === "epassport") {
     presentationDefinition = presentation_definition_epass;
-  } else if (type === "educationId" || type === "educationid" ) {
+  } else if (type === "educationId" || type === "educationid") {
     presentationDefinition = presentation_definition_educational_id;
-  } else if(type==="allianceId" || type === "allianceid"){
+  } else if (type === "allianceId" || type === "allianceid") {
     presentationDefinition = presentation_definition_alliance_id;
-  }else {
+  } else if (type === "ferryboardingpass") {
+    presentationDefinition = presentation_definition_ferryboardingpass;
+  } else {
     return res.status(400).type("text/plain").send("Invalid type parameter");
   }
 

@@ -882,7 +882,137 @@
           }
         }
       }
+    },
+    "ferryBoardingPassCredential": {
+      "format": "vc_jwt",
+      "scope": "ferryBoardingPassCredential",
+      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_suites_supported": ["ES256"],
+      "display": [
+        {
+          "name": "Ferry Boarding Pass",
+          "locale": "en-GB",
+          "background_color": "#12107c",
+          "text_color": "#FFFFFF"
+        }
+      ],
+      "credential_definition": {
+        "type": ["ferryBoardingPassCredential"],
+        "claims": {
+          "identifier": {
+            "display": [
+              {
+                "name": "Identifier",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "ticketQR": {
+            "display": [
+              {
+                "name": "Ticket QR Code",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "ticketNumber": {
+            "display": [
+              {
+                "name": "Ticket Number",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "ticketLet": {
+            "display": [
+              {
+                "name": "Ticket Letter",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "lastName": {
+            "display": [
+              {
+                "name": "Last Name",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "firstName": {
+            "display": [
+              {
+                "name": "First Name",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "seatType": {
+            "display": [
+              {
+                "name": "Seat Type",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "seatNumber": {
+            "display": [
+              {
+                "name": "Seat Number",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "departureDate": {
+            "display": [
+              {
+                "name": "Departure Date",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "departureTime": {
+            "display": [
+              {
+                "name": "Departure Time",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "arrivalDate": {
+            "display": [
+              {
+                "name": "Arrival Date",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "arrivalTime": {
+            "display": [
+              {
+                "name": "Arrival Time",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "arrivalPort": {
+            "display": [
+              {
+                "name": "Arrival Port",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "vesselDescription": {
+            "display": [
+              {
+                "name": "Vessel Description",
+                "locale": "en-GB"
+              }
+            ]
+          }
+        }
+      }
     }
-
   }
 }

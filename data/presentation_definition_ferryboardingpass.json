@@ -1,0 +1,66 @@
+{
+  "id": "d49ee616-0e8d-4698-aff5-2a8a2362652d",
+  "name": "ferry-boarding-pass-proof",
+  "format": {
+    "jwt_vc": {
+      "alg": ["ES256", "ES384"]
+    }
+  },
+  "input_descriptors": [
+    {
+      "id": "abd4acb1-1dcb-41ad-8596-ceb1401a69c7",
+      "format": {
+        "jwt_vc": {
+          "alg": ["ES256", "ES384"]
+        }
+      },
+      "constraints": {
+        "fields": [
+          {
+            "path": ["$.credentialSubject.identifier", "$.vc.credentialSubject.identifier"]
+          },
+          {
+            "path": ["$.credentialSubject.ticketQR", "$.vc.credentialSubject.ticketQR"]
+          },
+          {
+            "path": ["$.credentialSubject.ticketNumber", "$.vc.credentialSubject.ticketNumber"]
+          },
+          {
+            "path": ["$.credentialSubject.ticketLet", "$.vc.credentialSubject.ticketLet"]
+          },
+          {
+            "path": ["$.credentialSubject.lastName", "$.vc.credentialSubject.lastName"]
+          },
+          {
+            "path": ["$.credentialSubject.firstName", "$.vc.credentialSubject.firstName"]
+          },
+          {
+            "path": ["$.credentialSubject.seatType", "$.vc.credentialSubject.seatType"]
+          },
+          {
+            "path": ["$.credentialSubject.seatNumber", "$.vc.credentialSubject.seatNumber"]
+          },
+          {
+            "path": ["$.credentialSubject.departureDate", "$.vc.credentialSubject.departureDate"]
+          },
+          {
+            "path": ["$.credentialSubject.departureTime", "$.vc.credentialSubject.departureTime"]
+          },
+          {
+            "path": ["$.credentialSubject.arrivalDate", "$.vc.credentialSubject.arrivalDate"]
+          },
+          {
+            "path": ["$.credentialSubject.arrivalTime", "$.vc.credentialSubject.arrivalTime"]
+          },
+          {
+            "path": ["$.credentialSubject.arrivalPort", "$.vc.credentialSubject.arrivalPort"]
+          },
+          {
+            "path": ["$.credentialSubject.vesselDescription", "$.vc.credentialSubject.vesselDescription"]
+          }
+        ]
+      },
+      "limit_disclosure": "required"
+    }
+  ]
+}

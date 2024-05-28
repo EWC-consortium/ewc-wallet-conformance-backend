@@ -5,6 +5,7 @@ import verifierRouter from "./routes/verifierRoutes.js";
 import metadataRouter from "./routes/metadataroutes.js";
 import codeFlowRouter from "./routes/codeFlowJwtRoutes.js";
 import codeFlowRouterSDJWT from "./routes/codeFlowSdJwtRoutes.js";
+import boardingPassRouter from "./routes/boardingPassRoutes.js";
 import pidRouter from "./routes/pidroutes.js";
 import passportRouter from "./routes/passportRoutes.js";
 import educationalRouter from "./routes/educationalRoutes.js";
@@ -31,6 +32,7 @@ app.use("/", codeFlowRouterSDJWT);
 app.use("/", pidRouter);
 app.use("/", passportRouter);
 app.use("/", educationalRouter);
+app.use("/", boardingPassRouter);
 
 // Start the server
 app.listen(port, () => {
