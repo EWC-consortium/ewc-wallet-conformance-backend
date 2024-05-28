@@ -48,6 +48,13 @@ const presentation_definition_ferryboardingpass = JSON.parse(
     "utf-8"
   )
 );
+
+const presentation_definition_alliance_and_education_Id = JSON.parse(
+  fs.readFileSync(
+    "./data/presentation_definition_alliance_and_education_Id.json",
+    "utf-8"
+  )
+);
 //
 
 const jwks = pemToJWK(publicKeyPem, "public");
@@ -273,6 +280,8 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
     presentationDefinition = presentation_definition_alliance_id;
   } else if (type === "ferryboardingpass") {
     presentationDefinition = presentation_definition_ferryboardingpass;
+  } else if (type === "erua-id") {
+    presentationDefinition = presentation_definition_alliance_and_education_Id;
   } else {
     return res.status(400).type("text/plain").send("Invalid type parameter");
   }

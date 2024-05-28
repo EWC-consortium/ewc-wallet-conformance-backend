@@ -1,0 +1,75 @@
+{
+  "id": "multi-credential-request",
+  "name": "Multi-Credential Request",
+  "format": {
+    "jwt_vc": {
+      "alg": ["ES256", "ES384"]
+    }
+  },
+  "input_descriptors": [
+    {
+      "id": "alliance-id-credential",
+      "name": "Alliance ID Credential",
+      "format": {
+        "jwt_vc": {
+          "alg": ["ES256", "ES384"]
+        }
+      },
+      "constraints": {
+        "fields": [
+          {
+            "path": ["$.credentialSubject.identifier.id", "$.vc.credentialSubject.identifier.id"],
+            "purpose": "We need to verify your Alliance ID credential."
+          }
+        ]
+      },
+      "limit_disclosure": "required"
+    },
+    {
+      "id": "educational-id-credential",
+      "name": "Educational ID Credential",
+      "format": {
+        "jwt_vc": {
+          "alg": ["ES256", "ES384"]
+        }
+      },
+      "constraints": {
+        "fields": [
+          {
+            "path": ["$.credentialSubject.schacPersonalUniqueID", "$.vc.credentialSubject.schacPersonalUniqueID"],
+            "purpose": "We need to verify your Educational ID credential."
+          },
+          {
+            "path": ["$.credentialSubject.schacHomeOrganization", "$.vc.credentialSubject.schacHomeOrganization"],
+            "purpose": "We need to verify your Educational ID credential."
+          },
+          {
+            "path": ["$.credentialSubject.familyName", "$.vc.credentialSubject.familyName"],
+            "purpose": "We need to verify your Educational ID credential."
+          },
+          {
+            "path": ["$.credentialSubject.firstName", "$.vc.credentialSubject.firstName"],
+            "purpose": "We need to verify your Educational ID credential."
+          },
+          {
+            "path": ["$.credentialSubject.dateOfBirth", "$.vc.credentialSubject.dateOfBirth"],
+            "purpose": "We need to verify your Educational ID credential."
+          },
+          {
+            "path": ["$.credentialSubject.eduPersonPrincipalName", "$.vc.credentialSubject.eduPersonPrincipalName"],
+            "purpose": "We need to verify your Educational ID credential."
+          },
+          {
+            "path": ["$.credentialSubject.eduPersonPrimaryAffiliation", "$.vc.credentialSubject.eduPersonPrimaryAffiliation"],
+            "purpose": "We need to verify your Educational ID credential."
+          },
+          {
+            "path": ["$.credentialSubject.eduPersonAffiliation", "$.vc.credentialSubject.eduPersonAffiliation"],
+            "purpose": "We need to verify your Educational ID credential."
+          }
+        ]
+      },
+      "limit_disclosure": "required"
+    }
+  ]
+}
