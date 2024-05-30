@@ -121,6 +121,21 @@ router.get(["/credential-offer-pre-jwt/:id"], (req, res) => {
   });
 });
 
+function getPersonaPart(inputString) {
+  const personaKey = "persona=";
+  const personaIndex = inputString.indexOf(personaKey);
+
+  if (personaIndex === -1) {
+    return null; // "persona=" not found in the string
+  }
+
+  // Split the string based on "persona="
+  const parts = inputString.split(personaKey);
+
+  // Return the part after "persona="
+  return parts[1] || null;
+}
+
 router.post("/token_endpoint", async (req, res) => {
   //pre-auth code flow
   const grantType = req.body.grant_type;
@@ -137,6 +152,8 @@ router.post("/token_endpoint", async (req, res) => {
   // console.log(userPin);
   // console.log("---------");
 
+  let generatedAccessToken = buildAccessToken(serverURL, privateKey);
+
   if (grantType == "urn:ietf:params:oauth:grant-type:pre-authorized_code") {
     console.log("pre-auth code flow");
     const preSessions = getPreCodeSessions();
@@ -146,6 +163,15 @@ router.post("/token_endpoint", async (req, res) => {
         `credential for session ${preAuthorizedCode} has been issued`
       );
       preSessions.results[index].status = "success";
+      preSessions.accessTokens[index] = generatedAccessToken;
+
+      let personaId = getPersonaPart(preAuthorizedCode);
+      if (personaId) {
+        preSessions.personas[index] = personaId;
+      } else {
+        preSessions.personas[index] = null;
+      }
+
       // console.log("pre-auth code flow" + preSessions.results[index].status);
     }
   } else {
@@ -161,7 +187,7 @@ router.post("/token_endpoint", async (req, res) => {
   }
   //TODO return error if code flow validation fails and is not a pre-auth flow
   res.json({
-    access_token: buildAccessToken(serverURL, privateKey),
+    access_token: generatedAccessToken,
     refresh_token: generateRefreshToken(),
     token_type: "bearer",
     expires_in: 86400,
@@ -178,7 +204,7 @@ router.post("/credential", async (req, res) => {
   // Accessing the body data
   const requestBody = req.body;
   const format = requestBody.format;
-  const requestedCredentials = requestBody.types || requestBody.credential_definition.type;
+  const requestedCredentials = requestBody.credential_definition.type; //removed requestBody.types to conform to RFC001
   //TODO valiate bearer header
   let decodedWithHeader;
   let decodedHeaderSubjectDID;
@@ -193,6 +219,79 @@ router.post("/credential", async (req, res) => {
   if (format === "jwt_vc") {
     let payload = {};
     if (requestedCredentials != null && requestedCredentials[0] === "PID") {
+      //get persona if existing from accessToken
+      const preSessions = getPreCodeSessions();
+      let persona = getPersonaFromAccessToken(
+        token,
+        preSessions.personas,
+        preSessions.accessTokens
+      );
+
+      let credentialSubject = {
+        id: decodedHeaderSubjectDID,
+        family_name: "Doe",
+        given_name: "John",
+        birth_date: "1990-01-01",
+        age_over_18: true,
+        issuance_date: new Date(
+          Math.floor(Date.now() / 1000) * 1000
+        ).toISOString(),
+        expiry_date: new Date(
+          Math.floor(Date.now() + 60 / 1000) * 1000
+        ).toISOString(),
+        issuing_authority: "https://authority.example.com",
+        issuing_country: "GR",
+      };
+      if (persona === "1") {
+        credentialSubject = {
+          id: decodedHeaderSubjectDID,
+          family_name: "Conti",
+          given_name: "Mario",
+          birth_date: "1988-11-12",
+          age_over_18: true,
+          issuance_date: new Date(
+            Math.floor(Date.now() / 1000) * 1000
+          ).toISOString(),
+          expiry_date: new Date(
+            Math.floor(Date.now() + 60 / 1000) * 1000
+          ).toISOString(),
+          issuing_authority: "https://authority.example.com",
+          issuing_country: "IT",
+        };
+      } else if (persona === "2") {
+        credentialSubject = {
+          id: decodedHeaderSubjectDID,
+          family_name: "Matkalainen",
+          given_name: "Hannah",
+          birth_date: "2005-02-07",
+          age_over_18: true,
+          issuance_date: new Date(
+            Math.floor(Date.now() / 1000) * 1000
+          ).toISOString(),
+          expiry_date: new Date(
+            Math.floor(Date.now() + 60 / 1000) * 1000
+          ).toISOString(),
+          issuing_authority: "https://authority.example.com",
+          issuing_country: "FI",
+        };
+      } else if (persona === "3") {
+        credentialSubject = {
+          id: decodedHeaderSubjectDID,
+          family_name: "Fischer",
+          given_name: "Felix",
+          birth_date: "1953-01-23",
+          age_over_18: true,
+          issuance_date: new Date(
+            Math.floor(Date.now() / 1000) * 1000
+          ).toISOString(),
+          expiry_date: new Date(
+            Math.floor(Date.now() + 60 / 1000) * 1000
+          ).toISOString(),
+          issuing_authority: "https://authority.example.com",
+          issuing_country: "FI",
+        };
+      }
+
       payload = {
         iss: serverURL,
         sub: decodedHeaderSubjectDID || "",
@@ -201,21 +300,7 @@ router.post("/credential", async (req, res) => {
         // nbf: Math.floor(Date.now() / 1000),
         jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
         vc: {
-          credentialSubject: {
-            id: decodedHeaderSubjectDID,
-            family_name: "Doe",
-            given_name: "John",
-            birth_date: "1990-01-01",
-            age_over_18: true,
-            issuance_date: new Date(
-              Math.floor(Date.now() / 1000) * 1000
-            ).toISOString(),
-            expiry_date: new Date(
-              Math.floor(Date.now() + 60 / 1000) * 1000
-            ).toISOString(),
-            issuing_authority: "https://authority.example.com",
-            issuing_country: "GR",
-          },
+          credentialSubject: credentialSubject,
           expirationDate: new Date(
             (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
           ).toISOString(),
@@ -636,6 +721,16 @@ function checkIfExistsIssuanceStatus(
     return status;
   }
   return null;
+}
+
+function getPersonaFromAccessToken(accessToken, personas, accessTokens) {
+  let persona = null;
+  for (let i = 0; i < accessTokens.length; i++) {
+    if (accessTokens[i] === accessToken) {
+      persona = personas[i];
+    }
+  }
+  return persona;
 }
 
 async function validatePKCE(sessions, code, code_verifier, issuanceResults) {

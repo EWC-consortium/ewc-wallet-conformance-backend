@@ -1,5 +1,7 @@
 let sessions = [];
 let issuanceResults = [];
+let personas = [];
+let accesTokens = [];
 
 let walletCodeSessions = [];
 let issuerCodeSessions = [];
@@ -10,6 +12,8 @@ export function getPreCodeSessions() {
   return {
     sessions: sessions,
     results: issuanceResults,
+    personas: personas,
+    accessTokens: accesTokens,
   };
 }
 
@@ -21,5 +25,3 @@ export function getAuthCodeSessions() {
     results: codeFlowRequestsResults,
   };
 }
-
-
