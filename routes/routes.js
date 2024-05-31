@@ -204,7 +204,9 @@ router.post("/credential", async (req, res) => {
   // Accessing the body data
   const requestBody = req.body;
   const format = requestBody.format;
-  const requestedCredentials = requestBody.credential_definition.type; //removed requestBody.types to conform to RFC001
+  const requestedCredentials = requestBody.credential_definition
+    ? requestBody.credential_definition.type
+    : null; //removed requestBody.types to conform to RFC001
   //TODO valiate bearer header
   let decodedWithHeader;
   let decodedHeaderSubjectDID;
