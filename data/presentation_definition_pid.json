@@ -42,9 +42,9 @@
           }
 
 
-        ]
-      },
-      "limit_disclosure": "required"
+        ],
+        "limit_disclosure": "required"
+      }
     }
   ]
 }

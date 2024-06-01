@@ -21,9 +21,9 @@
             "path": ["$.credentialSubject.identifier.id", "$.vc.credentialSubject.identifier.id"],
             "purpose": "We need to verify your Alliance ID credential."
           }
-        ]
-      },
-      "limit_disclosure": "required"
+        ],
+        "limit_disclosure": "required"
+      }
     },
     {
       "id": "educational-id-credential",
@@ -67,9 +67,9 @@
             "path": ["$.credentialSubject.eduPersonAffiliation", "$.vc.credentialSubject.eduPersonAffiliation"],
             "purpose": "We need to verify your Educational ID credential."
           }
-        ]
-      },
-      "limit_disclosure": "required"
+        ],
+        "limit_disclosure": "required"
+      }
     }
   ]
 }

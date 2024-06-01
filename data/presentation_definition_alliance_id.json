@@ -20,9 +20,9 @@
             "path": ["$.credentialSubject.identifier.id","$.vc.credentialSubject.identifier.id"]
           } 
 
-        ]
-      },
-      "limit_disclosure": "required"
+        ],
+        "limit_disclosure": "required"
+      }
     }
   ]
 }

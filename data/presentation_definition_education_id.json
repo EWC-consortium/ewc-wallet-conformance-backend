@@ -20,9 +20,9 @@
             "path": ["$.credentialSubject.schacPersonalUniqueCode","$.vc.credentialSubject.schacPersonalUniqueCode"]
           } 
 
-        ]
-      },
-      "limit_disclosure": "required"
+        ],
+        "limit_disclosure": "required"
+      }
     }
   ]
 }
