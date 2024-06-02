@@ -59,8 +59,7 @@
             "path": ["$.credentialSubject.vesselDescription", "$.vc.credentialSubject.vesselDescription"]
           }
         ]
-      },
-      "limit_disclosure": "required"
+      }
     }
   ]
 }

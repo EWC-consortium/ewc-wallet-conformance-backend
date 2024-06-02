@@ -22,8 +22,7 @@
             "purpose": "We need to verify your Alliance ID credential."
           }
         ]
-      },
-      "limit_disclosure": "required"
+      }
     },
     {
       "id": "educational-id-credential",
@@ -68,8 +67,7 @@
             "purpose": "We need to verify your Educational ID credential."
           }
         ]
-      },
-      "limit_disclosure": "required"
+      }
     }
   ]
 }
