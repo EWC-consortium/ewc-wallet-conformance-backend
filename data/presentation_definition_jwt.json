@@ -23,8 +23,7 @@
             "path": ["$.credentialSubject.last_name","$.vc.credentialSubject.last_name"]
           }
         ]
-      },
-      "limit_disclosure": "required"
+      }
     }
   ]
 }
