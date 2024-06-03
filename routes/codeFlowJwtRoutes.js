@@ -63,9 +63,11 @@ codeFlowRouter.get("/authorize", async (req, res) => {
   const issuerState = decodeURIComponent(req.query.issuer_state); // This can be associated with the ITB session
   const state = req.query.state;
   const clientId = decodeURIComponent(req.query.client_id); //DID of the holder requesting the credential
-  const authorizationDetails = JSON.parse(
-    decodeURIComponent(req.query.authorization_details) //TODO this contains the credentials requested
-  );
+  const authorizationDetails = req.query.authorization_details
+    ? JSON.parse(
+        decodeURIComponent(req.query.authorization_details) //TODO this contains the credentials requested
+      )
+    : null;
   const redirectUri = decodeURIComponent(req.query.redirect_uri);
   const nonce = req.query.nonce;
   const codeChallenge = decodeURIComponent(req.query.code_challenge);
@@ -76,18 +78,16 @@ codeFlowRouter.get("/authorize", async (req, res) => {
   );
   //validations
   let errors = [];
-  if (authorizationDetails.credential_definition) {
+  if (!authorizationDetails) {
+    //errors.push("no credentials requested");
+    console.log(`no credentials requested`);
+  } else if (authorizationDetails.credential_definition) {
     console.log(
       `credential ${authorizationDetails.credential_definition.type} was requested`
     );
-  } else {
-    if (authorizationDetails.types) {
-      //EBSI style
-      console.log(`credential ${authorizationDetails.types} was requested`);
-    } else {
-      //errors.push("no credentials requested");
-      console.log(`no credentials requested`);
-    }
+  } else if (authorizationDetails.types) {
+    //EBSI style
+    console.log(`credential ${authorizationDetails.types} was requested`);
   }
 
   if (responseType !== "code") {
@@ -100,7 +100,7 @@ codeFlowRouter.get("/authorize", async (req, res) => {
   // If validations pass, redirect with a 302 Found response
   const authorizationCode = null; //"SplxlOBeZQQYbYS6WxSbIA";
   const codeSessions = getAuthCodeSessions();
-  if (codeSessions.sessions.indexOf(issuerState) >=0 ) {
+  if (codeSessions.sessions.indexOf(issuerState) >= 0) {
     codeSessions.requests.push({
       challenge: codeChallenge,
       method: codeChallengeMethod,
