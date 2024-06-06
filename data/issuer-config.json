@@ -108,7 +108,12 @@
           "name": "PID",
           "locale": "en-GB",
           "background_color": "#12107c",
-          "text_color": "#FFFFFF"
+          "text_color": "#FFFFFF",
+          "logo":{
+            "url":"https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+            "alt_text":"UAegean"
+
+          }
         }
       ],
       "credential_definition": {
@@ -191,7 +196,13 @@
           "name": "ePassportCredential",
           "locale": "en-GB",
           "background_color": "#12107c",
-          "text_color": "#FFFFFF"
+          "text_color": "#FFFFFF",
+          "logo":{
+            "url":"https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+            "alt_text":"UAegean"
+
+          }
+
         }
       ],
       "credential_definition": {
@@ -701,7 +712,12 @@
           "name": "EducationalID",
           "locale": "en-GB",
           "background_color": "#12107c",
-          "text_color": "#FFFFFF"
+          "text_color": "#FFFFFF",
+          "logo":{
+            "url":"https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+            "alt_text":"UAegean"
+
+          }
         }
       ],
       "credential_definition": {
@@ -840,7 +856,12 @@
           "name": "AllianceIDCredential",
           "locale": "en-GB",
           "background_color": "#12107c",
-          "text_color": "#FFFFFF"
+          "text_color": "#FFFFFF",
+          "logo":{
+            "url":"https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+            "alt_text":"UAegean"
+
+          }
         }
       ],
       "credential_definition": {
@@ -893,7 +914,12 @@
           "name": "Ferry Boarding Pass",
           "locale": "en-GB",
           "background_color": "#12107c",
-          "text_color": "#FFFFFF"
+          "text_color": "#FFFFFF",
+          "logo":{
+            "url":"https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+            "alt_text":"UAegean"
+
+          }
         }
       ],
       "credential_definition": {
