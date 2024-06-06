@@ -72,10 +72,15 @@ codeFlowRouter.get("/authorize", async (req, res) => {
   const nonce = req.query.nonce;
   const codeChallenge = decodeURIComponent(req.query.code_challenge);
   const codeChallengeMethod = req.query.code_challenge_method; //this should equal to S256
+  try {
+    const clientMetadata = JSON.parse(
+      decodeURIComponent(req.query.client_metadata)
+    );
+  } catch (error) {
+    console.log("client_metadata was missing");
+    console.log(error);
+  }
 
-  const clientMetadata = JSON.parse(
-    decodeURIComponent(req.query.client_metadata)
-  );
   //validations
   let errors = [];
   if (!authorizationDetails) {
