@@ -432,6 +432,13 @@ router.post("/credential", async (req, res) => {
           requestedCredentials != null &&
           requestedCredentials[0] === "EducationalID"
         ) {
+          const preSessions = getPreCodeSessions();
+          let persona = getPersonaFromAccessToken(
+            token,
+            preSessions.personas,
+            preSessions.accessTokens
+          );
+
           payload = {
             iss: serverURL,
             sub: decodedHeaderSubjectDID || "",
@@ -475,6 +482,77 @@ router.post("/credential", async (req, res) => {
               ).toISOString(),
             },
           };
+
+          if (persona === "1") {
+            payload.vc.credentialSubject = {
+              id: decodedHeaderSubjectDID || "",
+              identifier: "mario.conti@ewc.eu",
+              schacPersonalUniqueCode: [
+                "urn:schac:personalUniqueCode:int:esi:university.edu:12345",
+              ],
+              schacPersonalUniqueID: "urn:schac:personalUniqueID:us:12345",
+              schacHomeOrganization: "university.edu",
+              familyName: "Conti",
+              firstName: "Mario",
+              displayName: "Mario Conti",
+              dateOfBirth: "1990-01-01",
+              commonName: "Mario Contri",
+              mail: "mario.conti@ewc.eu",
+              eduPersonPrincipalName: "mario.conti@ewc.eu",
+              eduPersonPrimaryAffiliation: "student",
+              eduPersonAffiliation: ["member", "student"],
+              eduPersonScopedAffiliation: ["student@ewc.eu"],
+              eduPersonAssurance: [
+                "https://wiki.refeds.org/display/ASS/REFEDS+Assurance+Framework+ver+1.0",
+              ],
+            }
+          } else if (persona === "2") {
+            payload.vc.credentialSubject = {
+              id: decodedHeaderSubjectDID || "",
+              identifier: "hannah@ewc.eu",
+              schacPersonalUniqueCode: [
+                "urn:schac:personalUniqueCode:int:esi:university.edu:12345",
+              ],
+              schacPersonalUniqueID: "urn:schac:personalUniqueID:us:12345",
+              schacHomeOrganization: "university.edu",
+              familyName: "Matkalainen",
+              firstName: "Hannah",
+              displayName: "Hannah Matkalainen",
+              dateOfBirth: "1990-01-01",
+              commonName: "Hannah Matkalainen",
+              mail: "hannah@ewc.eu",
+              eduPersonPrincipalName: "hannah@ewc.eu",
+              eduPersonPrimaryAffiliation: "student",
+              eduPersonAffiliation: ["member", "student"],
+              eduPersonScopedAffiliation: ["student@ewc.eu"],
+              eduPersonAssurance: [
+                "https://wiki.refeds.org/display/ASS/REFEDS+Assurance+Framework+ver+1.0",
+              ],
+            }
+          } else if (persona === "3") {
+            payload.vc.credentialSubject = {
+              id: decodedHeaderSubjectDID || "",
+              identifier: "felix@ewc.eu",
+              schacPersonalUniqueCode: [
+                "urn:schac:personalUniqueCode:int:esi:university.edu:12345",
+              ],
+              schacPersonalUniqueID: "urn:schac:personalUniqueID:us:12345",
+              schacHomeOrganization: "university.edu",
+              familyName: "Fischer",
+              firstName: "Felix",
+              displayName: "Felix Fischer",
+              dateOfBirth: "1990-01-01",
+              commonName: "Felix Fischer",
+              mail: "felix@ewc.eu",
+              eduPersonPrincipalName: "felix@ewc.eu",
+              eduPersonPrimaryAffiliation: "student",
+              eduPersonAffiliation: ["member", "student"],
+              eduPersonScopedAffiliation: ["student@ewc.eu"],
+              eduPersonAssurance: [
+                "https://wiki.refeds.org/display/ASS/REFEDS+Assurance+Framework+ver+1.0",
+              ],
+            }
+          }
         } else {
           if (
             requestedCredentials != null &&

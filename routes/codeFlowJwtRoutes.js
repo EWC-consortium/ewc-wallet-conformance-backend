@@ -63,11 +63,18 @@ codeFlowRouter.get("/authorize", async (req, res) => {
   const issuerState = decodeURIComponent(req.query.issuer_state); // This can be associated with the ITB session
   const state = req.query.state;
   const clientId = decodeURIComponent(req.query.client_id); //DID of the holder requesting the credential
-  const authorizationDetails = req.query.authorization_details
-    ? JSON.parse(
-        decodeURIComponent(req.query.authorization_details) //TODO this contains the credentials requested
-      )
-    : null;
+  let authorizationDetails = "";
+  try {
+    authorizationDetails = decodeURIComponent(req.query.authorization_details); //TODO this contains the credentials requested
+  } catch (error) {
+    console.log(
+      "No credentials requested! req.query.authorization_details missing!"
+    );
+    errors.push(
+      "No credentials requested! req.query.authorization_details missing!"
+    );
+  }
+
   const redirectUri = decodeURIComponent(req.query.redirect_uri);
   const nonce = req.query.nonce;
   const codeChallenge = decodeURIComponent(req.query.code_challenge);
