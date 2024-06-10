@@ -854,7 +854,7 @@ function checkIfExistsIssuanceStatus(
   console.log(index);
   if (index < 0) {
     sessions.forEach((value, _index) => {
-      console.log("chaning value to " + value.replace(/-persona=\d+$/, "") +"-checking vs" + sessionId)
+      console.log("checking value to " + value.replace(/-persona=\s+$/, "") +"-checking vs" + sessionId)
       if (value.replace(/-persona=\d+$/, "") === sessionId) {
         console.log("updated index")
         index = _index;
