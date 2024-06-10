@@ -47,6 +47,7 @@ educationalRouter.get(["/pre-offer-jwt-edu"], async (req, res) => {
   //   preSessions.accessTokens.push(null);
   // } 
   if (preSessions.sessions.indexOf(uuid ) < 0) {
+    console.log(uuid)
     preSessions.sessions.push(uuid);
     preSessions.results.push({ sessionId: uuid, status: "pending" });
     preSessions.personas.push(null);
