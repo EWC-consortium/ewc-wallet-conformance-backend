@@ -351,7 +351,8 @@ verifierRouter.get(["/verificationStatus"], (req, res) => {
   let index = sessions.indexOf(sessionId); // sessions.indexOf(sessionId+""); //
   if (index < 0) {
     sessions.forEach((value, _index) => {
-      if (value.replace(/-persona=\d+$/, "") === sessionId) {
+      if (value.replace(/-persona=.*$/, "") === sessionId) {
+        console.log("updated index");
         index = _index;
       }
     });
