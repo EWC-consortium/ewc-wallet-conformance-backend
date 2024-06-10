@@ -40,12 +40,18 @@ educationalRouter.get(["/pre-offer-jwt-edu"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const personaId = req.query.persona;
   const preSessions = getPreCodeSessions();
-  if (preSessions.sessions.indexOf(uuid + "-persona=" + personaId) < 0) {
-    preSessions.sessions.push(uuid + "-persona=" + personaId);
+  //if (preSessions.sessions.indexOf(uuid + "-persona=" + personaId) < 0) {
+  //   preSessions.sessions.push(uuid + "-persona=" + personaId);
+  //   preSessions.results.push({ sessionId: uuid, status: "pending" });
+  //   preSessions.personas.push(null);
+  //   preSessions.accessTokens.push(null);
+  // } 
+  if (preSessions.sessions.indexOf(uuid ) < 0) {
+    preSessions.sessions.push(uuid);
     preSessions.results.push({ sessionId: uuid, status: "pending" });
     preSessions.personas.push(null);
     preSessions.accessTokens.push(null);
-  }
+  } 
   let credentialOffer = "";
   if (personaId) {
     credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-pre-jwt-edu/${uuid}?persona=${personaId}`; //OfferUUID

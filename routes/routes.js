@@ -852,15 +852,15 @@ function checkIfExistsIssuanceStatus(
   let index = sessions.indexOf(sessionId);
   console.log("index is");
   console.log(index);
-  if (index < 0) {
-    sessions.forEach((value, _index) => {
-      console.log("checking value to " + value.replace(/-persona=\s+$/, "") +"-checking vs" + sessionId)
-      if (value.replace(/-persona=.*$/, "") === sessionId) {
-        console.log("updated index")
-        index = _index;
-      }
-    });
-  }
+  // if (index < 0) {
+  //   sessions.forEach((value, _index) => {
+  //     console.log("checking value to " + value.replace(/-persona=\s+$/, "") +"-checking vs" + sessionId)
+  //     if (value.replace(/-persona=.*$/, "") === sessionId) {
+  //       console.log("updated index")
+  //       index = _index;
+  //     }
+  //   });
+  // }
   if (index >= 0) {
     let status = sessionResults[index].status;
     console.log(`sending status ${status} for session ${sessionId}`);

@@ -349,14 +349,14 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
 verifierRouter.get(["/verificationStatus"], (req, res) => {
   let sessionId = req.query.sessionId;
   let index = sessions.indexOf(sessionId); // sessions.indexOf(sessionId+""); //
-  if (index < 0) {
-    sessions.forEach((value, _index) => {
-      if (value.replace(/-persona=.*$/, "") === sessionId) {
-        console.log("updated index");
-        index = _index;
-      }
-    });
-  }
+  // if (index < 0) {
+  //   sessions.forEach((value, _index) => {
+  //     if (value.replace(/-persona=.*$/, "") === sessionId) {
+  //       console.log("updated index");
+  //       index = _index;
+  //     }
+  //   });
+  // }
   console.log("index is");
   console.log(index);
   let result = null;
