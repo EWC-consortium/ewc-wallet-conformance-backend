@@ -852,6 +852,13 @@ function checkIfExistsIssuanceStatus(
   let index = sessions.indexOf(sessionId);
   console.log("index is");
   console.log(index);
+  if (index < 0) {
+    sessions.forEach((value, _index) => {
+      if (value.replace(/-persona=\d+$/, "") === sessionId) {
+        index = _index;
+      }
+    });
+  }
   if (index >= 0) {
     let status = sessionResults[index].status;
     console.log(`sending status ${status} for session ${sessionId}`);
