@@ -505,7 +505,7 @@ router.post("/credential", async (req, res) => {
               eduPersonAssurance: [
                 "https://wiki.refeds.org/display/ASS/REFEDS+Assurance+Framework+ver+1.0",
               ],
-            }
+            };
           } else if (persona === "2") {
             payload.vc.credentialSubject = {
               id: decodedHeaderSubjectDID || "",
@@ -528,7 +528,7 @@ router.post("/credential", async (req, res) => {
               eduPersonAssurance: [
                 "https://wiki.refeds.org/display/ASS/REFEDS+Assurance+Framework+ver+1.0",
               ],
-            }
+            };
           } else if (persona === "3") {
             payload.vc.credentialSubject = {
               id: decodedHeaderSubjectDID || "",
@@ -551,7 +551,7 @@ router.post("/credential", async (req, res) => {
               eduPersonAssurance: [
                 "https://wiki.refeds.org/display/ASS/REFEDS+Assurance+Framework+ver+1.0",
               ],
-            }
+            };
           }
         } else {
           if (
@@ -592,6 +592,13 @@ router.post("/credential", async (req, res) => {
             requestedCredentials != null &&
             requestedCredentials[0] === "ferryBoardingPassCredential"
           ) {
+            const preSessions = getPreCodeSessions();
+            let persona = getPersonaFromAccessToken(
+              token,
+              preSessions.personas,
+              preSessions.accessTokens
+            );
+
             payload = {
               iss: serverURL,
               sub: decodedHeaderSubjectDID || "",
@@ -602,6 +609,15 @@ router.post("/credential", async (req, res) => {
                 type: ["VerifiableCredential", "ferryBoardingPassCredential"],
                 "@context": ["https://www.w3.org/2018/credentials/v1"],
                 issuer: serverURL,
+                issuanceDate: new Date(
+                  Math.floor(Date.now() / 1000) * 1000
+                ).toISOString(),
+                expirationDate: new Date(
+                  (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
+                ).toISOString(),
+                validFrom: new Date(
+                  Math.floor(Date.now() / 1000) * 1000
+                ).toISOString(),
                 credentialSubject: {
                   id: decodedHeaderSubjectDID || "", // Replace with the actual subject DID
                   identifier: "John Doe",
@@ -620,17 +636,68 @@ router.post("/credential", async (req, res) => {
                   arrivalPort: "NYC",
                   vesselDescription: "Ferry XYZ",
                 },
-                issuanceDate: new Date(
-                  Math.floor(Date.now() / 1000) * 1000
-                ).toISOString(),
-                expirationDate: new Date(
-                  (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
-                ).toISOString(),
-                validFrom: new Date(
-                  Math.floor(Date.now() / 1000) * 1000
-                ).toISOString(),
+                
               },
             };
+  
+            if (persona === "1") {
+              payload.vc.credentialSubject ={
+                id: decodedHeaderSubjectDID || "", // Replace with the actual subject DID
+                identifier: "Mario Conti",
+                ticketQR:
+                  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHkAAAB5AQAAAAA+SX7VAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAABlUlEQVRIDe2YMUtCQRCFZxQVhQo2hdwV2NhZ+ggLFzcBrcNLYktjb2AiBBkDEtFiFE3d7WVo+BR+BX+gtEop3Rjb7ndmxmh8HTIz5TdvzZk5MhGoUZ1Hnz1swr3/ehyHt6nuKPexG5XQPeDqcgrBXT3wGso+ULuLoDr/owxPI27WqZLPKpFvH2FqESkBu8WqwCrCL3r6Ne3Slo6I0A9H/UUXH5KoJwUbPFLU5CJqsZubAiZwVLja4YpAyyKcijulVDrwjeMaLs5CmlgHds1GZc9K8T/AXTDwLB0yzhFb2CHavBtL68YRuBN3le6HB54Rz6MPGoNx7N2e3ws+b9YL2scQY8jI9iA9gN0FbgeEQLzUXwl90kpAmNyDe4SjH5itwbPfNRi7w0Ogl8KiB1QWUDZc0h34sFjDwrIs+w6GCSnNhWbzP9FAvVd8BzCgbChAkd4VnLQZX9VaQd9gM0b9D/UZoTQAAAABJRU5ErkJggg==",
+                ticketNumber: "3022",
+                ticketLet: "Y",
+                lastName: "Conti",
+                firstName: "Mario",
+                seatType: "Economy",
+                seatNumber: "12A",
+                departureDate: "2024-08-17",
+                departureTime: "13:07:34",
+                arrivalDate: "2024-08-17",
+                arrivalTime: "15:30:00",
+                arrivalPort: "MYKONOS TEST",
+                vesselDescription: "MYKONOS TEST",
+              }
+            }else if(persona === "2"){
+              payload.vc.credentialSubject ={
+                id: decodedHeaderSubjectDID || "", // Replace with the actual subject DID
+                identifier: "Hannah Matkalainen",
+                ticketQR:
+                  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHkAAAB5AQAAAAA+SX7VAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAABlUlEQVRIDe2YMUtCQRCFZxQVhQo2hdwV2NhZ+ggLFzcBrcNLYktjb2AiBBkDEtFiFE3d7WVo+BR+BX+gtEop3Rjb7ndmxmh8HTIz5TdvzZk5MhGoUZ1Hnz1swr3/ehyHt6nuKPexG5XQPeDqcgrBXT3wGso+ULuLoDr/owxPI27WqZLPKpFvH2FqESkBu8WqwCrCL3r6Ne3Slo6I0A9H/UUXH5KoJwUbPFLU5CJqsZubAiZwVLja4YpAyyKcijulVDrwjeMaLs5CmlgHds1GZc9K8T/AXTDwLB0yzhFb2CHavBtL68YRuBN3le6HB54Rz6MPGoNx7N2e3ws+b9YL2scQY8jI9iA9gN0FbgeEQLzUXwl90kpAmNyDe4SjH5itwbPfNRi7w0Ogl8KiB1QWUDZc0h34sFjDwrIs+w6GCSnNhWbzP9FAvVd8BzCgbChAkd4VnLQZX9VaQd9gM0b9D/UZoTQAAAABJRU5ErkJggg==",
+                ticketNumber: "3022",
+                ticketLet: "Y",
+                lastName: "Matkalainen",
+                firstName: "Hannah",
+                seatType: "Economy",
+                seatNumber: "12A",
+                departureDate: "2024-08-17",
+                departureTime: "13:07:34",
+                arrivalDate: "2024-08-17",
+                arrivalTime: "15:30:00",
+                arrivalPort: "MYKONOS TEST",
+                vesselDescription: "MYKONOS TEST",
+              }
+            }else if(persona ==="3"){
+              payload.vc.credentialSubject ={
+                id: decodedHeaderSubjectDID || "", // Replace with the actual subject DID
+                identifier: "Felix Fischer",
+                ticketQR:
+                  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHkAAAB5AQAAAAA+SX7VAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAABlUlEQVRIDe2YMUtCQRCFZxQVhQo2hdwV2NhZ+ggLFzcBrcNLYktjb2AiBBkDEtFiFE3d7WVo+BR+BX+gtEop3Rjb7ndmxmh8HTIz5TdvzZk5MhGoUZ1Hnz1swr3/ehyHt6nuKPexG5XQPeDqcgrBXT3wGso+ULuLoDr/owxPI27WqZLPKpFvH2FqESkBu8WqwCrCL3r6Ne3Slo6I0A9H/UUXH5KoJwUbPFLU5CJqsZubAiZwVLja4YpAyyKcijulVDrwjeMaLs5CmlgHds1GZc9K8T/AXTDwLB0yzhFb2CHavBtL68YRuBN3le6HB54Rz6MPGoNx7N2e3ws+b9YL2scQY8jI9iA9gN0FbgeEQLzUXwl90kpAmNyDe4SjH5itwbPfNRi7w0Ogl8KiB1QWUDZc0h34sFjDwrIs+w6GCSnNhWbzP9FAvVd8BzCgbChAkd4VnLQZX9VaQd9gM0b9D/UZoTQAAAABJRU5ErkJggg==",
+                ticketNumber: "3022",
+                ticketLet: "Y",
+                lastName: "Fischer",
+                firstName: "Felix",
+                seatType: "Economy",
+                seatNumber: "12A",
+                departureDate: "2024-08-17",
+                departureTime: "13:07:34",
+                arrivalDate: "2024-08-17",
+                arrivalTime: "15:30:00",
+                arrivalPort: "MYKONOS TEST",
+                vesselDescription: "MYKONOS TEST",
+              }
+            } 
           } else {
             //sign as jwt
             payload = {

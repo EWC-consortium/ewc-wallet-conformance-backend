@@ -37,12 +37,16 @@ const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
 
 boardingPassRouter.get(["/pre-offer-jwt-bpass"], async (req, res) => {
-  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  let uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  const persona = req.query.persona ? req.query.persona : null;
+  if(persona) uuid = uuid+"-persona="+persona
+
   const preSessions = getPreCodeSessions();
   if (preSessions.sessions.indexOf(uuid) < 0) {
     preSessions.sessions.push(uuid);
     preSessions.results.push({ sessionId: uuid, status: "pending" });
   }
+  // console.log(preSessions)
   let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-pre-jwt-bpass/${uuid}`; //OfferUUID
   let code = qr.image(credentialOffer, {
     type: "png",
