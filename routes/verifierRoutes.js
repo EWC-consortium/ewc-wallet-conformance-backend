@@ -389,10 +389,9 @@ verifierRouter.get(["/verificationStatus"], (req, res) => {
 verifierRouter.get(["/verificationStatusHistory"], (req, res) => {
   let sessionId = req.query.sessionId;
   let index = sessionHistory.getCurrentArray().indexOf(sessionId);  
- 
   if (index >= 0) {
     res.json({
-      status: status,
+      status: "success",
       reason: "ok",
       sessionId: sessionId,
       claims: verificationResultsHistory.getCurrentArray()[index],
