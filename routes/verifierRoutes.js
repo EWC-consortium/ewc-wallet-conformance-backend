@@ -324,7 +324,9 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
   // Convert credentials to claims
   let claims;
   try {
+    console.log(credentialsJwtArray)
     claims = await flattenCredentialsToClaims(credentialsJwtArray);
+    console.log(claims)
     if (!claims) {
       throw new Error("Claims conversion returned null or undefined.");
     }
