@@ -13,6 +13,7 @@ import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import jwt from "jsonwebtoken";
+import TimedArray from "../utils/timedArray.js";
 
 const verifierRouter = express.Router();
 
@@ -61,6 +62,8 @@ const jwks = pemToJWK(publicKeyPem, "public");
 
 let verificationSessions = []; //TODO these should be redis or something a proper cache...
 let sessions = [];
+let sessionHistory = new TimedArray(30000) //cache data for 30sec
+let verificationResultsHistory = new TimedArray(30000) //cache data for 30sec
 
 verifierRouter.get("/generateVPRequest", async (req, res) => {
   const stateParam = req.query.id ? req.query.id : uuidv4();
@@ -351,14 +354,6 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
 verifierRouter.get(["/verificationStatus"], (req, res) => {
   let sessionId = req.query.sessionId;
   let index = sessions.indexOf(sessionId); // sessions.indexOf(sessionId+""); //
-  // if (index < 0) {
-  //   sessions.forEach((value, _index) => {
-  //     if (value.replace(/-persona=.*$/, "") === sessionId) {
-  //       console.log("updated index");
-  //       index = _index;
-  //     }
-  //   });
-  // }
   console.log("index is");
   console.log(index);
   let result = null;
@@ -369,6 +364,8 @@ verifierRouter.get(["/verificationStatus"], (req, res) => {
       result = verificationSessions[index].claims;
       sessions.splice(index, 1);
       verificationSessions.splice(index, 1);
+      sessionHistory.addElement(sessionId)
+      verificationResultsHistory.addElement(result)
     }
     // console.log(`new sessions`);
     // console.log(sessions);
@@ -388,6 +385,27 @@ verifierRouter.get(["/verificationStatus"], (req, res) => {
     });
   }
 });
+
+verifierRouter.get(["/verificationStatusHistory"], (req, res) => {
+  let sessionId = req.query.sessionId;
+  let index = sessionHistory.getCurrentArray().indexOf(sessionId);  
+ 
+  if (index >= 0) {
+    res.json({
+      status: status,
+      reason: "ok",
+      sessionId: sessionId,
+      claims: verificationResultsHistory.getCurrentArray()[index],
+    });
+  } else {
+    res.json({
+      status: "failed",
+      reason: "not found",
+      sessionId: sessionId,
+    });
+  }
+});
+
 
 function buildVP(
   client_id,
