@@ -8,6 +8,67 @@
   },
   "input_descriptors": [
     {
+      "id": "abd4acb1-1dcb-41ad-8596-ceb1401a69c7",
+      "format": {
+        "jwt_vc": {
+          "alg": ["ES256", "ES384"]
+        }
+      },
+      "constraints": {
+        "fields": [
+          {
+            "path": [
+              "$.credentialSubject.given_name",
+              "$.vc.credentialSubject.given_name"
+            ]
+          },
+          {
+            "path": [
+              "$.credentialSubject.family_name",
+              "$.vc.credentialSubject.family_name"
+            ]
+          },
+          {
+            "path": [
+              "$.credentialSubject.birth_date",
+              "$.vc.credentialSubject.birth_date"
+            ]
+          },
+          {
+            "path": [
+              "$.credentialSubject.age_over_18",
+              "$.vc.credentialSubject.age_over_18"
+            ]
+          },
+          {
+            "path": [
+              "$.credentialSubject.issuance_date",
+              "$.vc.credentialSubject.issuance_date"
+            ]
+          },
+          {
+            "path": [
+              "$.credentialSubject.expiry_date",
+              "$.vc.credentialSubject.expiry_date"
+            ]
+          },
+          {
+            "path": [
+              "$.credentialSubject.issuing_authority",
+              "$.vc.credentialSubject.issuing_authority"
+            ]
+          },
+          {
+            "path": [
+              "$.credentialSubject.issuing_country",
+              "$.vc.credentialSubject.issuing_country"
+            ]
+          }
+        ]
+      }
+    },
+
+    {
       "id": "alliance-id-credential",
       "name": "Alliance ID Credential",
       "format": {
@@ -18,7 +79,10 @@
       "constraints": {
         "fields": [
           {
-            "path": ["$.credentialSubject.identifier.id", "$.vc.credentialSubject.identifier.id"],
+            "path": [
+              "$.credentialSubject.identifier.id",
+              "$.vc.credentialSubject.identifier.id"
+            ],
             "purpose": "We need to verify your Alliance ID credential."
           }
         ]
@@ -35,35 +99,59 @@
       "constraints": {
         "fields": [
           {
-            "path": ["$.credentialSubject.schacPersonalUniqueID", "$.vc.credentialSubject.schacPersonalUniqueID"],
+            "path": [
+              "$.credentialSubject.schacPersonalUniqueID",
+              "$.vc.credentialSubject.schacPersonalUniqueID"
+            ],
             "purpose": "We need to verify your Educational ID credential."
           },
           {
-            "path": ["$.credentialSubject.schacHomeOrganization", "$.vc.credentialSubject.schacHomeOrganization"],
+            "path": [
+              "$.credentialSubject.schacHomeOrganization",
+              "$.vc.credentialSubject.schacHomeOrganization"
+            ],
             "purpose": "We need to verify your Educational ID credential."
           },
           {
-            "path": ["$.credentialSubject.familyName", "$.vc.credentialSubject.familyName"],
+            "path": [
+              "$.credentialSubject.familyName",
+              "$.vc.credentialSubject.familyName"
+            ],
             "purpose": "We need to verify your Educational ID credential."
           },
           {
-            "path": ["$.credentialSubject.firstName", "$.vc.credentialSubject.firstName"],
+            "path": [
+              "$.credentialSubject.firstName",
+              "$.vc.credentialSubject.firstName"
+            ],
             "purpose": "We need to verify your Educational ID credential."
           },
           {
-            "path": ["$.credentialSubject.dateOfBirth", "$.vc.credentialSubject.dateOfBirth"],
+            "path": [
+              "$.credentialSubject.dateOfBirth",
+              "$.vc.credentialSubject.dateOfBirth"
+            ],
             "purpose": "We need to verify your Educational ID credential."
           },
           {
-            "path": ["$.credentialSubject.eduPersonPrincipalName", "$.vc.credentialSubject.eduPersonPrincipalName"],
+            "path": [
+              "$.credentialSubject.eduPersonPrincipalName",
+              "$.vc.credentialSubject.eduPersonPrincipalName"
+            ],
             "purpose": "We need to verify your Educational ID credential."
           },
           {
-            "path": ["$.credentialSubject.eduPersonPrimaryAffiliation", "$.vc.credentialSubject.eduPersonPrimaryAffiliation"],
+            "path": [
+              "$.credentialSubject.eduPersonPrimaryAffiliation",
+              "$.vc.credentialSubject.eduPersonPrimaryAffiliation"
+            ],
             "purpose": "We need to verify your Educational ID credential."
           },
           {
-            "path": ["$.credentialSubject.eduPersonAffiliation", "$.vc.credentialSubject.eduPersonAffiliation"],
+            "path": [
+              "$.credentialSubject.eduPersonAffiliation",
+              "$.vc.credentialSubject.eduPersonAffiliation"
+            ],
             "purpose": "We need to verify your Educational ID credential."
           }
         ]
