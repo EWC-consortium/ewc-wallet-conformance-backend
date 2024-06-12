@@ -2,7 +2,7 @@
   "id": "multi-credential-request",
   "name": "Multi-Credential Request",
   "format": {
-    "jwt_vc": {
+    "jwt_vc_json": {
       "alg": ["ES256", "ES384"]
     }
   },
@@ -10,7 +10,7 @@
     {
       "id": "abd4acb1-1dcb-41ad-8596-ceb1401a69c7",
       "format": {
-        "jwt_vc": {
+        "jwt_vc_json": {
           "alg": ["ES256", "ES384"]
         }
       },
@@ -72,7 +72,7 @@
       "id": "alliance-id-credential",
       "name": "Alliance ID Credential",
       "format": {
-        "jwt_vc": {
+        "jwt_vc_json": {
           "alg": ["ES256", "ES384"]
         }
       },
@@ -92,7 +92,7 @@
       "id": "educational-id-credential",
       "name": "Educational ID Credential",
       "format": {
-        "jwt_vc": {
+        "jwt_vc_json": {
           "alg": ["ES256", "ES384"]
         }
       },

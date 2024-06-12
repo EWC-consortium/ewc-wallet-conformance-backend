@@ -41,7 +41,7 @@
         "ES256"
       ]
     },
-    "jwt_vc": {
+    "jwt_vc_json": {
       "alg_values_supported": [
         "ES256"
       ]
