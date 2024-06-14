@@ -83,7 +83,7 @@ router.get(["/credential-offer/:id"], (req, res) => {
 });
 
 // ***************
-///pre-auth flow jwt_vc
+///pre-auth flow jwt_vc_json
 router.get(["/pre-offer-jwt"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const preSessions = getPreCodeSessions();
@@ -218,7 +218,7 @@ router.post("/credential", async (req, res) => {
   }
 
   // console.log(credential);
-  if (format === "jwt_vc") {
+  if (format === "jwt_vc_json") {
     let payload = {};
     if (requestedCredentials != null && requestedCredentials[0] === "PID") {
       //get persona if existing from accessToken
@@ -755,7 +755,7 @@ router.post("/credential", async (req, res) => {
 
     /* jwt format */
     res.json({
-      format: "jwt_vc",
+      format: "jwt_vc_json",
       credential: idtoken,
       c_nonce: generateNonce(),
       c_nonce_expires_in: 86400,
