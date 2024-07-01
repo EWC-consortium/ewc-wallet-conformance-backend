@@ -214,19 +214,21 @@ verifierRouter.get("/vpRequestJwt/:id", async (req, res) => {
     claims: null,
   });
 
-  let jwtToken = buildVpRequestJwt(
-    stateParam,
-    nonce,
-    clientId,
-    response_uri,
-    presentation_definition_jwt,
-    jwks,
-    serverURL,
-    privateKey
-  );
+  // let jwtToken = buildVpRequestJwt(
+  //   stateParam,
+  //   nonce,
+  //   clientId,
+  //   response_uri,
+  //   presentation_definition_jwt,
+  //   jwks,
+  //   serverURL,
+  //   privateKey
+  // );
 
 
   clientMetadata.presentation_definition_uri= serverURL+"/presentation-definition/1"
+  clientMetadata.redirect_uris= [response_uri]
+  clientMetadata.client_id=clientId
 
    let vpRequest= {
     response_type: "vp_token",
