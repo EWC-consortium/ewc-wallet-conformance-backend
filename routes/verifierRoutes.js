@@ -57,6 +57,9 @@ const presentation_definition_alliance_and_education_Id = JSON.parse(
   )
 );
 //
+const clientMetadata = JSON.parse(
+  fs.readFileSync("./data/verifier-config.json", "utf-8")
+);
 
 const jwks = pemToJWK(publicKeyPem, "public");
 
@@ -221,8 +224,36 @@ verifierRouter.get("/vpRequestJwt/:id", async (req, res) => {
     serverURL,
     privateKey
   );
-  res.type("text/plain").send(jwtToken);
+
+
+  clientMetadata.presentation_definition_uri= serverURL+"/presentation-definition/1"
+
+   let vpRequest= {
+    response_type: "vp_token",
+    client_id: clientId,
+    client_id_scheme: "redirect_uri",
+    presentation_definition: presentation_definition_jwt,
+    redirect_uri: response_uri,
+    // response_mode: "direct_post",
+    client_metadata : encodeURIComponent(JSON.stringify(clientMetadata)),
+   }
+
+   console.log("will send vpRequest")
+   console.log(vpRequest)
+
+   res.json(vpRequest);
 });
+
+
+verifierRouter.get("/presentation-definition/:type", async (req, res) => {
+  const { type } = req.params;
+  if(type == 1) {
+    res.type("application/json").send(presentation_definition_jwt);
+  }
+  console.log("ERROR getting presentatiton-definition type")
+  res.status(500)
+})
+
 
 // *******************PILOT USE CASES ******************************
 verifierRouter.get("/vp-request/:type", async (req, res) => {
