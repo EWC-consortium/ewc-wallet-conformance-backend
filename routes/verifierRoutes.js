@@ -65,8 +65,8 @@ const jwks = pemToJWK(publicKeyPem, "public");
 
 let verificationSessions = []; //TODO these should be redis or something a proper cache...
 let sessions = [];
-let sessionHistory = new TimedArray(30000) //cache data for 30sec
-let verificationResultsHistory = new TimedArray(30000) //cache data for 30sec
+let sessionHistory = new TimedArray(30000); //cache data for 30sec
+let verificationResultsHistory = new TimedArray(30000); //cache data for 30sec
 
 verifierRouter.get("/generateVPRequest", async (req, res) => {
   const stateParam = req.query.id ? req.query.id : uuidv4();
@@ -214,48 +214,36 @@ verifierRouter.get("/vpRequestJwt/:id", async (req, res) => {
     claims: null,
   });
 
-  // let jwtToken = buildVpRequestJwt(
-  //   stateParam,
-  //   nonce,
-  //   clientId,
-  //   response_uri,
-  //   presentation_definition_jwt,
-  //   jwks,
-  //   serverURL,
-  //   privateKey
-  // );
+  clientMetadata.presentation_definition_uri =
+    serverURL + "/presentation-definition/1";
+  clientMetadata.redirect_uris = [response_uri];
+  clientMetadata.client_id = clientId;
 
-
-  clientMetadata.presentation_definition_uri= serverURL+"/presentation-definition/1"
-  clientMetadata.redirect_uris= [response_uri]
-  clientMetadata.client_id=clientId
-
-   let vpRequest= {
-    response_type: "vp_token",
+  let vpRequest = {
     client_id: clientId,
     client_id_scheme: "redirect_uri",
+    response_uri: response_uri,
+    response_type: "vp_token",
+    response_mode: "direct_post",
     presentation_definition: presentation_definition_jwt,
-    redirect_uri: response_uri,
-    // response_mode: "direct_post",
-    client_metadata : encodeURIComponent(JSON.stringify(clientMetadata)),
-   }
+    nonce: nonce,
+    state: uuid,
+  };
 
-   console.log("will send vpRequest")
-   console.log(vpRequest)
+  // console.log("will send vpRequest");
+  // console.log(vpRequest);
 
-   res.json(vpRequest);
+  res.json(vpRequest);
 });
-
 
 verifierRouter.get("/presentation-definition/:type", async (req, res) => {
   const { type } = req.params;
-  if(type == 1) {
+  if (type == 1) {
     res.type("application/json").send(presentation_definition_jwt);
   }
-  console.log("ERROR getting presentatiton-definition type")
-  res.status(500)
-})
-
+  console.log("ERROR getting presentatiton-definition type");
+  res.status(500);
+});
 
 // *******************PILOT USE CASES ******************************
 verifierRouter.get("/vp-request/:type", async (req, res) => {
@@ -322,17 +310,27 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
     return res.status(400).type("text/plain").send("Invalid type parameter");
   }
 
-  let jwtToken = buildVpRequestJwt(
-    stateParam,
-    nonce,
-    clientId,
-    response_uri,
-    presentationDefinition,
-    jwks,
-    serverURL,
-    privateKey
-  );
-  res.type("text/plain").send(jwtToken);
+  // let jwtToken = buildVpRequestJwt(
+  //   stateParam,
+  //   nonce,
+  //   clientId,
+  //   response_uri,
+  //   presentationDefinition,
+  //   jwks,
+  //   serverURL,
+  //   privateKey
+  // );
+  let vpRequest = {
+    client_id: clientId,
+    client_id_scheme: "redirect_uri",
+    response_uri: response_uri,
+    response_type: "vp_token",
+    response_mode: "direct_post",
+    presentation_definition: presentation_definition_jwt,
+    nonce: nonce,
+    state: uuid,
+  };
+  res.json(vpRequest);
 });
 
 verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
@@ -360,9 +358,9 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
   // Convert credentials to claims
   let claims;
   try {
-    console.log(credentialsJwtArray)
+    console.log(credentialsJwtArray);
     claims = await flattenCredentialsToClaims(credentialsJwtArray);
-    console.log(claims)
+    console.log(claims);
     if (!claims) {
       throw new Error("Claims conversion returned null or undefined.");
     }
@@ -397,8 +395,8 @@ verifierRouter.get(["/verificationStatus"], (req, res) => {
       result = verificationSessions[index].claims;
       sessions.splice(index, 1);
       verificationSessions.splice(index, 1);
-      sessionHistory.addElement(sessionId)
-      verificationResultsHistory.addElement(result)
+      sessionHistory.addElement(sessionId);
+      verificationResultsHistory.addElement(result);
     }
     // console.log(`new sessions`);
     // console.log(sessions);
@@ -421,7 +419,7 @@ verifierRouter.get(["/verificationStatus"], (req, res) => {
 
 verifierRouter.get(["/verificationStatusHistory"], (req, res) => {
   let sessionId = req.query.sessionId;
-  let index = sessionHistory.getCurrentArray().indexOf(sessionId);  
+  let index = sessionHistory.getCurrentArray().indexOf(sessionId);
   if (index >= 0) {
     res.json({
       status: "success",
@@ -437,7 +435,6 @@ verifierRouter.get(["/verificationStatusHistory"], (req, res) => {
     });
   }
 });
-
 
 function buildVP(
   client_id,
