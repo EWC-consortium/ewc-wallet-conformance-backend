@@ -49,49 +49,52 @@ export function buildVpRequestJwt(
 */
 
   /**
- * response_uri
- * client_id_scheme: "redirect_uri",
- * iss": "https://some.io",
- * presentation_definition: {}
- * "response_type": "vp_token",
-  "state": "344306f6-0323-4ef5-9348-70fc328efd85",
-  "exp": 1712309984,
-  "nonce": "1fRxngVjYq0oETeZxNYfId",
-  "iat": 1712306384,
-  "client_id": "https://some.io/openid4vp/authorization-response",
-  "response_mode": "direct_post"
+ Location: https://client.example.org/universal-link?
+    response_type=vp_token
+    &client_id=https%3A%2F%2Fclient.example.org%2Fcb
+    &client_id_scheme=redirect_uri
+    &redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb
+    &presentation_definition=...
+    &nonce=n-0S6_WzA2Mj
+    &client_metadata=%7B%22vp_formats%22:%7B%22jwt_vp%22:%
+    7B%22alg%22:%5B%22EdDSA%22,%22ES256K%22%5D%7D,%22ldp
+    _vp%22:%7B%22proof_type%22:%5B%22Ed25519Signature201
+    8%22%5D%7D%7D%7D
  * 
  */
 
   let jwtPayload = {
-    client_id_scheme: "redirect_uri",
-    response_uri: response_uri, //TODO Note: If the Client Identifier scheme redirect_uri is used in conjunction with the Response Mode direct_post, and the response_uri parameter is present, the client_id value MUST be equal to the response_uri value
-    iss: serverURL,
-    presentation_definition: presentation_definition,
     response_type: "vp_token",
-    state: state,
-    exp: Math.floor(Date.now() / 1000) + 60,
-    nonce: nonce,
-    iat: Math.floor(Date.now() / 1000),
     client_id: client_id,
-    response_mode: "direct_post",
+    client_id_scheme: "redirect_uri",
+    presentation_definition: presentation_definition,
+    redirect_uri: response_uri,
+    // response_mode: "direct_post",
+    client_metadata : "",
+    
+    // response_uri: response_uri, //TODO Note: If the Client Identifier scheme redirect_uri is used in conjunction with the Response Mode direct_post, and the response_uri parameter is present, the client_id value MUST be equal to the response_uri value
+    // iss: serverURL,
+    // state: state,
+    // exp: Math.floor(Date.now() / 1000) + 60,
+    // nonce: nonce,
+    // iat: Math.floor(Date.now() / 1000),
     // nbf: Math.floor(Date.now() / 1000),
     // redirect_uri: redirect_uri,
     // scope: "openid",
     
   };
 
-  const header = {
-    alg: "ES256",
-    kid: `aegean#authentication-key`, //this kid needs to be resolvable from the did.json endpoint
-  };
+  // const header = {
+  //   alg: "ES256",
+  //   kid: `aegean#authentication-key`, //this kid needs to be resolvable from the did.json endpoint
+  // };
 
-  const token = jwt.sign(jwtPayload, privateKey, {
-    algorithm: "ES256",
-    noTimestamp: true,
-    header,
-  });
-  return token;
+  // const token = jwt.sign(jwtPayload, privateKey, {
+  //   algorithm: "ES256",
+  //   noTimestamp: true,
+  //   header,
+  // });
+  return jwtPayload;
 }
 
 export async function decryptJWE(jweToken, privateKeyPEM) {
