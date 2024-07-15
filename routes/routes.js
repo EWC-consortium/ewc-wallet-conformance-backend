@@ -826,7 +826,7 @@ router.get(["/issueStatus"], (req, res) => {
     console.log({
       status: result,
       reason: "ok",
-      sessionId: sessionId,
+      sessionId: sessionId, 
     });
     res.json({
       status: result,
