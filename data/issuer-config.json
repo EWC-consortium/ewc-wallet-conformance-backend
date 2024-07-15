@@ -56,7 +56,7 @@
       }
     },
     "VerifiablePortableDocumentA2": {
-      "format": "vc_jwt",
+      "format": "jwt_vc_json",
       "scope": "VerifiablePortableDocumentA2",
       "cryptographic_binding_methods_supported": ["jwk"],
       "cryptographic_suites_supported": ["ES256"],
@@ -99,7 +99,7 @@
       }
     },
     "PID": {
-      "format": "vc_jwt",
+      "format": "jwt_vc_json",
       "scope": "PID",
       "cryptographic_binding_methods_supported": ["jwk"],
       "cryptographic_suites_supported": ["ES256"],
@@ -187,7 +187,7 @@
       }
     },
     "ePassportCredential": {
-      "format": "vc_jwt",
+      "format": "jwt_vc_json",
       "scope": "ePassportCredential",
       "cryptographic_binding_methods_supported": ["jwk"],
       "cryptographic_suites_supported": ["ES256"],
@@ -703,7 +703,7 @@
     },
 
     "EducationalID": {
-      "format": "vc_jwt",
+      "format": "jwt_vc_json",
       "scope": "EducationalID",
       "cryptographic_binding_methods_supported": ["jwk"],
       "cryptographic_suites_supported": ["ES256"],
@@ -847,7 +847,7 @@
       }
     },
     "allianceIDCredential": {
-      "format": "vc_jwt",
+      "format": "jwt_vc_json",
       "scope": "allianceIDCredential",
       "cryptographic_binding_methods_supported": ["jwk"],
       "cryptographic_suites_supported": ["ES256"],
@@ -905,7 +905,7 @@
       }
     },
     "ferryBoardingPassCredential": {
-      "format": "vc_jwt",
+      "format": "jwt_vc_json",
       "scope": "ferryBoardingPassCredential",
       "cryptographic_binding_methods_supported": ["jwk"],
       "cryptographic_suites_supported": ["ES256"],
