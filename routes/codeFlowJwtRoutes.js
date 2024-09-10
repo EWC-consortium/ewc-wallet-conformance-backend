@@ -90,16 +90,29 @@ codeFlowRouter.get("/authorize", async (req, res) => {
 
   //validations
   let errors = [];
+  /*
+  [{"format":"jwt_vc",
+  "locations":["https://issuer.example.com"],
+  "type":"openid_credential",
+  "types":["VerifiableCredential","VerifiableAttestation","VerifiablePortableDocumentA1"]}]
+  */
   if (!authorizationDetails) {
-    //errors.push("no credentials requested");
+    errors.push("no credentials requested");
     console.log(`no credentials requested`);
-  } else if (authorizationDetails.credential_definition) {
-    console.log(
-      `credential ${authorizationDetails.credential_definition.type} was requested`
-    );
-  } else if (authorizationDetails.types) {
-    //EBSI style
-    console.log(`credential ${authorizationDetails.types} was requested`);
+  } else {
+    try{
+      if (authorizationDetails.credential_definition) {
+        console.log(
+          `credential ${authorizationDetails.credential_definition.type} was requested`
+        );
+      } else if (authorizationDetails.types) {
+        //EBSI style
+        console.log(`credential ${authorizationDetails.types} was requested`);
+      }
+    }catch(error){
+      errors.push("no credentials requested");
+    }
+   
   }
 
   if (responseType !== "code") {
