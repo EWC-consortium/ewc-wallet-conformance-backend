@@ -770,7 +770,7 @@ router.post("/credential", async (req, res) => {
     const sdjwt = new SDJwtVcInstance({
       signer,
       verifier,
-      signAlg: "ES384",
+      signAlg: "ES256",
       hasher: digest,
       hashAlg: "SHA-256",
       saltGenerator: generateSalt,
