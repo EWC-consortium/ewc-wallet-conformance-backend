@@ -326,7 +326,7 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
     response_uri: response_uri,
     response_type: "vp_token",
     response_mode: "direct_post",
-    presentation_definition: presentation_definition_jwt,
+    presentation_definition: presentationDefinition,
     nonce: nonce,
     state: uuid,
   };
