@@ -443,7 +443,7 @@ router.post("/credential", async (req, res) => {
             iss: serverURL,
             sub: decodedHeaderSubjectDID || "",
             iat: Math.floor(Date.now() / 1000), // Token issued at time
-            exp: (Math.floor(Date.now() / 1000) + 60 * 60) * 1000,
+            exp: Math.floor(Date.now() / 1000) +  60 * 60 * 24 * 30, // Token expiration time (1 hour from now)
             jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
             vc: {
               type: ["StudentID"],//["EducationalID"],
@@ -475,7 +475,7 @@ router.post("/credential", async (req, res) => {
                 Math.floor(Date.now() / 1000) * 1000
               ).toISOString(),
               expirationDate: new Date(
-                (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
+                (Math.floor(Date.now() / 1000) +  60 * 60 * 24 * 30) * 1000
               ).toISOString(),
               validFrom: new Date(
                 Math.floor(Date.now() / 1000) * 1000
