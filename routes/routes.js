@@ -446,7 +446,7 @@ router.post("/credential", async (req, res) => {
             exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
             jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
             vc: {
-              type: ["EducationalID"],
+              type: ["StudentID"],//["EducationalID"],
               "@context": ["https://www.w3.org/2018/credentials/v1"],
               issuer: serverURL,
               credentialSubject: {

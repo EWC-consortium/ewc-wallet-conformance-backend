@@ -321,6 +321,13 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
   //   privateKey
   // );
   let vpRequest = {
+    client_metadata: {
+      client_name: "UAegean EWC Verifier",
+      logo_uri: "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+      location: "Greece",
+      cover_uri: "string",
+      description: "EWC pilot case verification",
+    },
     client_id: clientId,
     client_id_scheme: "redirect_uri",
     response_uri: response_uri,

@@ -90,7 +90,7 @@
     },
     {
       "id": "educational-id-credential",
-      "name": "Educational ID Credential",
+      "name": "Student ID",
       "format": {
         "jwt_vc_json": {
           "alg": ["ES256", "ES384"]
