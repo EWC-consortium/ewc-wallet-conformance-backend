@@ -443,7 +443,7 @@ router.post("/credential", async (req, res) => {
             iss: serverURL,
             sub: decodedHeaderSubjectDID || "",
             iat: Math.floor(Date.now() / 1000), // Token issued at time
-            exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
+            exp: (Math.floor(Date.now() / 1000) + 60 * 60) * 1000,
             jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
             vc: {
               type: ["StudentID"],//["EducationalID"],
