@@ -702,14 +702,14 @@
       }
     },
 
-    "EducationalID": {
+    "StudentID": {
       "format": "jwt_vc_json",
-      "scope": "EducationalID",
+      "scope": "StudentID",
       "cryptographic_binding_methods_supported": ["jwk"],
       "cryptographic_suites_supported": ["ES256"],
       "display": [
         {
-          "name": "EducationalID",
+          "name": "StudentID",
           "locale": "en-GB",
           "background_color": "#12107c",
           "text_color": "#FFFFFF",
@@ -721,7 +721,7 @@
         }
       ],
       "credential_definition": {
-        "type": ["EducationalID"],
+        "type": ["StudentID"],
         "claims": {
           "identifier": {
             "display": [

@@ -80,7 +80,7 @@ educationalRouter.get(["/credential-offer-pre-jwt-edu/:id"], (req, res) => {
   if (!persona) {
     res.json({
       credential_issuer: serverURL,
-      credentials: ["EducationalID"],
+      credentials: ["StudentID"],
       grants: {
         "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
           "pre-authorized_code": req.params.id,
@@ -91,7 +91,7 @@ educationalRouter.get(["/credential-offer-pre-jwt-edu/:id"], (req, res) => {
   } else {
     res.json({
       credential_issuer: serverURL,
-      credentials: ["EducationalID"],
+      credentials: ["StudentID"],
       grants: {
         "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
           "pre-authorized_code": req.params.id + "-persona=" + persona,

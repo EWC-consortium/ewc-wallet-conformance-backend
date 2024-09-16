@@ -297,14 +297,14 @@ router.post("/credential", async (req, res) => {
       payload = {
         iss: serverURL,
         sub: decodedHeaderSubjectDID || "",
-        exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
+        exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30, // Token expiration time (1 hour from now)
         iat: Math.floor(Date.now() / 1000), // Token issued at time
         // nbf: Math.floor(Date.now() / 1000),
         jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
         vc: {
           credentialSubject: credentialSubject,
           expirationDate: new Date(
-            (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
+            (Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30) * 1000
           ).toISOString(),
           id: decodedHeaderSubjectDID,
           issuanceDate: new Date(
@@ -429,8 +429,9 @@ router.post("/credential", async (req, res) => {
         };
       } else {
         if (
-          requestedCredentials != null &&
-          requestedCredentials[0] === "EducationalID"
+          (requestedCredentials != null &&
+            requestedCredentials[0] === "EducationalID") ||
+          requestedCredentials[0] === "StudentID"
         ) {
           const preSessions = getPreCodeSessions();
           let persona = getPersonaFromAccessToken(
@@ -443,10 +444,10 @@ router.post("/credential", async (req, res) => {
             iss: serverURL,
             sub: decodedHeaderSubjectDID || "",
             iat: Math.floor(Date.now() / 1000), // Token issued at time
-            exp: Math.floor(Date.now() / 1000) +  60 * 60 * 24 * 30, // Token expiration time (1 hour from now)
+            exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30, // Token expiration time (1 hour from now)
             jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
             vc: {
-              type: ["StudentID"],//["EducationalID"],
+              type: ["StudentID"], //["EducationalID"],
               "@context": ["https://www.w3.org/2018/credentials/v1"],
               issuer: serverURL,
               credentialSubject: {
@@ -475,7 +476,7 @@ router.post("/credential", async (req, res) => {
                 Math.floor(Date.now() / 1000) * 1000
               ).toISOString(),
               expirationDate: new Date(
-                (Math.floor(Date.now() / 1000) +  60 * 60 * 24 * 30) * 1000
+                (Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30) * 1000
               ).toISOString(),
               validFrom: new Date(
                 Math.floor(Date.now() / 1000) * 1000
@@ -562,7 +563,7 @@ router.post("/credential", async (req, res) => {
               iss: serverURL,
               sub: decodedHeaderSubjectDID || "",
               iat: Math.floor(Date.now() / 1000), // Token issued at time
-              exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
+              exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30, // Token expiration time (1 hour from now)
               jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
               vc: {
                 type: ["allianceIDCredential"],
@@ -581,7 +582,7 @@ router.post("/credential", async (req, res) => {
                   Math.floor(Date.now() / 1000) * 1000
                 ).toISOString(),
                 expirationDate: new Date(
-                  (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
+                  (Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30) * 1000
                 ).toISOString(),
                 validFrom: new Date(
                   Math.floor(Date.now() / 1000) * 1000
@@ -603,7 +604,7 @@ router.post("/credential", async (req, res) => {
               iss: serverURL,
               sub: decodedHeaderSubjectDID || "",
               iat: Math.floor(Date.now() / 1000), // Token issued at time
-              exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
+              exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30, // Token expiration time (1 hour from now)
               jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
               vc: {
                 type: ["VerifiableCredential", "ferryBoardingPassCredential"],
@@ -613,7 +614,7 @@ router.post("/credential", async (req, res) => {
                   Math.floor(Date.now() / 1000) * 1000
                 ).toISOString(),
                 expirationDate: new Date(
-                  (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
+                  (Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30) * 1000
                 ).toISOString(),
                 validFrom: new Date(
                   Math.floor(Date.now() / 1000) * 1000
@@ -636,12 +637,11 @@ router.post("/credential", async (req, res) => {
                   arrivalPort: "NYC",
                   vesselDescription: "Ferry XYZ",
                 },
-                
               },
             };
-  
+
             if (persona === "1") {
-              payload.vc.credentialSubject ={
+              payload.vc.credentialSubject = {
                 id: decodedHeaderSubjectDID || "", // Replace with the actual subject DID
                 identifier: "Mario Conti",
                 ticketQR:
@@ -658,9 +658,9 @@ router.post("/credential", async (req, res) => {
                 arrivalTime: "15:30:00",
                 arrivalPort: "MYKONOS TEST",
                 vesselDescription: "MYKONOS TEST",
-              }
-            }else if(persona === "2"){
-              payload.vc.credentialSubject ={
+              };
+            } else if (persona === "2") {
+              payload.vc.credentialSubject = {
                 id: decodedHeaderSubjectDID || "", // Replace with the actual subject DID
                 identifier: "Hannah Matkalainen",
                 ticketQR:
@@ -677,9 +677,9 @@ router.post("/credential", async (req, res) => {
                 arrivalTime: "15:30:00",
                 arrivalPort: "MYKONOS TEST",
                 vesselDescription: "MYKONOS TEST",
-              }
-            }else if(persona ==="3"){
-              payload.vc.credentialSubject ={
+              };
+            } else if (persona === "3") {
+              payload.vc.credentialSubject = {
                 id: decodedHeaderSubjectDID || "", // Replace with the actual subject DID
                 identifier: "Felix Fischer",
                 ticketQR:
@@ -696,14 +696,14 @@ router.post("/credential", async (req, res) => {
                 arrivalTime: "15:30:00",
                 arrivalPort: "MYKONOS TEST",
                 vesselDescription: "MYKONOS TEST",
-              }
-            } 
+              };
+            }
           } else {
             //sign as jwt
             payload = {
               iss: serverURL,
               sub: decodedHeaderSubjectDID || "",
-              exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
+              exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30, // Token expiration time (1 hour from now)
               iat: Math.floor(Date.now() / 1000), // Token issued at time
               // nbf: Math.floor(Date.now() / 1000),
               jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
@@ -714,7 +714,7 @@ router.post("/credential", async (req, res) => {
                   last_name: "Doe",
                 },
                 expirationDate: new Date(
-                  (Math.floor(Date.now() / 1000) + 60 * 60) * 1000
+                  (Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30) * 1000
                 ).toISOString(),
                 id: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
                 issuanceDate: new Date(
@@ -826,7 +826,7 @@ router.get(["/issueStatus"], (req, res) => {
     console.log({
       status: result,
       reason: "ok",
-      sessionId: sessionId, 
+      sessionId: sessionId,
     });
     res.json({
       status: result,

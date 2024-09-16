@@ -70,7 +70,7 @@
 
     {
       "id": "alliance-id-credential",
-      "name": "Alliance ID Credential",
+      "name": "allianceIDCredential",
       "format": {
         "jwt_vc_json": {
           "alg": ["ES256", "ES384"]
