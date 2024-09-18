@@ -37,7 +37,7 @@ const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
 
 educationalRouter.get(["/pre-offer-jwt-edu"], async (req, res) => {
-  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  let uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const personaId = req.query.persona;
   const preSessions = getPreCodeSessions();
   //if (preSessions.sessions.indexOf(uuid + "-persona=" + personaId) < 0) {
@@ -45,14 +45,16 @@ educationalRouter.get(["/pre-offer-jwt-edu"], async (req, res) => {
   //   preSessions.results.push({ sessionId: uuid, status: "pending" });
   //   preSessions.personas.push(null);
   //   preSessions.accessTokens.push(null);
-  // } 
-  if (preSessions.sessions.indexOf(uuid ) < 0) {
-    console.log(uuid)
-    preSessions.sessions.push(uuid);
+  //142d9d92-3375-498b-b097-baac74d68c0a-persona=3
+  // }
+  if (preSessions.sessions.indexOf(uuid) < 0) {
+    if (personaId) preSessions.sessions.push(uuid + "-persona=" + personaId);
+    else preSessions.sessions.push(uuid);
+
     preSessions.results.push({ sessionId: uuid, status: "pending" });
-    preSessions.personas.push(null);
+    preSessions.personas.push(personaId);
     preSessions.accessTokens.push(null);
-  } 
+  }
   let credentialOffer = "";
   if (personaId) {
     credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-pre-jwt-edu/${uuid}?persona=${personaId}`; //OfferUUID
@@ -89,6 +91,7 @@ educationalRouter.get(["/credential-offer-pre-jwt-edu/:id"], (req, res) => {
       },
     });
   } else {
+    // console.log("pre-authorized_code:"+ req.params.id + "-persona=" + persona)
     res.json({
       credential_issuer: serverURL,
       credentials: ["StudentID"],

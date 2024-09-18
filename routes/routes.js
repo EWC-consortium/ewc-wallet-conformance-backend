@@ -882,6 +882,7 @@ function checkIfExistsIssuanceStatus(
 function getPersonaFromAccessToken(accessToken, personas, accessTokens) {
   let persona = null;
   for (let i = 0; i < accessTokens.length; i++) {
+    console.log(accessTokens[i])
     if (accessTokens[i] === accessToken) {
       persona = personas[i];
     }
