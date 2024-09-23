@@ -1,6 +1,6 @@
 // main file
 import express from "express";
-import router from "./routes/routes.js";
+import router from "./routes/preAuthSDjwRoutes.js";
 import verifierRouter from "./routes/verifierRoutes.js";
 import metadataRouter from "./routes/metadataroutes.js";
 import codeFlowRouter from "./routes/codeFlowJwtRoutes.js";

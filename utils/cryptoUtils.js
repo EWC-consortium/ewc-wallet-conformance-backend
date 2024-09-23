@@ -27,7 +27,7 @@ export function generateNonce(length = 12) {
   return crypto.randomBytes(length).toString("hex");
 }
 
-export function buildVpRequestJwt(
+export function buildVpRequestJSON(
   state,
   nonce,
   client_id,
@@ -72,16 +72,7 @@ export function buildVpRequestJwt(
     // response_mode: "direct_post",
     client_metadata : "",
     
-    // response_uri: response_uri, //TODO Note: If the Client Identifier scheme redirect_uri is used in conjunction with the Response Mode direct_post, and the response_uri parameter is present, the client_id value MUST be equal to the response_uri value
-    // iss: serverURL,
-    // state: state,
-    // exp: Math.floor(Date.now() / 1000) + 60,
-    // nonce: nonce,
-    // iat: Math.floor(Date.now() / 1000),
-    // nbf: Math.floor(Date.now() / 1000),
-    // redirect_uri: redirect_uri,
-    // scope: "openid",
-    
+    // response_uri: response_uri, //TODO Note: If the Client Identifier scheme redirect_uri is used in conjunction with the Response Mode direct_post, and the response_uri parameter is present, the client_id value MUST be equal to the response_uri value    
   };
 
   // const header = {
@@ -96,6 +87,42 @@ export function buildVpRequestJwt(
   // });
   return jwtPayload;
 }
+
+
+
+export function buildVpRequestJWT(
+  client_id,
+  response_uri,
+  presentation_definition,
+  privateKey
+) {
+
+  let jwtPayload = {
+    response_type: "vp_token",
+    client_id: client_id,
+    client_id_scheme: "redirect_uri",
+    presentation_definition: presentation_definition,
+    redirect_uri: response_uri,
+    // response_mode: "direct_post",
+    client_metadata : "",
+    // response_uri: response_uri, //TODO Note: If the Client Identifier scheme redirect_uri is used in conjunction with the Response Mode direct_post, and the response_uri parameter is present, the client_id value MUST be equal to the response_uri value    
+  };
+
+  const header = {
+    alg: "ES256",
+    kid: `aegean#authentication-key`, //this kid needs to be resolvable from the did.json endpoint
+  };
+
+  const token = jwt.sign(jwtPayload, privateKey, {
+    algorithm: "ES256",
+    noTimestamp: true,
+    header,
+  });
+  return token;
+}
+
+
+
 
 export async function decryptJWE(jweToken, privateKeyPEM) {
   try {

@@ -5,7 +5,7 @@ import {
   pemToJWK,
   generateNonce,
   decryptJWE,
-  buildVpRequestJwt,
+  buildVpRequestJSON,
 } from "../utils/cryptoUtils.js";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
 import { digest } from "@sd-jwt/crypto-nodejs";
@@ -119,7 +119,7 @@ verifierRouter.get("/vpRequest/:id", async (req, res) => {
     claims: null,
   });
 
-  let jwtToken = buildVpRequestJwt(
+  let jwtToken = buildVpRequestJSON(
     stateParam,
     nonce,
     clientId,
@@ -309,27 +309,29 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
   } else {
     return res.status(400).type("text/plain").send("Invalid type parameter");
   }
+  /*
+ TODO the vpRequest/:type/:id endpoint defined in routes/verifierRoutes.js, 
+ that is used for JWT secured Authorization Requests (JAR), 
+ returns a raw JSON object instead of a JWT. 
+ 
+ According to the JAR standard (RFC9101), the endpoint defined in request_uri should present a JWT in the response body,
+  never raw JSON. 
+  Also, as has been mentioned before, when a client_id_scheme of redirect_uri is used, 
+  the authorization request must not be signed, 
+  so perhaps the conformance backend shouldn't use JAR at all with this scheme.
+*/
 
-  // let jwtToken = buildVpRequestJwt(
-  //   stateParam,
-  //   nonce,
-  //   clientId,
-  //   response_uri,
-  //   presentationDefinition,
-  //   jwks,
-  //   serverURL,
-  //   privateKey
-  // );
   let vpRequest = {
     client_metadata: {
       client_name: "UAegean EWC Verifier",
-      logo_uri: "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+      logo_uri:
+        "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
       location: "Greece",
       cover_uri: "string",
       description: "EWC pilot case verification",
     },
     client_id: clientId,
-    client_id_scheme: "redirect_uri",
+    client_id_scheme: "redirect_uri", //TODO change this
     response_uri: response_uri,
     response_type: "vp_token",
     response_mode: "direct_post",

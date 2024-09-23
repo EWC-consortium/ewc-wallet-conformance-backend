@@ -17,6 +17,11 @@ const oauthConfig = JSON.parse(
 
 const jwks = pemToJWK(publicKeyPem, "public");
 
+
+/**
+ * Credential Issuer metadata
+ */
+
 metadataRouter.get(
   "/.well-known/openid-credential-issuer",
   async (req, res) => {
@@ -30,6 +35,9 @@ metadataRouter.get(
   }
 );
 
+/**
+ * Authorization Server Metadata
+ */
 metadataRouter.get(
   [
     "/.well-known/oauth-authorization-server",
@@ -39,11 +47,15 @@ metadataRouter.get(
   async (req, res) => {
     oauthConfig.issuer = serverURL;
     oauthConfig.authorization_endpoint = serverURL + "/authorize";
+    oauthConfig.pushed_authorization_request_endpoint = serverURL + "/par";
     oauthConfig.token_endpoint = serverURL + "/token_endpoint";
     oauthConfig.jwks_uri = serverURL + "/jwks";
     res.type("application/json").send(oauthConfig);
   }
 );
+
+
+
 
 metadataRouter.get(["/", "/jwks"], (req, res) => {
   res.json({

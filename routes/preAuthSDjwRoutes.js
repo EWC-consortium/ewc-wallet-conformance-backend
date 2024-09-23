@@ -12,9 +12,13 @@ import {
   buildIdToken,
 } from "../utils/tokenUtils.js";
 
+import {getCredentialSubjectForPersona, getPersonaFromAccessToken} from "../utils/personasUtils.js"
+
+
 import {
   getAuthCodeSessions,
   getPreCodeSessions,
+  getAuthCodeAuthorizationDetail,
 } from "../services/cacheService.js";
 
 import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
@@ -40,19 +44,22 @@ const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
 console.log("privateKey");
 console.log(privateKey);
 
+// ******************************************************************
+// ************* CREDENTIAL OFFER ENDPOINTS *************************
+// ******************************************************************
+
 ///pre-auth flow sd-jwt
-router.get(["/offer"], async (req, res) => {
+/*
+ Generates a VCI request with  pre-authorised flow with a transaction code
+*/
+router.get(["/offer-tx-code"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const preSessions = getPreCodeSessions();
   if (preSessions.sessions.indexOf(uuid) < 0) {
     preSessions.sessions.push(uuid);
     preSessions.results.push({ sessionId: uuid, status: "pending" });
   }
-
-  // console.log("active sessions");
-  // console.log(issuanceResults);
-  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer/${uuid}`; //OfferUUID
-
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-tx-code/${uuid}`; //OfferUUID
   let code = qr.image(credentialOffer, {
     type: "png",
     ec_level: "H",
@@ -68,30 +75,38 @@ router.get(["/offer"], async (req, res) => {
   });
 });
 
-//pre-auth flow request sd-jwt
-router.get(["/credential-offer/:id"], (req, res) => {
+/**
+ * pre-authorised flow with a transaction code, credential offer
+ */
+router.get(["/credential-offer-tx-code/:id"], (req, res) => {
   res.json({
     credential_issuer: serverURL,
-    credentials: ["VerifiablePortableDocumentA1"],
+    credential_configuration_ids: ["VerifiablePortableDocumentA1"],
     grants: {
       "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
         "pre-authorized_code": req.params.id,
-        user_pin_required: true,
+        tx_code: {
+          length: 4,
+          input_mode: "numeric",
+          description:
+            "Please provide the one-time code that was sent via e-mail or offline",
+        },
       },
     },
   });
 });
 
-// ***************
-///pre-auth flow jwt_vc_json
-router.get(["/pre-offer-jwt"], async (req, res) => {
+/**
+ * pre-authorised flow without a transaction code request
+ */
+router.get(["/offer-no-code"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const preSessions = getPreCodeSessions();
   if (preSessions.sessions.indexOf(uuid) < 0) {
     preSessions.sessions.push(uuid);
     preSessions.results.push({ sessionId: uuid, status: "pending" });
   }
-  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-pre-jwt/${uuid}`; //OfferUUID
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-no-code/${uuid}`; //OfferUUID
   let code = qr.image(credentialOffer, {
     type: "png",
     ec_level: "H",
@@ -107,52 +122,47 @@ router.get(["/pre-offer-jwt"], async (req, res) => {
   });
 });
 
-//pre-auth flow request sd-jwt
-router.get(["/credential-offer-pre-jwt/:id"], (req, res) => {
+/**
+ * pre-authorised flow no transaction code request endpoint
+ */
+router.get(["/ccredential-offer-no-code/:id"], (req, res) => {
   res.json({
     credential_issuer: serverURL,
-    credentials: ["VerifiablePortableDocumentA2"],
+    credential_configuration_ids: ["VerifiablePortableDocumentA1"],
     grants: {
       "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
         "pre-authorized_code": req.params.id,
-        user_pin_required: true,
       },
     },
   });
 });
 
-function getPersonaPart(inputString) {
-  const personaKey = "persona=";
-  const personaIndex = inputString.indexOf(personaKey);
+// *********************************************************************
 
-  if (personaIndex === -1) {
-    return null; // "persona=" not found in the string
-  }
-
-  // Split the string based on "persona="
-  const parts = inputString.split(personaKey);
-
-  // Return the part after "persona="
-  return parts[1] || null;
-}
+// *****************************************************************
+// ************* TOKEN ENDPOINTS ***********************************
+// *****************************************************************
 
 router.post("/token_endpoint", async (req, res) => {
+  // Fetch the Authorization header
+  const authorizationHeader = req.headers["authorization"]; // Fetch the 'Authorization' header
+  console.log("token_endpoint authorizatiotn header-" + authorizationHeader);
+
   //pre-auth code flow
-  const grantType = req.body.grant_type;
   const preAuthorizedCode = req.body["pre-authorized_code"]; // req.body["pre-authorized_code"]
-  const userPin = req.body["user_pin"];
+  const tx_code = req.body["tx_code"];
+
   //code flow
+  const grantType = req.body.grant_type;
+  const client_id = req.body.client_id;
   const code = req.body["code"]; //TODO check the code ...
   const code_verifier = req.body["code_verifier"];
   const redirect_uri = req.body["redirect_uri"];
 
-  // console.log("token_endpoint parameters received");
-  // console.log(grantType);
-  // console.log(preAuthorizedCode);
-  // console.log(userPin);
-  // console.log("---------");
-
   let generatedAccessToken = buildAccessToken(serverURL, privateKey);
+
+  //TODO CHECK IF THE  AUTHORIZATION REQUEST WAS done via a authorization_details or scope parameter
+  let authorization_details = getAuthCodeAuthorizationDetail().get(code);
 
   if (grantType == "urn:ietf:params:oauth:grant-type:pre-authorized_code") {
     console.log("pre-auth code flow");
@@ -164,14 +174,12 @@ router.post("/token_endpoint", async (req, res) => {
       );
       preSessions.results[index].status = "success";
       preSessions.accessTokens[index] = generatedAccessToken;
-
       let personaId = getPersonaPart(preAuthorizedCode);
       if (personaId) {
         preSessions.personas[index] = personaId;
       } else {
         preSessions.personas[index] = null;
       }
-
       // console.log("pre-auth code flow" + preSessions.results[index].status);
     }
   } else {
@@ -186,16 +194,53 @@ router.post("/token_endpoint", async (req, res) => {
     }
   }
   //TODO return error if code flow validation fails and is not a pre-auth flow
-  res.json({
-    access_token: generatedAccessToken,
-    refresh_token: generateRefreshToken(),
-    token_type: "bearer",
-    expires_in: 86400,
-    id_token: buildIdToken(serverURL, privateKey),
-    c_nonce: generateNonce(),
-    c_nonce_expires_in: 86400,
-  });
+
+  if (authorization_details) {
+    /*{  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6Ikp..sHQ",
+  "token_type": "bearer",
+  "expires_in": 86400,
+  "c_nonce": "tZignsnFbp",
+  "c_nonce_expires_in": 86400,
+  "authorization_details": [
+    {
+      "type": "openid_credential",
+      "credential_configuration_id": "VerifiablePortableDocumentA1",
+      "credential_identifiers": [ "VerifiablePortableDocumentA1-Spain", "VerifiablePortableDocumentA1-Sweden", "VerifiablePortableDocumentA1-Germany" ]
+    }]}*/
+    res.json({
+      access_token: generatedAccessToken,
+      refresh_token: generateRefreshToken(),
+      token_type: "bearer",
+      expires_in: 86400,
+      // id_token: buildIdToken(serverURL, privateKey),
+      c_nonce: generateNonce(),
+      c_nonce_expires_in: 86400,
+      authorization_details: authorizatiton_details,
+    });
+  } else {
+    res.json({
+      /*   "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6Ikp..sHQ",
+    "refresh_token": "eyJhbGciOiJSUzI1NiIsInR5cCI4a5k..zEF",
+    "token_type": "bearer",
+    "expires_in": 86400,
+    "id_token": "eyJodHRwOi8vbWF0dHIvdGVuYW50L..3Mz",
+    "c_nonce": "PAPPf3h9lexTv3WYHZx8ajTe",
+    "c_nonce_expires_in": 86400 */
+
+      access_token: generatedAccessToken,
+      refresh_token: generateRefreshToken(),
+      token_type: "bearer",
+      expires_in: 86400,
+      id_token: buildIdToken(serverURL, privateKey),
+      c_nonce: generateNonce(),
+      c_nonce_expires_in: 86400,
+    });
+  }
 });
+
+// *****************************************************************
+// ************* CREDENTIAL ENDPOINTS ******************************
+// *****************************************************************
 
 router.post("/credential", async (req, res) => {
   // console.log("7 ROUTE /credential CALLED!!!!!!");
@@ -204,7 +249,7 @@ router.post("/credential", async (req, res) => {
   // Accessing the body data
   const requestBody = req.body;
   const format = requestBody.format;
-  const requestedCredentials = requestBody.credential_definition
+  let requestedCredentials = requestBody.credential_definition
     ? requestBody.credential_definition.type
     : null; //removed requestBody.types to conform to RFC001
   //TODO valiate bearer header
@@ -229,70 +274,9 @@ router.post("/credential", async (req, res) => {
         preSessions.accessTokens
       );
 
-      let credentialSubject = {
-        id: decodedHeaderSubjectDID,
-        family_name: "Doe",
-        given_name: "John",
-        birth_date: "1990-01-01",
-        age_over_18: true,
-        issuance_date: new Date(
-          Math.floor(Date.now() / 1000) * 1000
-        ).toISOString(),
-        expiry_date: new Date(
-          Math.floor(Date.now() + 60 / 1000) * 1000
-        ).toISOString(),
-        issuing_authority: "https://authority.example.com",
-        issuing_country: "GR",
-      };
-      if (persona === "1") {
-        credentialSubject = {
-          id: decodedHeaderSubjectDID,
-          family_name: "Conti",
-          given_name: "Mario",
-          birth_date: "1988-11-12",
-          age_over_18: true,
-          issuance_date: new Date(
-            Math.floor(Date.now() / 1000) * 1000
-          ).toISOString(),
-          expiry_date: new Date(
-            Math.floor(Date.now() + 60 / 1000) * 1000
-          ).toISOString(),
-          issuing_authority: "https://authority.example.com",
-          issuing_country: "IT",
-        };
-      } else if (persona === "2") {
-        credentialSubject = {
-          id: decodedHeaderSubjectDID,
-          family_name: "Matkalainen",
-          given_name: "Hannah",
-          birth_date: "2005-02-07",
-          age_over_18: true,
-          issuance_date: new Date(
-            Math.floor(Date.now() / 1000) * 1000
-          ).toISOString(),
-          expiry_date: new Date(
-            Math.floor(Date.now() + 60 / 1000) * 1000
-          ).toISOString(),
-          issuing_authority: "https://authority.example.com",
-          issuing_country: "FI",
-        };
-      } else if (persona === "3") {
-        credentialSubject = {
-          id: decodedHeaderSubjectDID,
-          family_name: "Fischer",
-          given_name: "Felix",
-          birth_date: "1953-01-23",
-          age_over_18: true,
-          issuance_date: new Date(
-            Math.floor(Date.now() / 1000) * 1000
-          ).toISOString(),
-          expiry_date: new Date(
-            Math.floor(Date.now() + 60 / 1000) * 1000
-          ).toISOString(),
-          issuing_authority: "https://authority.example.com",
-          issuing_country: "FI",
-        };
-      }
+     // Get the persona-specific credentialSubject
+     const credentialSubject = getCredentialSubjectForPersona(persona, decodedHeaderSubjectDID);
+
 
       payload = {
         iss: serverURL,
@@ -761,42 +745,48 @@ router.post("/credential", async (req, res) => {
       c_nonce_expires_in: 86400,
     });
   } else {
-    // console.log("Token:", token);
-    // console.log("Request Body:", requestBody);
-    const { signer, verifier } = await createSignerVerifier(
-      pemToJWK(privateKey, "private"),
-      pemToJWK(publicKeyPem, "public")
-    );
-    const sdjwt = new SDJwtVcInstance({
-      signer,
-      verifier,
-      signAlg: "ES256",
-      hasher: digest,
-      hashAlg: "SHA-256",
-      saltGenerator: generateSalt,
-    });
-    const claims = {
-      given_name: "John",
-      last_name: "Doe",
-    };
-    const disclosureFrame = {
-      _sd: ["given_name", "last_name"],
-    };
-    const credential = await sdjwt.issue(
-      {
-        iss: serverURL,
-        iat: new Date().getTime(),
-        vct: "VerifiablePortableDocumentA1",
-        ...claims,
-      },
-      disclosureFrame
-    );
-    res.json({
-      format: "vc+sd-jwt",
-      credential: credential,
-      c_nonce: generateNonce(),
-      c_nonce_expires_in: 86400,
-    });
+    
+    if (format === "vc+sd-jwt") {
+      // console.log("Token:", token);
+      // console.log("Request Body:", requestBody);
+      const { signer, verifier } = await createSignerVerifier(
+        pemToJWK(privateKey, "private"),
+        pemToJWK(publicKeyPem, "public")
+      );
+      const sdjwt = new SDJwtVcInstance({
+        signer,
+        verifier,
+        signAlg: "ES256",
+        hasher: digest,
+        hashAlg: "SHA-256",
+        saltGenerator: generateSalt,
+      });
+      const claims = {
+        given_name: "John",
+        last_name: "Doe",
+      };
+      const disclosureFrame = {
+        _sd: ["given_name", "last_name"],
+      };
+      const credential = await sdjwt.issue(
+        {
+          iss: serverURL,
+          iat: new Date().getTime(),
+          vct: "VerifiablePortableDocumentA1",
+          ...claims,
+        },
+        disclosureFrame
+      );
+      res.json({
+        format: "vc+sd-jwt",
+        credential: credential,
+        c_nonce: generateNonce(),
+        c_nonce_expires_in: 86400,
+      });
+    } else {
+      console.log("UNSUPPORTED FORMAT!");
+      console.log(format);
+    }
   }
 });
 //issuerConfig.credential_endpoint = serverURL + "/credential";
@@ -879,16 +869,7 @@ function checkIfExistsIssuanceStatus(
   return null;
 }
 
-function getPersonaFromAccessToken(accessToken, personas, accessTokens) {
-  let persona = null;
-  for (let i = 0; i < accessTokens.length; i++) {
-    console.log(accessTokens[i])
-    if (accessTokens[i] === accessToken) {
-      persona = personas[i];
-    }
-  }
-  return persona;
-}
+
 
 async function validatePKCE(sessions, code, code_verifier, issuanceResults) {
   for (let i = 0; i < sessions.length; i++) {
@@ -899,9 +880,31 @@ async function validatePKCE(sessions, code, code_verifier, issuanceResults) {
       if (tester === challenge) {
         issuanceResults[i].status = "success";
         console.log("code flow status:" + issuanceResults[i].status);
+      } else {
+        console.log(
+          "PCKE ERROR tester and challenge do not match " +
+            tester +
+            "-" +
+            challenge
+        );
       }
     }
   }
+}
+
+function getPersonaPart(inputString) {
+  const personaKey = "persona=";
+  const personaIndex = inputString.indexOf(personaKey);
+
+  if (personaIndex === -1) {
+    return null; // "persona=" not found in the string
+  }
+
+  // Split the string based on "persona="
+  const parts = inputString.split(personaKey);
+
+  // Return the part after "persona="
+  return parts[1] || null;
 }
 
 export default router;
