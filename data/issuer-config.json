@@ -5,18 +5,22 @@
   "deferred_credential_endpoint": "https://server.example.com/credential_deferred",
   "display": [
     {
-      "name": "UAegean",
-      "location": "UAegean",
+      "name": "Issuer",
+      "location": "Belgium",
       "locale": "en-GB",
-      "description": "University of the Aegean RFC Issuer for EWC"
+      "description": "For queries about how we manage your data please contact the Data Protection Officer."
     }
   ],
   "credential_configurations_supported": {
     "VerifiablePortableDocumentA1": {
       "format": "vc+sd-jwt",
       "scope": "VerifiablePortableDocumentA1",
-      "cryptographic_binding_methods_supported": ["jwk"],
-      "credential_signing_alg_values_supported": ["ES256"],
+      "cryptographic_binding_methods_supported": [
+        "jwk"
+      ],
+      "credential_signing_alg_values_supported": [
+        "ES256"
+      ],
       "display": [
         {
           "name": "Portable Document A1",
@@ -25,36 +29,33 @@
           "text_color": "#FFFFFF"
         }
       ],
-      "credential_definition": {
-        "vct": "VerifiablePortableDocumentA1",
-        "claims": {
-          "given_name": {
-            "display": [
-              {
-                "name": "Given Name",
-                "locale": "en-GB"
-              },
-              {
-                "name": "ΟΝΟΜΑ",
-                "locale": "gr-GR"
-              }
-            ]
-          },
-          "last_name": {
-            "display": [
-              {
-                "name": "Surname",
-                "locale": "en-GB"
-              },
-              {
-                "name": "ΕΠΩΝΥΜΟ",
-                "locale": "gr-GR"
-              }
-            ]
-          }
+      "vct": "VerifiablePortableDocumentA1",
+      "claims": {
+        "given_name": {
+          "display": [
+            {
+              "name": "Given Name",
+              "locale": "en-GB"
+            },
+            {
+              "name": "Vorname",
+              "locale": "de-DE"
+            }
+          ]
+        },
+        "last_name": {
+          "display": [
+            {
+              "name": "Surname",
+              "locale": "en-GB"
+            },
+            {
+              "name": "Nachname",
+              "locale": "de-DE"
+            }
+          ]
         }
       }
     }
-
   }
 }

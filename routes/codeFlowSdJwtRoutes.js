@@ -16,7 +16,9 @@ const codeFlowRouterSDJWT = express.Router();
 
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 
-// auth code flow
+// ******************************************************************
+// ************* CREDENTIAL OFFER ENDPOINTS *************************
+// ******************************************************************
 codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const codeSessions = getAuthCodeSessions();
@@ -45,10 +47,10 @@ codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
 codeFlowRouterSDJWT.get(["/credential-offer-code-sd-jwt/:id"], (req, res) => {
   res.json({
     credential_issuer: serverURL,
-    credentials: ["VerifiablePortableDocumentA1"],
+    credential_configuration_ids: ["VerifiablePortableDocumentA1"],
     grants: {
-      authorization_code: {
-        issuer_state: req.params.id,
+      "authorization_code": {
+        "issuer_state": req.params.id,
       },
     },
   });
@@ -164,10 +166,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     optional: code_challenge_method, authorization_details, redirect_uri, issuer_state
   */
   if (authorizationDetails) {
-
-   
-
-    if (authorization_details && !response_type)
+    if (authorizationDetails && !response_type)
       errors.push("authorizationDetails missing response_type");
     if (authorizationDetails && !client_id)
       errors.push("authorizationDetails missing client_id");

@@ -125,7 +125,7 @@ router.get(["/offer-no-code"], async (req, res) => {
 /**
  * pre-authorised flow no transaction code request endpoint
  */
-router.get(["/ccredential-offer-no-code/:id"], (req, res) => {
+router.get(["/credential-offer-no-code/:id"], (req, res) => {
   res.json({
     credential_issuer: serverURL,
     credential_configuration_ids: ["VerifiablePortableDocumentA1"],
