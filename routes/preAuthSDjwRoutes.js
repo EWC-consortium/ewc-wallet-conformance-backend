@@ -771,7 +771,7 @@ router.post("/credential", async (req, res) => {
           given_name: "John",
           last_name: "Doe",
         };
-        const cnf = holderJWKS;
+        const cnf = { jwk: holderJWKS };
 
         const disclosureFrame = {
           _sd: ["given_name", "last_name"],
@@ -786,6 +786,7 @@ router.post("/credential", async (req, res) => {
           },
           disclosureFrame
         );
+
         res.json({
           format: "vc+sd-jwt",
           credential: credential,
