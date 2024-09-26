@@ -1,8 +1,10 @@
 {
   "credential_issuer": "https://server.example.com",
-  "authorization_server": "https://server.example.com",
+  "authorization_servers": ["https://server.example.com"],
   "credential_endpoint": "https://server.example.com/credential",
   "deferred_credential_endpoint": "https://server.example.com/credential_deferred",
+  "notification_endpoint": "https://server.example.com/notification",
+  "batch_credential_endpoint":"https://server.example.com/batch",
   "display": [
     {
       "name": "Issuer",
@@ -12,24 +14,8 @@
     }
   ],
   "credential_configurations_supported": {
-    "VerifiablePortableDocumentA1": {
-      "format": "vc+sd-jwt",
-      "scope": "VerifiablePortableDocumentA1",
-      "cryptographic_binding_methods_supported": [
-        "jwk"
-      ],
-      "credential_signing_alg_values_supported": [
-        "ES256"
-      ],
-      "display": [
-        {
-          "name": "Portable Document A1",
-          "locale": "en-GB",
-          "background_color": "#12107c",
-          "text_color": "#FFFFFF"
-        }
-      ],
-      "vct": "VerifiablePortableDocumentA1",
+    "VerifiablePortableDocumentA1SDJWT": {
+      "scope": "VerifiablePortableDocumentA1SDJWT",
       "claims": {
         "given_name": {
           "display": [
@@ -54,6 +40,24 @@
               "locale": "de-DE"
             }
           ]
+        }
+      },
+      "cryptographic_binding_methods_supported": ["jwk"],
+      "display": [
+        {
+          "name": "SD-JWT Portable Document A1",
+          "locale": "en-GB",
+          "background_color": "#12107c",
+          "text_color": "#FFFFFF"
+        }
+      ],
+      "credential_signing_alg_values_supported": ["ES256"],
+      "format": "vc+sd-jwt",
+
+      "vct": "VerifiablePortableDocumentA1SDJWT",
+      "proof_types_supported": {
+        "jwt": {
+          "proof_signing_alg_values_supported": ["ES256"]
         }
       }
     }

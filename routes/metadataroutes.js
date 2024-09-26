@@ -26,7 +26,7 @@ metadataRouter.get(
   "/.well-known/openid-credential-issuer",
   async (req, res) => {
     issuerConfig.credential_issuer = serverURL;
-    issuerConfig.authorization_server = serverURL;
+    issuerConfig.authorization_servers = [serverURL];
     issuerConfig.credential_endpoint = serverURL + "/credential";
     issuerConfig.deferred_credential_endpoint =
       serverURL + "/credential_deferred";

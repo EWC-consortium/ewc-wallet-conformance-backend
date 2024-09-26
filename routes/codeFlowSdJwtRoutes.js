@@ -47,7 +47,7 @@ codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
 codeFlowRouterSDJWT.get(["/credential-offer-code-sd-jwt/:id"], (req, res) => {
   res.json({
     credential_issuer: serverURL,
-    credential_configuration_ids: ["VerifiablePortableDocumentA1"],
+    credential_configuration_ids: ["VerifiablePortableDocumentA1SDJWT"],
     grants: {
       "authorization_code": {
         "issuer_state": req.params.id,
@@ -69,7 +69,7 @@ codeFlowRouterSDJWT.post("/par", async (req, res) => {
   const code_challenge_method = req.body.code_challenge_method;
   const claims = req.body.claims;
   const state = req.body.state;
-  const authorizationHeader = req.get(Authorization);
+  const authorizationHeader = req.get("Authorization");
   const responseType = req.body.response_type;
   const issuerState = decodeURIComponent(req.body.issuer_state); // This can be associated with the ITB session
   let authorizationDetails = "";
@@ -115,6 +115,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   let code_challenge = req.query.code_challenge;
   let code_challenge_method = req.query.code_challenge_method;
   let authorizationHeader = req.headers['authorization']; // Fetch the 'Authorization' header
+  let claims=""
 
   //validations
   let errors = [];
@@ -136,7 +137,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       state = parRequest.state;
       authorizationHeader = parRequest.authorizationHeader;
       issuerState = parRequest.issuerState;
-      authorizationDetails = parRequest = authorizationDetails;
+      authorizationDetails = parRequest.authorizationDetails;
       response_type = parRequest.response_type;
     } else {
       console.log(
@@ -210,9 +211,10 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   if (response_type !== "code") {
     errors.push("Invalid response_type");
   }
-  if (!scope.includes("openid")) {
-    errors.push("Invalid scope");
-  }
+  // removed due to https://openid.github.io/OpenID4VCI/openid-4-verifiable-credential-issuance-wg-draft.html#name-using-scope-parameter-to-re
+  // if (!scope.includes("openid")) {
+  //   errors.push("Invalid scope");
+  // }
 
   const authorizationCode = null; //"SplxlOBeZQQYbYS6WxSbIA";
   const codeSessions = getAuthCodeSessions();
