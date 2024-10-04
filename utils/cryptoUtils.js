@@ -70,9 +70,21 @@ export function buildVpRequestJSON(
     presentation_definition: presentation_definition,
     redirect_uri: response_uri,
     // response_mode: "direct_post",
-    client_metadata : "",
-    
-    // response_uri: response_uri, //TODO Note: If the Client Identifier scheme redirect_uri is used in conjunction with the Response Mode direct_post, and the response_uri parameter is present, the client_id value MUST be equal to the response_uri value    
+    nonce: "n-0S6_WzA2Mj",
+    state: "af0ifjsldkj",
+    client_metadata: {
+      vp_formats: {
+        jwt_vp: {
+          alg: ["EdDSA", "ES256K"],
+        },
+        ldp_vp: {
+          proof_type: ["Ed25519Signature2018"],
+        },
+      },
+      // Add any additional required metadata here
+    },
+
+    // response_uri: response_uri, //TODO Note: If the Client Identifier scheme redirect_uri is used in conjunction with the Response Mode direct_post, and the response_uri parameter is present, the client_id value MUST be equal to the response_uri value
   };
 
   // const header = {
@@ -87,8 +99,6 @@ export function buildVpRequestJSON(
   // });
   return jwtPayload;
 }
-
-
 
 export function buildVpRequestJWT(
   client_id,
@@ -105,7 +115,9 @@ export function buildVpRequestJWT(
     client_id_scheme: client_id_scheme,
     presentation_definition: presentation_definition,
     redirect_uri: response_uri,
-    client_metadata: client_metadata, // 
+    nonce: "n-0S6_WzA2Mj",
+    state: "af0ifjsldkj",
+    client_metadata: client_metadata, //
   };
 
   // Define the JWT header
@@ -133,9 +145,6 @@ export function buildVpRequestJWT(
   }
 }
 
-
-
-
 export async function decryptJWE(jweToken, privateKeyPEM) {
   try {
     const privateKey = crypto.createPrivateKey(privateKeyPEM);
@@ -155,14 +164,13 @@ export async function decryptJWE(jweToken, privateKeyPEM) {
   }
 }
 
-
 export async function base64UrlEncodeSha256(codeVerifier) {
   // Convert the code verifier string to an ArrayBuffer with ASCII encoding
   const encoder = new TextEncoder();
   const data = encoder.encode(codeVerifier);
 
   // Calculate the SHA-256 hash of the ArrayBuffer
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
 
   // Convert the ArrayBuffer to a Uint8Array
   const hashArray = new Uint8Array(hashBuffer);
@@ -171,7 +179,10 @@ export async function base64UrlEncodeSha256(codeVerifier) {
   const base64String = btoa(String.fromCharCode.apply(null, hashArray));
 
   // Convert Base64 to Base64URL by replacing '+' with '-', '/' with '_', and stripping '='
-  const base64UrlString = base64String.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const base64UrlString = base64String
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 
   return base64UrlString;
 }

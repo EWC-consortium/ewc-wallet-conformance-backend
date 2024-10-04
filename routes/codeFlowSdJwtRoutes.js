@@ -301,6 +301,13 @@ codeFlowRouterSDJWT.get("/request_uri_dynamic", async (req, res) => {
   const __dirname = path.dirname(__filename);
   // Construct the absolute path to verifier-config.json
   const configPath = path.join(__dirname, "..", "data", "verifier-config.json");
+  const presentation_definition_sdJwt = JSON.parse(fs.readFileSync(path.join(
+    __dirname,
+    "..",
+    "data",
+    "presentation_definition.json" 
+  )));
+
   // Read and parse the JSON file
   // const clientMetadata = JSON.parse(fs.readFileSync(configPath, "utf-8"));
 
@@ -322,34 +329,14 @@ codeFlowRouterSDJWT.get("/request_uri_dynamic", async (req, res) => {
   const vpRequestJWT = buildVpRequestJWT(
     client_id,
     response_uri,
-    {
-      id: "def-123",
-      input_descriptors: [
-        {
-          id: "id-1",
-          schema: [
-            {
-              uri: "https://example.org/credentials/schema/EmployeeCredential",
-            },
-          ],
-          constraints: {
-            fields: [
-              {
-                path: ["$.employeeId"],
-                filter: {
-                  type: "string",
-                  pattern: "^[0-9]{6}$",
-                },
-              },
-            ],
-          },
-        },
-      ],
-    },
+    presentation_definition_sdJwt,
     privateKey,
     "redirect_uri",
     clientMetadata
   );
+
+  console.log("Dynamic VP request ")
+  console.log(JSON.stringify(vpRequestJWT, null, 2));
 
   res.send(vpRequestJWT);
 });

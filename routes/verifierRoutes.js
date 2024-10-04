@@ -129,6 +129,10 @@ verifierRouter.get("/vpRequest/:id", async (req, res) => {
     serverURL,
     privateKey
   );
+
+  console.log("VP request ")
+  console.log(JSON.stringify(jwtToken, null, 2));
+
   res.type("text/plain").send(jwtToken);
 });
 
