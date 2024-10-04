@@ -779,7 +779,7 @@ router.post("/credential", async (req, res) => {
         const credential = await sdjwt.issue(
           {
             iss: serverURL,
-            iat: new Date().getTime(),
+            iat: Math.floor(Date.now() / 1000),
             vct: "VerifiablePortableDocumentA1SDJWT",
             ...claims,
             cnf: cnf,

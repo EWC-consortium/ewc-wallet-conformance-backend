@@ -1,20 +1,24 @@
 import express from "express";
 import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { v4 as uuidv4 } from "uuid";
 import {
   getAuthCodeSessions,
   getPushedAuthorizationRequests,
   getSessionsAuthorizationDetail,
-  getAuthCodeAuthorizationDetail
+  getAuthCodeAuthorizationDetail,
 } from "../services/cacheService.js";
 
 import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
+import { generateNonce, buildVpRequestJWT } from "../utils/cryptoUtils.js";
 
 const codeFlowRouterSDJWT = express.Router();
 
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
+const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 
 // ******************************************************************
 // ************* CREDENTIAL OFFER ENDPOINTS *************************
@@ -49,8 +53,8 @@ codeFlowRouterSDJWT.get(["/credential-offer-code-sd-jwt/:id"], (req, res) => {
     credential_issuer: serverURL,
     credential_configuration_ids: ["VerifiablePortableDocumentA1SDJWT"],
     grants: {
-      "authorization_code": {
-        "issuer_state": req.params.id,
+      authorization_code: {
+        issuer_state: req.params.id,
       },
     },
   });
@@ -114,8 +118,8 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   let redirect_uri = req.query.redirect_uri;
   let code_challenge = req.query.code_challenge;
   let code_challenge_method = req.query.code_challenge_method;
-  let authorizationHeader = req.headers['authorization']; // Fetch the 'Authorization' header
-  let claims=""
+  let authorizationHeader = req.headers["authorization"]; // Fetch the 'Authorization' header
+  let claims = "";
 
   //validations
   let errors = [];
@@ -147,16 +151,20 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     }
   }
 
-  const redirectUri = req.query.redirect_uri
-    ? decodeURIComponent(req.query.redirect_uri)
-    : "localhost:8080";
+  const redirectUri = redirect_uri
+    ? decodeURIComponent(redirect_uri)
+    : "openid4vp://";
   const nonce = req.query.nonce;
   const codeChallenge = decodeURIComponent(req.query.code_challenge);
   const codeChallengeMethod = req.query.code_challenge_method; //this should equal to S256
   try {
-    const clientMetadata = JSON.parse(
-      decodeURIComponent(req.query.client_metadata)
-    );
+    if (req.query.client_metadata) {
+      const clientMetadata = JSON.parse(
+        decodeURIComponent(req.query.client_metadata)
+      );
+    } else {
+      console.log("client_metadata was missing");
+    }
   } catch (error) {
     console.log("client_metadata was missing");
     console.log(error);
@@ -180,7 +188,10 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
         authorizationDetails.forEach((item) => {
           let cred = fetchVCTorCredentialConfigId(item);
           // cache authorizationDetails for the direct_post endpoint (it is needed to assosiate it with the auth. code generated there)
-          getSessionsAuthorizationDetail().set(issuerState,decodeURIComponent(authorizationDetails))
+          getSessionsAuthorizationDetail().set(
+            issuerState,
+            decodeURIComponent(authorizationDetails)
+          );
           console.log("requested credentials: " + cred);
         });
       }
@@ -237,7 +248,6 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     console.log("ITB session not found");
   }
 
-
   /*
     Authorizatiton Endpoint Response:  
   */
@@ -269,7 +279,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     nonce,
     request_uri: The authorisation server’s private key signed the request.
     */
-    const redirectUrl = `http://localhost:8080?
+    const redirectUrl = `${redirectUri}?
          state=${state}
         &client_id=${client_id}
         &redirect_uri=${serverURL}/direct_post_vci
@@ -283,11 +293,62 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
 });
 
 codeFlowRouterSDJWT.get("/request_uri_dynamic", async (req, res) => {
-  const vpRequestJWT = buildVpRequestJSON(
+  let uuid = uuidv4();
+  let client_id = serverURL + "/direct_post" + "/" + uuid;
+  const response_uri = serverURL + "/direct_post" + "/" + uuid;
+
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  // Construct the absolute path to verifier-config.json
+  const configPath = path.join(__dirname, "..", "data", "verifier-config.json");
+  // Read and parse the JSON file
+  // const clientMetadata = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+
+  // clientMetadata.presentation_definition_uri =
+  //   serverURL + "/presentation-definition/" + uuid;
+  // clientMetadata.redirect_uris = [response_uri];
+  // clientMetadata.client_id = client_id;
+  const clientMetadata = {
+    vp_formats: {
+      jwt_vp: {
+        alg: ["EdDSA", "ES256K"],
+      },
+      ldp_vp: {
+        proof_type: ["Ed25519Signature2018"],
+      },
+    },
+  };
+
+  const vpRequestJWT = buildVpRequestJWT(
     client_id,
-    "response_uri",
-    null,
-    privateKey
+    response_uri,
+    {
+      id: "def-123",
+      input_descriptors: [
+        {
+          id: "id-1",
+          schema: [
+            {
+              uri: "https://example.org/credentials/schema/EmployeeCredential",
+            },
+          ],
+          constraints: {
+            fields: [
+              {
+                path: ["$.employeeId"],
+                filter: {
+                  type: "string",
+                  pattern: "^[0-9]{6}$",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+    privateKey,
+    "redirect_uri",
+    clientMetadata
   );
 
   res.send(vpRequestJWT);
@@ -303,16 +364,17 @@ codeFlowRouterSDJWT.post("/direct_post_vci", async (req, res) => {
   console.log("direct_post_vci received jwt is::");
   consnole.log(jwt);
 
-
-//
-  const authorizatiton_details = getSessionsAuthorizationDetail().get(state)
+  //
+  const authorizatiton_details = getSessionsAuthorizationDetail().get(state);
 
   if (jwt) {
     const codeSessions = getAuthCodeSessions();
     const authorizationCode = generateNonce(16);
     //cache authorizatiton_detatils witth the generated code. this is needed for the token_endpoint
-    getAuthCodeAuthorizationDetail().set(authorizationCode,authorizatiton_details)
-
+    getAuthCodeAuthorizationDetail().set(
+      authorizationCode,
+      authorizatiton_details
+    );
 
     updateIssuerStateWithAuthCode(
       authorizationCode,
@@ -321,7 +383,7 @@ codeFlowRouterSDJWT.post("/direct_post_vci", async (req, res) => {
       codeSessions.results,
       codeSessions.requests
     );
-    const redirectUrl = `http://localhost:8080?code=${authorizationCode}&state=${state}`;
+    const redirectUrl = `${redirectUri}?code=${authorizationCode}&state=${state}`;
     return res.redirect(302, redirectUrl);
   } else {
     return res.sendStatus(500);

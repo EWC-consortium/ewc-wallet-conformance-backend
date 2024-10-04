@@ -94,31 +94,43 @@ export function buildVpRequestJWT(
   client_id,
   response_uri,
   presentation_definition,
-  privateKey
+  privateKey,
+  client_id_scheme = "redirect_uri", // Default to "redirect_uri"
+  client_metadata = {} // Default to an empty object
 ) {
-
+  // Construct the JWT payload
   let jwtPayload = {
     response_type: "vp_token",
     client_id: client_id,
-    client_id_scheme: "redirect_uri",
+    client_id_scheme: client_id_scheme,
     presentation_definition: presentation_definition,
     redirect_uri: response_uri,
-    // response_mode: "direct_post",
-    client_metadata : "",
-    // response_uri: response_uri, //TODO Note: If the Client Identifier scheme redirect_uri is used in conjunction with the Response Mode direct_post, and the response_uri parameter is present, the client_id value MUST be equal to the response_uri value    
+    client_metadata: client_metadata, // 
   };
 
+  // Define the JWT header
   const header = {
     alg: "ES256",
-    kid: `aegean#authentication-key`, //this kid needs to be resolvable from the did.json endpoint
+    kid: `aegean#authentication-key`, // Ensure this kid is resolvable from the did.json endpoint
   };
 
-  const token = jwt.sign(jwtPayload, privateKey, {
-    algorithm: "ES256",
-    noTimestamp: true,
-    header,
-  });
-  return token;
+  // Conditional signing based on client_id_scheme
+  if (client_id_scheme !== "redirect_uri") {
+    // Sign the JWT as per the scheme's requirements
+    const token = jwt.sign(jwtPayload, privateKey, {
+      algorithm: "ES256",
+      noTimestamp: true, // Retain if necessary
+      header,
+    });
+    return token;
+  } else {
+    // Do NOT sign the JWT for "redirect_uri" scheme
+    // Depending on your application's requirements, you might:
+    // a) Return the payload as a plain object
+    // b) Serialize it differently
+    // Here, we'll return the payload without signing
+    return jwtPayload;
+  }
 }
 
 
