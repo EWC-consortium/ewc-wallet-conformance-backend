@@ -76,7 +76,7 @@ codeFlowRouterSDJWT.post("/par", async (req, res) => {
   const authorizationHeader = req.get("Authorization");
   const responseType = req.body.response_type;
   const issuerState = decodeURIComponent(req.body.issuer_state); // This can be associated with the ITB session
-  let authorizationDetails = "";
+  let authorizationDetails = JSON.parse(req.body.authorization_details);
 
   let requestURI = "urn:aegean.gr:" + uuidv4();
   let parRequests = getPushedAuthorizationRequests();
@@ -349,7 +349,7 @@ codeFlowRouterSDJWT.post("/direct_post_vci", async (req, res) => {
   let state = req.body["state"];
   let jwt = req.body["id_token"];
   console.log("direct_post_vci received jwt is::");
-  consnole.log(jwt);
+  console.log(jwt);
 
   //
   const authorizatiton_details = getSessionsAuthorizationDetail().get(state);
@@ -380,10 +380,10 @@ codeFlowRouterSDJWT.post("/direct_post_vci", async (req, res) => {
 // Function to fetch either vct or credential_configuration_id
 function fetchVCTorCredentialConfigId(data) {
   // Check for vct first, fallback to credential_configuration_id if not found
-  if (firstItem.vct) {
-    return firstItem.vct;
-  } else if (firstItem.credential_configuration_id) {
-    return firstItem.credential_configuration_id;
+  if (data.vct) {
+    return data.vct;
+  } else if (data.credential_configuration_id) {
+    return data.credential_configuration_id;
   } else {
     return null; // Return null if neither is found
   }
