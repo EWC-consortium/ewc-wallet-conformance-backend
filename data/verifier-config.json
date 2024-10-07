@@ -1,39 +1,7 @@
 {
-    "client_id": "https://dss.aegean.gr",
-    "client_name": "UAegean EWC Verifier",
-    "redirect_uris": [
-      "https://example-verifier.com/callback"
-    ],
-    "vp_formats_supported": [
-      "jwt_vc_json",
-      "ldp_vc"
-    ],
-    "vp_token_endpoint_auth_methods_supported": [
-      "client_secret_basic",
-      "client_secret_post"
-    ],
-    "presentation_definition_uri": "https://example-verifier.com/presentation-definitions",
-    "scopes_supported": [
-      "openid",
-      "profile",
-      "vc_present"
-    ],
-    "response_types_supported": [
-      "vp_token"
-    ],
-    "grant_types_supported": [
-      "authorization_code"
-    ],
-    "id_token_signing_alg_values_supported": [
-      "RS256",
-      "ES256"
-    ],
-    "vp_token_signing_alg_values_supported": [
-      "RS256",
-      "ES256"
-    ],
-    "subject_types_supported": [
-      "pairwise"
-    ]
-  }
-  
+  "client_name": "UAegean EWC Verifier",
+  "logo_uri": "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+  "location": "Greece",
+  "cover_uri": "string",
+  "description": "EWC pilot case verification"
+}

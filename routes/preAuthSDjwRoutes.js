@@ -83,7 +83,7 @@ router.get(["/offer-tx-code"], async (req, res) => {
 router.get(["/credential-offer-tx-code/:id"], (req, res) => {
   res.json({
     credential_issuer: serverURL,
-    credential_configuration_ids: ["VerifiablePortableDocumentA1SDJWT"],
+    credential_configuration_ids: ["VerifiablePortableDocumentA2SDJWT"],
     grants: {
       "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
         "pre-authorized_code": req.params.id,
@@ -130,7 +130,7 @@ router.get(["/offer-no-code"], async (req, res) => {
 router.get(["/credential-offer-no-code/:id"], (req, res) => {
   res.json({
     credential_issuer: serverURL,
-    credential_configuration_ids: ["VerifiablePortableDocumentA1SDJWT"],
+    credential_configuration_ids: ["VerifiablePortableDocumentA2SDJWT"],
     grants: {
       "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
         "pre-authorized_code": req.params.id,
@@ -257,6 +257,7 @@ router.post("/credential", async (req, res) => {
   //TODO valiate bearer header
   let decodedWithHeader;
   let decodedHeaderSubjectDID;
+  let vct = requestBody.vct
   if (requestBody.proof && requestBody.proof.jwt) {
     // console.log(requestBody.proof.jwt)
     decodedWithHeader = jwt.decode(requestBody.proof.jwt, { complete: true });
@@ -690,6 +691,8 @@ router.post("/credential", async (req, res) => {
                 };
               }
             } else {
+
+              let credType = requestedCredentials[0] //VerifiablePortableDocumentA2 or VerifiablePortableDocumentA1
               //sign as jwt
               payload = {
                 iss: serverURL,
@@ -715,7 +718,7 @@ router.post("/credential", async (req, res) => {
                     Math.floor(Date.now() / 1000) * 1000
                   ).toISOString(),
                   issuer: serverURL,
-                  type: ["VerifiablePortableDocumentA2"],
+                  type: [credType],
                   validFrom: new Date(
                     Math.floor(Date.now() / 1000) * 1000
                   ).toISOString(),
@@ -755,6 +758,7 @@ router.post("/credential", async (req, res) => {
       if (format === "vc+sd-jwt") {
         // console.log("Token:", token);
         // console.log("Request Body:", requestBody);
+        let credType = vct // VerifiablePortableDocumentA1SDJWT or VerifiablePortableDocumentA2SDJWT
         const { signer, verifier } = await createSignerVerifier(
           pemToJWK(privateKey, "private"),
           pemToJWK(publicKeyPem, "public")
@@ -780,7 +784,7 @@ router.post("/credential", async (req, res) => {
           {
             iss: serverURL,
             iat: Math.floor(Date.now() / 1000),
-            vct: "VerifiablePortableDocumentA1SDJWT",
+            vct: credType,
             ...claims,
             cnf: cnf,
           },

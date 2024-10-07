@@ -347,8 +347,8 @@ codeFlowRouterSDJWT.get("/request_uri_dynamic", async (req, res) => {
     clientMetadata
   );
 
-  console.log("Dynamic VP request ")
-  console.log(JSON.stringify(vpRequestJWT, null, 2));
+  // console.log("Dynamic VP request ")
+  // console.log(JSON.stringify(vpRequestJWT, null, 2));
 
   res.send(vpRequestJWT);
 });
