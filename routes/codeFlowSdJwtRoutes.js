@@ -78,7 +78,7 @@ codeFlowRouterSDJWT.post("/par", async (req, res) => {
   const responseType = req.body.response_type;
   const issuerState = decodeURIComponent(req.body.issuer_state); // This can be associated with the ITB session
   let authorizationDetails = req.body.authorization_details;
-  const clientMetadata = req.body.client_metadata
+  const clientMetadata = req.body.client_metadata;
 
   let requestURI = "urn:aegean.gr:" + uuidv4();
   let parRequests = getPushedAuthorizationRequests();
@@ -95,7 +95,7 @@ codeFlowRouterSDJWT.post("/par", async (req, res) => {
     responseType: responseType,
     issuerState: issuerState,
     authorizationDetails: authorizationDetails,
-    clientMetadata: clientMetadata
+    clientMetadata: clientMetadata,
   });
 
   res.json({
@@ -151,7 +151,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     } else {
       console.log(
         "ERROR: request_uri present in authorization endpoint, but no par request cached for request_uri" +
-        request_uri
+          request_uri
       );
     }
   }
@@ -164,9 +164,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   const codeChallengeMethod = req.query.code_challenge_method; //this should equal to S256
   try {
     if (client_metadata) {
-      const clientMetadata = JSON.parse(
-        decodeURIComponent(client_metadata)
-      );
+      const clientMetadata = JSON.parse(decodeURIComponent(client_metadata));
     } else {
       console.log("client_metadata was missing");
     }
@@ -291,15 +289,9 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     nonce,
     request_uri: The authorisation server’s private key signed the request.
     */
-    const redirectUrl = `${redirectUri}?
-         state=${state}
-        &client_id=${client_id}
-        &redirect_uri=${serverURL}/direct_post_vci
-        &response_type=id_token
-        &response_mode=direct_post
-        &scope=openid
-        &nonce=${nonce}
-        &request_uri=${serverURL}/request_uri_dynamic`;
+   const vpRedirectURI="openid4vp://"
+   console.log(redirect_uri + " but i will request the vp based on " + vpRedirectURI)
+    const redirectUrl = `${vpRedirectURI}?state=${state}&client_id=${client_id}&redirect_uri=${serverURL}/direct_post_vci&response_type=id_token&response_mode=direct_post&scope=openid&nonce=${nonce}&request_uri=${serverURL}/request_uri_dynamic`;
     return res.redirect(302, redirectUrl);
   }
 });
@@ -313,12 +305,11 @@ codeFlowRouterSDJWT.get("/request_uri_dynamic", async (req, res) => {
   const __dirname = path.dirname(__filename);
   // Construct the absolute path to verifier-config.json
   const configPath = path.join(__dirname, "..", "data", "verifier-config.json");
-  const presentation_definition_sdJwt = JSON.parse(fs.readFileSync(path.join(
-    __dirname,
-    "..",
-    "data",
-    "presentation_definition.json"
-  )));
+  const presentation_definition_sdJwt = JSON.parse(
+    fs.readFileSync(
+      path.join(__dirname, "..", "data", "presentation_definition_sdjwt.json")
+    )
+  );
 
   // Read and parse the JSON file
   // const clientMetadata = JSON.parse(fs.readFileSync(configPath, "utf-8"));
