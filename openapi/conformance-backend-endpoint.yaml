@@ -1,0 +1,148 @@
+openapi: 3.0.0
+info:
+  title: ITB Conformance Backend
+  version: "1.0.0"
+servers:
+  - description: Example conformance server
+    url: https://example.conformance.com
+paths:
+  /offer-code-sd-jwt:
+    get:
+      summary: Credential offer (SD-JWT)
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC001: Issue Verifiable Credential"
+  /offer-no-code:
+    get:
+      summary: Credential Offer without transaction code
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC001: Issue Verifiable Credential"
+  /offer-tx-code:
+    get:
+      summary: Credential Offer with transaction code
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC001: Issue Verifiable Credential"
+  /pre-offer-jwt-bpass:
+    get:
+      summary: Pre Authorised Credential Offer (Boarding Pass)
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC001: Issue Verifiable Credential"
+  /pre-offer-jwt-edu:
+    get:
+      summary: Pre Authorised Credential Offer (Education ID)
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC001: Issue Verifiable Credential"
+  /pre-offer-jwt-alliance:
+    get:
+      summary: Pre Authorised Credential Offer (Alliance)
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC001: Issue Verifiable Credential"
+  /pre-offer-jwt-passport:
+    get:
+      summary: Pre Authorised Credential Offer (Passport)
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC001: Issue Verifiable Credential"
+  /pre-offer-jwt-pid:
+    get:
+      summary: Pre Authorised Credential Offer (PID)
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC001: Issue Verifiable Credential"
+  /offer-pid-persona:
+    get:
+      summary: Pre Authorised Credential Offer (PID with persona)
+      parameters:
+        - in: query
+          name: personaId
+          schema:
+            type: string
+          required: true
+          example: "2"
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC001: Issue Verifiable Credential"
+  /offer:
+    get:
+      summary: Credential Offer
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC001: Issue Verifiable Credential"
+  /vp-request/pid:
+    get:
+      summary: Verification Request (PID)
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC002: Present Verifiable Credential"
+  /vp-request/epassport:
+    get:
+      summary: Verification Request (EPassport)
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC002: Present Verifiable Credential"
+  /vp-request/educationid:
+    get:
+      summary: Verification Request (Education ID)
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC002: Present Verifiable Credential"
+  /vp-request/allianceid:
+    get:
+      summary: Verification Request (Alliance ID)
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC002: Present Verifiable Credential"
+  /vp-request/erua-id:
+    get:
+      summary: Verification Request (EURA ID)
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC002: Present Verifiable Credential"
+  /vp-request/ferryboardingpass:
+    get:
+      summary: Verification Request (Ferry Boarding Pass)
+      responses:
+        "200":
+          description: Successful response
+      tags:
+        - "EWC RFC002: Present Verifiable Credential"
+tags:
+  - description: "This consists of conformance endpoints for EWC RFC001: Issue Verifiable Credential"
+    name: "EWC RFC001: Issue Verifiable Credential"
+  - description: "This consists of conformance endpoints for EWC RFC002: Present Verifiable Credential"
+    name: "EWC RFC002: Present Verifiable Credential"
