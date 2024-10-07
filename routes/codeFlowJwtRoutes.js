@@ -61,7 +61,7 @@ codeFlowRouter.get(["/credential-offer-code/:id"], (req, res) => {
 
 
 
-function updateIssuerStateWithAuthCode(
+export function updateIssuerStateWithAuthCode(
   code,
   walletState,
   walletSessions,

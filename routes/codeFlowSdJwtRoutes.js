@@ -14,6 +14,7 @@ import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import { generateNonce, buildVpRequestJWT } from "../utils/cryptoUtils.js";
+import { updateIssuerStateWithAuthCode } from "./codeFlowJwtRoutes.js";
 
 const codeFlowRouterSDJWT = express.Router();
 
@@ -76,7 +77,8 @@ codeFlowRouterSDJWT.post("/par", async (req, res) => {
   const authorizationHeader = req.get("Authorization");
   const responseType = req.body.response_type;
   const issuerState = decodeURIComponent(req.body.issuer_state); // This can be associated with the ITB session
-  let authorizationDetails = JSON.parse(req.body.authorization_details);
+  let authorizationDetails = req.body.authorization_details;
+  const clientMetadata = req.body.client_metadata
 
   let requestURI = "urn:aegean.gr:" + uuidv4();
   let parRequests = getPushedAuthorizationRequests();
@@ -93,6 +95,7 @@ codeFlowRouterSDJWT.post("/par", async (req, res) => {
     responseType: responseType,
     issuerState: issuerState,
     authorizationDetails: authorizationDetails,
+    clientMetadata: clientMetadata
   });
 
   res.json({
@@ -120,6 +123,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   let code_challenge_method = req.query.code_challenge_method;
   let authorizationHeader = req.headers["authorization"]; // Fetch the 'Authorization' header
   let claims = "";
+  let client_metadata = req.query.client_metadata;
 
   //validations
   let errors = [];
@@ -143,10 +147,11 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       issuerState = parRequest.issuerState;
       authorizationDetails = parRequest.authorizationDetails;
       response_type = parRequest.response_type;
+      client_metadata = parRequest.clientMetadata;
     } else {
       console.log(
         "ERROR: request_uri present in authorization endpoint, but no par request cached for request_uri" +
-          request_uri
+        request_uri
       );
     }
   }
@@ -158,9 +163,9 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   const codeChallenge = decodeURIComponent(req.query.code_challenge);
   const codeChallengeMethod = req.query.code_challenge_method; //this should equal to S256
   try {
-    if (req.query.client_metadata) {
+    if (client_metadata) {
       const clientMetadata = JSON.parse(
-        decodeURIComponent(req.query.client_metadata)
+        decodeURIComponent(client_metadata)
       );
     } else {
       console.log("client_metadata was missing");
@@ -183,7 +188,13 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       errors.push("authorizationDetails missing code_challenge");
 
     try {
-      authorizationDetails = decodeURIComponent(authorizationDetails);
+      if (authorizationDetails) {
+        authorizationDetails = JSON.parse(
+          decodeURIComponent(authorizationDetails)
+        );
+      } else {
+        console.log("authorization_details was missing");
+      }
       if (authorizationDetails.length > 0) {
         authorizationDetails.forEach((item) => {
           let cred = fetchVCTorCredentialConfigId(item);
@@ -231,6 +242,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   const codeSessions = getAuthCodeSessions();
   if (codeSessions.sessions.indexOf(issuerState) >= 0) {
     codeSessions.requests.push({
+      redirectUri: redirectUri,
       challenge: codeChallenge,
       method: codeChallengeMethod,
       sessionId: authorizationCode,
@@ -305,7 +317,7 @@ codeFlowRouterSDJWT.get("/request_uri_dynamic", async (req, res) => {
     __dirname,
     "..",
     "data",
-    "presentation_definition.json" 
+    "presentation_definition.json"
   )));
 
   // Read and parse the JSON file
@@ -370,7 +382,7 @@ codeFlowRouterSDJWT.post("/direct_post_vci", async (req, res) => {
       codeSessions.results,
       codeSessions.requests
     );
-    const redirectUrl = `${redirectUri}?code=${authorizationCode}&state=${state}`;
+    const redirectUrl = `${codeSessions.requests.redirectUri}?code=${authorizationCode}&state=${state}`;
     return res.redirect(302, redirectUrl);
   } else {
     return res.sendStatus(500);
