@@ -6,6 +6,7 @@ import {
   generateNonce,
   decryptJWE,
   buildVpRequestJSON,
+  buildVpRequestJWT,
 } from "../utils/cryptoUtils.js";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
 import { digest } from "@sd-jwt/crypto-nodejs";
@@ -23,7 +24,7 @@ const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
 
 const presentation_definition_sdJwt = JSON.parse(
-  fs.readFileSync("./data/presentation_definition.json", "utf-8")
+  fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
 );
 
 const presentation_definition_jwt = JSON.parse(
@@ -119,18 +120,27 @@ verifierRouter.get("/vpRequest/:id", async (req, res) => {
     claims: null,
   });
 
-  let jwtToken = buildVpRequestJSON(
-    stateParam,
-    nonce,
+  // let jwtToken = buildVpRequestJSON(
+  //   stateParam,
+  //   nonce,
+  //   clientId,
+  //   response_uri,
+  //   presentation_definition_sdJwt,
+  //   jwks,
+  //   serverURL,
+  //   privateKey
+  // );
+  let client_id_scheme = "redirect_uri";
+  let jwtToken = buildVpRequestJWT(
     clientId,
     response_uri,
     presentation_definition_sdJwt,
-    jwks,
-    serverURL,
-    privateKey
+    privateKey,
+    client_id_scheme,
+    clientMetadata
   );
 
-  console.log("VP request ")
+  console.log("VP request ");
   console.log(JSON.stringify(jwtToken, null, 2));
 
   res.type("text/plain").send(jwtToken);
