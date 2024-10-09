@@ -8,6 +8,8 @@ import {
   buildVpRequestJSON,
   buildVpRequestJWT,
 } from "../utils/cryptoUtils.js";
+
+import {buildVPbyValue} from "../utils/tokenUtils.js"
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
 import { digest } from "@sd-jwt/crypto-nodejs";
 import qr from "qr-image";
@@ -51,6 +53,10 @@ const presentation_definition_ferryboardingpass = JSON.parse(
   )
 );
 
+const client_metadata = JSON.parse(
+  fs.readFileSync("./data/verifier-config.json", "utf-8")
+);
+
 const presentation_definition_alliance_and_education_Id = JSON.parse(
   fs.readFileSync(
     "./data/presentation_definition_alliance_and_education_Id.json",
@@ -73,16 +79,30 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
   const stateParam = req.query.id ? req.query.id : uuidv4();
   const nonce = generateNonce(16);
 
-  let request_uri = serverURL + "/vpRequest/" + stateParam;
-  const response_uri = serverURL + "/direct_post"; //not used
+  // The Verifier may send an Authorization Request as Request Object by value
+  // or by reference as defined in JWT-Secured Authorization Request (JAR)
+  // The Verifier articulates requirements of the Credential(s) that
+  // are requested using presentation_definition and presentation_definition_uri
 
-  const vpRequest = buildVP(
-    serverURL,
-    response_uri,
-    request_uri,
-    stateParam,
-    nonce,
-    encodeURIComponent(JSON.stringify(presentation_definition_sdJwt))
+  const uuid = req.params.id ? req.params.id : uuidv4();
+  //url.searchParams.get("presentation_definition");
+  const response_uri = serverURL + "/direct_post" + "/" + uuid;
+  const presentation_definition_uri =
+    serverURL + "/presentation-definition/itbsdjwt";
+  const client_metadata_uri = serverURL + "/client-metadata";
+  const clientId = serverURL + "/direct_post" + "/" + uuid;
+  sessions.push(uuid);
+  verificationSessions.push({
+    uuid: uuid,
+    status: "pending",
+    claims: null,
+  });
+  const vpRequest = buildVPbyValue(
+    clientId,
+    presentation_definition_uri,
+    "redirect_uri",
+    client_metadata_uri,
+    response_uri
   );
 
   let code = qr.image(vpRequest, {
@@ -102,48 +122,44 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
   // res.json({ vpRequest: vpRequest });
 });
 
-verifierRouter.get("/vpRequest/:id", async (req, res) => {
-  console.log("VPRequest called Will send JWT");
-  // console.log(jwtToken);
-  const uuid = req.params.id ? req.params.id : uuidv4();
+//***********PRESENTATION DEFINITON endpoint to support presentation_definition_uri Parameter */
+verifierRouter.get("/presentation-definition/:type", async (req, res) => {
+  const { type } = req.params;
+  const presentationDefinitions = {
+    1: presentation_definition_jwt,
+    jwt: presentation_definition_jwt,
+    2: presentation_definition_sdJwt,
+    itbsdjwt: presentation_definition_sdJwt,
+    3: presentation_definition_pid,
+    pid: presentation_definition_pid,
+    4: presentation_definition_epass,
+    epass: presentation_definition_epass,
+    5: presentation_definition_alliance_and_education_Id,
+    eduId: presentation_definition_alliance_and_education_Id,
+    6: presentation_definition_ferryboardingpass, // Changed from '5' to '6' to avoid duplication
+    ferryboarding: presentation_definition_ferryboardingpass,
+  };
 
-  //url.searchParams.get("presentation_definition");
-  const stateParam = uuidv4();
-  const nonce = generateNonce(16);
+  // Retrieve the appropriate presentation definition based on the type
+  const selectedDefinition = presentationDefinitions[type];
 
-  const response_uri = serverURL + "/direct_post" + "/" + uuid;
-  let clientId = serverURL + "/direct_post" + "/" + uuid;
-  sessions.push(uuid);
-  verificationSessions.push({
-    uuid: uuid,
-    status: "pending",
-    claims: null,
-  });
+  if (selectedDefinition) {
+    res.type("application/json").send(selectedDefinition);
+  } else {
+    // Log the error for debugging purposes (optional)
+    console.error(`No presentation definition found for type: ${type}`);
 
-  // let jwtToken = buildVpRequestJSON(
-  //   stateParam,
-  //   nonce,
-  //   clientId,
-  //   response_uri,
-  //   presentation_definition_sdJwt,
-  //   jwks,
-  //   serverURL,
-  //   privateKey
-  // );
-  let client_id_scheme = "redirect_uri";
-  let jwtToken = buildVpRequestJWT(
-    clientId,
-    response_uri,
-    presentation_definition_sdJwt,
-    privateKey,
-    client_id_scheme,
-    clientMetadata
-  );
+    // Send a 500 Internal Server Error response
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: `No presentation definition found for type: ${type}`,
+    });
+  }
+});
 
-  console.log("VP request ");
-  console.log(JSON.stringify(jwtToken, null, 2));
-
-  res.type("text/plain").send(jwtToken);
+// CLIENT VERIFIER METADATA
+verifierRouter.get("/client-metadata", async (req, res) => {
+  res.type("application/json").send(clientMetadata);
 });
 
 verifierRouter.post("/direct_post/:id", async (req, res) => {
@@ -176,6 +192,50 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
   } else {
     res.sendStatus(500);
   }
+});
+
+// this endpoint returns the autthorization requqest object (by reference), and  is to be set on the request_uri
+// however, when combined with client_id_scheme=redirect_uri then, the Authorization Request MUST NOT be signed,
+// this causes incompatibilities with JAR, which is the expected result form this endpoint:
+// The Verifier may send an Authorization Request as Request Object by value or by reference
+// as defined in JWT-Secured Authorization Request (JAR)
+// as a result this endpoint will not be used and we will only use request object by Value
+/*
+ ******************DEPRECATED******************************************************************************
+ */
+verifierRouter.get("/vpRequest/:id", async (req, res) => {
+  console.log("VPRequest called Will send JWT");
+  // console.log(jwtToken);
+  const uuid = req.params.id ? req.params.id : uuidv4();
+
+  //url.searchParams.get("presentation_definition");
+  const stateParam = uuidv4();
+  const nonce = generateNonce(16);
+
+  const response_uri = serverURL + "/direct_post" + "/" + uuid;
+  let clientId = serverURL + "/direct_post" + "/" + uuid;
+  sessions.push(uuid);
+  verificationSessions.push({
+    uuid: uuid,
+    status: "pending",
+    claims: null,
+  });
+
+  let client_id_scheme = "redirect_uri";
+  let jwtToken = buildVpRequestJWT(
+    clientId,
+    response_uri,
+    presentation_definition_sdJwt,
+    privateKey,
+    client_id_scheme,
+    clientMetadata
+  );
+
+  console.log("VP request ");
+  //console.log(JSON.stringify(jwtToken, null, 2));
+  console.log(jwtToken);
+
+  res.type("text/plain").send(jwtToken);
 });
 
 // *******************************************************
@@ -248,15 +308,6 @@ verifierRouter.get("/vpRequestJwt/:id", async (req, res) => {
   // console.log(vpRequest);
 
   res.json(vpRequest);
-});
-
-verifierRouter.get("/presentation-definition/:type", async (req, res) => {
-  const { type } = req.params;
-  if (type == 1) {
-    res.type("application/json").send(presentation_definition_jwt);
-  }
-  console.log("ERROR getting presentatiton-definition type");
-  res.status(500);
 });
 
 // *******************PILOT USE CASES ******************************
@@ -490,6 +541,8 @@ function buildVP(
 
   return result;
 }
+
+
 
 async function flattenCredentialsToClaims(credentials) {
   let claimsResult = {};

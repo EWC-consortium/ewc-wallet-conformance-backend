@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "SERVER_URL=https://7777-2a02-587-8710-c200-dfe5-692-8f85-d14b.ngrok-free.app node server.js"
+    "dev": "SERVER_URL=https://4a3a-2a02-587-8710-c200-ab47-cbd6-6894-33d4.ngrok-free.app node server.js"
   },
   "author": "",
   "license": "ISC",
@@ -15,6 +15,7 @@
     "@sd-jwt/core": "^0.6.1",
     "@sd-jwt/crypto-nodejs": "^0.6.1",
     "@sd-jwt/sd-jwt-vc": "^0.6.1",
+    "base64url": "^3.0.1",
     "express": "^4.18.3",
     "express-openapi-validator": "^5.3.7",
     "image-data-uri": "^2.0.1",

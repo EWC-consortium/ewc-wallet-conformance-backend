@@ -9,6 +9,7 @@ import {
   getSessionsAuthorizationDetail,
   getAuthCodeAuthorizationDetail,
 } from "../services/cacheService.js";
+import { buildVPbyValue } from "../utils/tokenUtils.js";
 
 import qr from "qr-image";
 import imageDataURI from "image-data-uri";
@@ -291,7 +292,13 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     */
    const vpRedirectURI="openid4vp://"
    console.log(redirect_uri + " but i will request the vp based on " + vpRedirectURI)
-    const redirectUrl = `${vpRedirectURI}?state=${state}&client_id=${client_id}&redirect_uri=${serverURL}/direct_post_vci&response_type=id_token&response_mode=direct_post&scope=openid&nonce=${nonce}&request_uri=${serverURL}/request_uri_dynamic`;
+    // changed this to support auth request by value not reference
+    //const redirectUrl = `${vpRedirectURI}?state=${state}&client_id=${client_id}&redirect_uri=${serverURL}/direct_post_vci&response_type=id_token&response_mode=direct_post&scope=openid&nonce=${nonce}&request_uri=${serverURL}/request_uri_dynamic`;
+    const response_url = serverURL+"/request_uri_dynamic"
+    const presentation_definition_uri =
+    serverURL + "/presentation-definition/itbsdjwt";
+    const client_metadata_uri = serverURL + "/client-metadata";
+    const redirectUrl = buildVPbyValue(client_id,presentation_definition_uri,"redirect_uri",client_metadata_uri,response_url)
     return res.redirect(302, redirectUrl);
   }
 });

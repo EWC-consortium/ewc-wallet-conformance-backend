@@ -869,7 +869,7 @@ function checkIfExistsIssuanceStatus(
   //     }
   //   });
   // }
-  if (index >= 0) {
+  if (index >= 0 && sessionResults[index]) {
     let status = sessionResults[index].status;
     console.log(`sending status ${status} for session ${sessionId}`);
     console.log(`new sessions`);

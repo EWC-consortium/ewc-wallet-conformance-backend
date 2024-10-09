@@ -32,7 +32,8 @@
   "subject_syntax_types_supported": [
     "did:key:jwk_jcs-pub",
     "did:ebsi:v1",
-    "did:ebsi:v2"
+    "did:ebsi:v2",
+    "did:jwk"
   ],
   "subject_trust_frameworks_supported": ["ebsi", "ewc-issuer-trust-list"],
   "id_token_types_supported": [

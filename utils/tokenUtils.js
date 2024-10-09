@@ -44,3 +44,33 @@ export function buildIdToken(issuerURL, privateKey) {
 //   console.log("Generated ID Token:", idToken);
   return idToken;
 }
+
+
+export function buildVPbyValue(
+  client_id,
+  presentation_definition_uri,
+  client_id_scheme = "redirect_uri",
+  client_metadata_uri,
+  redirect_uri
+) {
+  if (client_id_scheme == "redirect_uri") {
+    redirect_uri = client_id;
+  }
+
+  let result =
+    "openid4vp://?client_id=" +
+    encodeURIComponent(client_id) +
+    "&response_type=vp_token" +
+    "&response_mode=direct_post"+
+  "&response_uri=" +
+    encodeURIComponent(redirect_uri) +
+    "&presentation_definition_uri=" +
+    encodeURIComponent(presentation_definition_uri) +
+    "&client_id_scheme=" +
+    client_id_scheme +
+    "&client_metadata_uri=" +
+    encodeURIComponent(client_metadata_uri) +
+    "&nonce=n0S6_WzA2Mj" +
+    "&state=af0ifjsldkj";
+  return result;
+}

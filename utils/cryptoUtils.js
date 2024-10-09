@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import * as jose from "jose";
+import base64url from "base64url";
 
 export function pemToJWK(pem, keyType) {
   let key;
@@ -137,10 +138,7 @@ export function buildVpRequestJWT(
     return token;
   } else {
     // Do NOT sign the JWT for "redirect_uri" scheme
-    // Depending on your application's requirements, you might:
-    // a) Return the payload as a plain object
-    // b) Serialize it differently
-    // Here, we'll return the payload without signing
+   
     return jwtPayload;
   }
 }
