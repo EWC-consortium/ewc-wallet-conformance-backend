@@ -107,6 +107,548 @@
           "proof_signing_alg_values_supported": ["ES256"]
         }
       }
+    },
+
+    "VerifiablePIDSDJWT": {
+      "scope": "PID",
+      "claims": {
+        "given_name": {
+          "display": [
+            {
+              "name": "Given Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "family_name": {
+          "display": [
+            {
+              "name": "Surname",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "birth_date": {
+          "display": [
+            {
+              "name": "Birth Date",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "age_over_18": {
+          "display": [
+            {
+              "name": "Age Over 18",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "issuance_date": {
+          "display": [
+            {
+              "name": "Issuance Date",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "expiry_date": {
+          "display": [
+            {
+              "name": "Expiry Date",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "issuing_authority": {
+          "display": [
+            {
+              "name": "Issuing Authority",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "issuing_country": {
+          "display": [
+            {
+              "name": "Issuing Country",
+              "locale": "en-GB"
+            }
+          ]
+        }
+      },
+      "cryptographic_binding_methods_supported": ["jwk"],
+      "display": [
+        {
+          "name": "PID",
+          "locale": "en-GB",
+          "background_color": "#12107c",
+          "text_color": "#FFFFFF",
+          "logo": {
+            "url": "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+            "alt_text": "UAegean"
+          }
+        }
+      ],
+      "credential_signing_alg_values_supported": ["ES256"],
+      "format": "vc+sd-jwt",
+      "vct": "VerifiablePIDSDJWT",
+      "proof_types_supported": {
+        "jwt": {
+          "proof_signing_alg_values_supported": ["ES256"]
+        }
+      }
+    },
+
+    "VerifiableePassportCredentialSDJWT": {
+      "scope": "ePassportCredential",
+      "claims": {
+        "id": {
+          "display": [
+            {
+              "name": "id",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "electronicPassport": {
+          "display": [
+            {
+              "name": "electronicPassport",
+              "locale": "en-GB"
+            }
+          ],
+          "properties": {
+            "dataGroup1": {
+              "display": [
+                {
+                  "name": "dataGroup1",
+                  "locale": "en-GB"
+                }
+              ],
+              "properties": {
+                "birthdate": {
+                  "display": [
+                    {
+                      "name": "birthdate",
+                      "locale": "en-GB"
+                    }
+                  ]
+                },
+                "docTypeCode": {
+                  "display": [
+                    {
+                      "name": "docTypeCode",
+                      "locale": "en-GB"
+                    }
+                  ]
+                },
+                "expiryDate": {
+                  "display": [
+                    {
+                      "name": "expiryDate",
+                      "locale": "en-GB"
+                    }
+                  ]
+                },
+                "genderCode": {
+                  "display": [
+                    {
+                      "name": "genderCode",
+                      "locale": "en-GB"
+                    }
+                  ]
+                },
+                "holdersName": {
+                  "display": [
+                    {
+                      "name": "holdersName",
+                      "locale": "en-GB"
+                    }
+                  ]
+                },
+                "issuerCode": {
+                  "display": [
+                    {
+                      "name": "issuerCode",
+                      "locale": "en-GB"
+                    }
+                  ]
+                },
+                "natlText": {
+                  "display": [
+                    {
+                      "name": "natlText",
+                      "locale": "en-GB"
+                    }
+                  ]
+                },
+                "passportNumberIdentifier": {
+                  "display": [
+                    {
+                      "name": "passportNumberIdentifier",
+                      "locale": "en-GB"
+                    }
+                  ]
+                }
+              }
+            },
+            "dataGroup15": {
+              "display": [
+                {
+                  "name": "dataGroup15",
+                  "locale": "en-GB"
+                }
+              ],
+              "properties": {
+                "activeAuthentication": {
+                  "display": [
+                    {
+                      "name": "activeAuthentication",
+                      "locale": "en-GB"
+                    }
+                  ],
+                  "properties": {
+                    "publicKeyBinaryObject": {
+                      "display": [
+                        {
+                          "name": "publicKeyBinaryObject",
+                          "locale": "en-GB"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "dataGroup2EncodedFaceBiometrics": {
+              "display": [
+                {
+                  "name": "dataGroup2EncodedFaceBiometrics",
+                  "locale": "en-GB"
+                }
+              ],
+              "properties": {
+                "faceBiometricDataEncodedPicture": {
+                  "display": [
+                    {
+                      "name": "faceBiometricDataEncodedPicture",
+                      "locale": "en-GB"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "cryptographic_binding_methods_supported": ["jwk"],
+      "display": [
+        {
+          "name": "ePassportCredential",
+          "locale": "en-GB",
+          "background_color": "#12107c",
+          "text_color": "#FFFFFF",
+          "logo": {
+            "url": "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+            "alt_text": "UAegean"
+          }
+        }
+      ],
+      "credential_signing_alg_values_supported": ["ES256"],
+      "format": "vc+sd-jwt",
+      "vct": "VerifiableePassportCredentialSDJWT",
+      "proof_types_supported": {
+        "jwt": {
+          "proof_signing_alg_values_supported": ["ES256"]
+        }
+      }
+    },
+
+    "VerifiableStudentIDSDJWT": {
+      "scope": "StudentID",
+      "claims": {
+        "identifier": {
+          "display": [
+            {
+              "name": "Identifier",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "schacPersonalUniqueCode": {
+          "display": [
+            {
+              "name": "SCHAC Personal Unique Code",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "schacPersonalUniqueID": {
+          "display": [
+            {
+              "name": "SCHAC Personal Unique ID",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "schacHomeOrganization": {
+          "display": [
+            {
+              "name": "SCHAC Home Organization",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "familyName": {
+          "display": [
+            {
+              "name": "Family Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "firstName": {
+          "display": [
+            {
+              "name": "First Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "displayName": {
+          "display": [
+            {
+              "name": "Display Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "dateOfBirth": {
+          "display": [
+            {
+              "name": "Date of Birth",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "commonName": {
+          "display": [
+            {
+              "name": "Common Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "mail": {
+          "display": [
+            {
+              "name": "Email",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "eduPersonPrincipalName": {
+          "display": [
+            {
+              "name": "eduPerson Principal Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "eduPersonPrimaryAffiliation": {
+          "display": [
+            {
+              "name": "eduPerson Primary Affiliation",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "eduPersonAffiliation": {
+          "display": [
+            {
+              "name": "eduPerson Affiliation",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "eduPersonScopedAffiliation": {
+          "display": [
+            {
+              "name": "eduPerson Scoped Affiliation",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "eduPersonAssurance": {
+          "display": [
+            {
+              "name": "eduPerson Assurance",
+              "locale": "en-GB"
+            }
+          ]
+        }
+      },
+      "cryptographic_binding_methods_supported": ["jwk"],
+      "display": [
+        {
+          "name": "StudentID",
+          "locale": "en-GB",
+          "background_color": "#12107c",
+          "text_color": "#FFFFFF",
+          "logo": {
+            "url": "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+            "alt_text": "UAegean"
+          }
+        }
+      ],
+      "credential_signing_alg_values_supported": ["ES256"],
+      "format": "vc+sd-jwt",
+      "vct": "VerifiableStudentIDSDJWT",
+      "proof_types_supported": {
+        "jwt": {
+          "proof_signing_alg_values_supported": ["ES256"]
+        }
+      }
+    },
+
+    "VerifiableFerryBoardingPassCredentialSDJWT": {
+      "scope": "ferryBoardingPassCredential",
+      "claims": {
+        "identifier": {
+          "display": [
+            {
+              "name": "Identifier",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "ticketQR": {
+          "display": [
+            {
+              "name": "Ticket QR Code",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "ticketNumber": {
+          "display": [
+            {
+              "name": "Ticket Number",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "ticketLet": {
+          "display": [
+            {
+              "name": "Ticket Letter",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "lastName": {
+          "display": [
+            {
+              "name": "Last Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "firstName": {
+          "display": [
+            {
+              "name": "First Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "seatType": {
+          "display": [
+            {
+              "name": "Seat Type",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "seatNumber": {
+          "display": [
+            {
+              "name": "Seat Number",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "departureDate": {
+          "display": [
+            {
+              "name": "Departure Date",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "departureTime": {
+          "display": [
+            {
+              "name": "Departure Time",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "arrivalDate": {
+          "display": [
+            {
+              "name": "Arrival Date",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "arrivalTime": {
+          "display": [
+            {
+              "name": "Arrival Time",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "arrivalPort": {
+          "display": [
+            {
+              "name": "Arrival Port",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "vesselDescription": {
+          "display": [
+            {
+              "name": "Vessel Description",
+              "locale": "en-GB"
+            }
+          ]
+        }
+      },
+      "cryptographic_binding_methods_supported": ["jwk"],
+      "display": [
+        {
+          "name": "Ferry Boarding Pass",
+          "locale": "en-GB",
+          "background_color": "#12107c",
+          "text_color": "#FFFFFF",
+          "logo": {
+            "url": "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+            "alt_text": "UAegean"
+          }
+        }
+      ],
+      "credential_signing_alg_values_supported": ["ES256"],
+      "format": "vc+sd-jwt",
+      "vct": "VerifiableFerryBoardingPassCredentialSDJWT",
+      "proof_types_supported": {
+        "jwt": {
+          "proof_signing_alg_values_supported": ["ES256"]
+        }
+      }
     }
   }
 }
