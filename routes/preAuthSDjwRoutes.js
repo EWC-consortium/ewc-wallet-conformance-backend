@@ -67,10 +67,10 @@ console.log(privateKey);
 /*
  Generates a VCI request with  pre-authorised flow with a transaction code
 */
-router.get(["/offer-tx-code/:type"], async (req, res) => {
+router.get(["/offer-tx-code"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const credentialType = req.params.type
-    ? req.params.type
+  const credentialType = req.query.credentialType
+    ? req.query.credentialType
     : "VerifiablePortableDocumentA2SDJWT";
 
   const preSessions = getPreCodeSessions();
@@ -122,11 +122,12 @@ router.get(["/credential-offer-tx-code/:id"], (req, res) => {
 /**
  * pre-authorised flow without a transaction code request
  */
-router.get(["/offer-no-code/:type"], async (req, res) => {
+router.get(["/offer-no-code"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const credentialType = req.params.type
-    ? req.params.type
-    : "VerifiablePortableDocumentA2SDJWT";
+  const credentialType = req.query.credentialType
+  ? req.query.credentialType
+  : "VerifiablePortableDocumentA2SDJWT";
+  
   const preSessions = getPreCodeSessions();
   if (preSessions.sessions.indexOf(uuid) < 0) {
     preSessions.sessions.push(uuid);

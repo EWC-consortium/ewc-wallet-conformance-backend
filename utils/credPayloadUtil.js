@@ -1,4 +1,8 @@
+import {getCredentialSubjectForPersona} from "./personasUtils.js"
+
 // Helper functions to create payloads for different credential types
+
+
 export const createPIDPayload = (token, serverURL, decodedHeaderSubjectDID) => {
   const preSessions = getPreCodeSessions();
   const persona = getPersonaFromAccessToken(
