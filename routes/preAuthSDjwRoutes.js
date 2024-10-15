@@ -310,7 +310,20 @@ router.post("/credential", async (req, res) => {
     ) {
       payload = createEPassportPayload(serverURL, decodedHeaderSubjectDID);
     }
-    // Handle other credentials similarly...
+
+    const signOptions = { algorithm: "ES256" };
+    const additionalHeaders = { kid: "aegean#authentication-key", typ: "JWT" };
+    const idtoken = jwt.sign(payload, privateKey, {
+      ...signOptions,
+      header: additionalHeaders,
+    });
+
+    res.json({
+      format: "jwt_vc_json",
+      credential: idtoken,
+      c_nonce: generateNonce(),
+      c_nonce_expires_in: 86400,
+    });
   } else if (format === "vc+sd-jwt") {
     let vct = requestBody.vct;
     let decodedHeaderSubjectDID;
@@ -336,17 +349,8 @@ router.post("/credential", async (req, res) => {
         saltGenerator: generateSalt,
       });
 
-      // const claims = {
-      //   given_name: "John",
-      //   last_name: "Doe",
-      // };
-
-      // const disclosureFrame = {
-      //   _sd: ["given_name", "last_name"],
-      // };
       let credPayload = {};
       try {
-        
         if (credType === "VerifiablePIDSDJWT") {
           credPayload = getPIDSDJWTData(decodedHeaderSubjectDID);
         } else if (credType === "VerifiableePassportCredentialSDJWT") {
@@ -354,13 +358,15 @@ router.post("/credential", async (req, res) => {
         } else if (credType === "VerifiableStudentIDSDJWT") {
           credPayload = getStudentIDSDJWTData(decodedHeaderSubjectDID);
         } else if (credType === "ferryBoardingPassCredential") {
-          credPayload = VerifiableFerryBoardingPassCredentialSDJWT(decodedHeaderSubjectDID);
+          credPayload = VerifiableFerryBoardingPassCredentialSDJWT(
+            decodedHeaderSubjectDID
+          );
         }
 
         const cnf = { jwk: holderJWKS };
-        console.log(credType);
-        console.log(credPayload.claims);
-        console.log(credPayload.disclosureFrame);
+        // console.log(credType);
+        // console.log(credPayload.claims);
+        // console.log(credPayload.disclosureFrame);
 
         const credential = await sdjwt.issue(
           {
@@ -395,20 +401,6 @@ router.post("/credential", async (req, res) => {
     console.log("UNSUPPORTED FORMAT:", format);
     return res.status(400).json({ error: "Unsupported format" });
   }
-
-  const signOptions = { algorithm: "ES256" };
-  const additionalHeaders = { kid: "aegean#authentication-key", typ: "JWT" };
-  const idtoken = jwt.sign(payload, privateKey, {
-    ...signOptions,
-    header: additionalHeaders,
-  });
-
-  res.json({
-    format: "jwt_vc_json",
-    credential: idtoken,
-    c_nonce: generateNonce(),
-    c_nonce_expires_in: 86400,
-  });
 });
 
 //issuerConfig.credential_endpoint = serverURL + "/credential";
