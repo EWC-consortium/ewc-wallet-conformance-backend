@@ -2,6 +2,8 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import * as jose from "jose";
 import base64url from "base64url";
+import { error } from "console";
+import fs from "fs";
 
 export function pemToJWK(pem, keyType) {
   let key;
@@ -101,63 +103,75 @@ export function buildVpRequestJSON(
   return jwtPayload;
 }
 
-
-
-
-
-export function buildVpRequestJWT(
+export async function buildVpRequestJWT(
   client_id,
-  response_uri,
+  redirect_uri,
   presentation_definition,
-  privateKey,
+  privateKey="",
   client_id_scheme = "redirect_uri", // Default to "redirect_uri"
   client_metadata = {} // Default to an empty object
 ) {
-  // Construct the JWT payload
-  let jwtPayload = {
-    response_type: "vp_token",
-    client_id: client_id,
-    client_id_scheme: client_id_scheme,
-    presentation_definition: presentation_definition,
-    redirect_uri: response_uri,
-    nonce: "n-0S6_WzA2Mj",
-    state: "af0ifjsldkj",
-    client_metadata: client_metadata, //
-  };
+  if (client_id_scheme === "x509_san_dns") {
+    privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
+    const certificate = fs.readFileSync(
+      "./x509/client_certificate.crt",
+      "utf8"
+    );
+    // Convert certificate to Base64 without headers
+    const certBase64 = certificate
+      .replace("-----BEGIN CERTIFICATE-----", "")
+      .replace("-----END CERTIFICATE-----", "")
+      .replace(/\s+/g, "");
 
-  // Define the JWT header
-  const header = {
-    alg: "ES256",
-    kid: `aegean#authentication-key`, // Ensure this kid is resolvable from the did.json endpoint
-  };
+    // Construct the JWT payload
+    let jwtPayload = {
+      response_type: "vp_token",
+      response_mode: "direct_post",
+      client_id: client_id, // this should match the dns record in the certificate (dss.aegean.gr)
+      client_id_scheme: client_id_scheme,
+      presentation_definition: presentation_definition,
+      redirect_uri: redirect_uri,
+      nonce: "n-0S6_WzA2Mj",
+      state: "af0ifjsldkj",
+      client_metadata: client_metadata, //
+    };
 
-  // Conditional signing based on client_id_scheme
-  if (client_id_scheme !== "redirect_uri") {
-    // Sign the JWT as per the scheme's requirements
-    const token = jwt.sign(jwtPayload, privateKey, {
-      algorithm: "ES256",
-      noTimestamp: true, // Retain if necessary
-      header,
-    });
-    return token;
+    // Define the JWT header
+    // const header = {
+    //   alg: "ES256",
+    //   kid: `aegean#authentication-key`, // Ensure this kid is resolvable from the did.json endpoint
+    // };
+    const header = {
+      alg: "RS256",
+      typ: "JWT",
+      x5c: [certBase64],
+    };
+
+    const jwt = await new jose.SignJWT(jwtPayload)
+      .setProtectedHeader(header)
+      .sign(await jose.importPKCS8(privateKey, "RS256"));
+
+      return jwt
+
+    // Conditional signing based on client_id_scheme
+
+    //}
+    // else if (client_id_scheme !== "redirect_uri") {
+    //         // Do NOT sign the JWT for "redirect_uri" scheme
+    //     // Sign the JWT as per the scheme's requirements
+    //     const token = jwt.sign(jwtPayload, privateKey, {
+    //       algorithm: "ES256",
+    //       noTimestamp: true, // Retain if necessary
+    //       header,
+    //     });
+    //     return token;
+
+    //   return jwtPayload;
+    // }
   } else {
-    // Do NOT sign the JWT for "redirect_uri" scheme
-   
-    return jwtPayload;
+    throw new Error("not supported client_id_scheme:" + client_id_scheme);
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 export async function decryptJWE(jweToken, privateKeyPEM) {
   try {

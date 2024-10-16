@@ -9,7 +9,7 @@ import {
   buildVpRequestJWT,
 } from "../utils/cryptoUtils.js";
 
-import {buildVPbyValue} from "../utils/tokenUtils.js"
+import { buildVPbyValue } from "../utils/tokenUtils.js";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
 import { digest } from "@sd-jwt/crypto-nodejs";
 import qr from "qr-image";
@@ -75,6 +75,10 @@ let sessions = [];
 let sessionHistory = new TimedArray(30000); //cache data for 30sec
 let verificationResultsHistory = new TimedArray(30000); //cache data for 30sec
 
+/*  *******************************************************
+  CLIENT_ID_SCHEME_REDIRECT_URI
+
+*********************************************************** */
 verifierRouter.get("/generateVPRequest", async (req, res) => {
   const stateParam = req.query.id ? req.query.id : uuidv4();
   const nonce = generateNonce(16);
@@ -160,6 +164,58 @@ verifierRouter.get("/presentation-definition/:type", async (req, res) => {
 // CLIENT VERIFIER METADATA
 verifierRouter.get("/client-metadata", async (req, res) => {
   res.type("application/json").send(clientMetadata);
+});
+
+/*  *******************************************************
+  CLIENT_ID_SCHEME x509_dns_san
+*********************************************************** */
+verifierRouter.get("/generateVPRequestx509", async (req, res) => {
+  const stateParam = req.query.id ? req.query.id : uuidv4();
+  const nonce = generateNonce(16);
+
+  const uuid = req.params.id ? req.params.id : uuidv4();
+  const response_uri = serverURL + "/direct_post" + "/" + uuid;
+ 
+
+  const client_metadata = {
+    client_name: "UAegean EWC Verifier",
+    logo_uri: "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+    location: "Greece",
+    cover_uri: "string",
+    description: "EWC pilot case verification",
+  };
+
+  const clientId = "dss.aegean.gr";
+  sessions.push(uuid);
+  verificationSessions.push({
+    uuid: uuid,
+    status: "pending",
+    claims: null,
+  });
+
+  const vpRequest = await buildVpRequestJWT(
+    clientId,
+    response_uri,
+    presentation_definition_sdJwt,
+    "",
+    "x509_san_dns",
+    client_metadata
+  );
+
+  let code = qr.image(vpRequest, {
+    type: "png",
+    ec_level: "M",
+    size: 20,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  res.json({
+    qr: encodedQR,
+    deepLink: vpRequest,
+    sessionId: stateParam,
+  });
+
 });
 
 verifierRouter.post("/direct_post/:id", async (req, res) => {
@@ -541,8 +597,6 @@ function buildVP(
 
   return result;
 }
-
-
 
 async function flattenCredentialsToClaims(credentials) {
   let claimsResult = {};

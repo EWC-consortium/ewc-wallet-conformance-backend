@@ -83,7 +83,7 @@ export function buildVPbyReference(
   redirect_uri
 ) {
   if (client_id_scheme == "redirect_uri") {
-    throw error("redirect_uri is not supportted for VP by reference");
+    throw new Error("redirect_uri is not supportted for VP by reference");
   } else {
     let result =
       "openid4vp://?client_id=" +
