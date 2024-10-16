@@ -244,7 +244,7 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
   if (sdjwt) {
     let presentationSubmission = req.body["presentation_submission"];
     let state = req.body["state"];
-    console.log(state);
+    // console.log(state);
     // console.log(response);
     const decodedSdJwt = await decodeSdJwt(sdjwt, digest);
     const claims = await getClaims(

@@ -28,11 +28,19 @@ const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const codeSessions = getAuthCodeSessions();
+  const credentialType = req.query.credentialType
+    ? req.query.credentialType
+    : "VerifiablePortableDocumentA2SDJWT";
+
+  const client_id_scheme = req.query.client_id_scheme
+    ? req.query.client_id_scheme
+    : "redirect_uri";
+
   if (codeSessions.sessions.indexOf(uuid) < 0) {
     codeSessions.sessions.push(uuid);
     // codeSessions.results.push({ sessionId: uuid, status: "pending" });
   }
-  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-code-sd-jwt/${uuid}`;
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-code-sd-jwt/${uuid}?scheme=${client_id_scheme}&type=${credentialType}`;
 
   let code = qr.image(credentialOffer, {
     type: "png",
@@ -50,13 +58,30 @@ codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
 });
 
 // auth code-flow request
+
+// with dynamic cred request and client_id_scheme == redirect_uri
 codeFlowRouterSDJWT.get(["/credential-offer-code-sd-jwt/:id"], (req, res) => {
+  const credentialType = req.query.credentialType
+    ? req.query.credentialType
+    : "VerifiablePortableDocumentA1SDJWT";
+
+  console.log(req.query);
+  console.log(req.query.client_id_scheme);
+  const client_id_scheme = req.query.scheme ? req.query.scheme : "redirect_uri";
+
+  /*
+    To support multiple client_id_schemas, this param  client_id_scheme 
+    will be passed into the session of the issuer and fetched in the 
+    authorize endpoint to decide what schema to use
+  */
+  const issuer_state = `${req.params.id}|${client_id_scheme}`; // using "|" as a delimiter
+
   res.json({
     credential_issuer: serverURL,
-    credential_configuration_ids: ["VerifiablePortableDocumentA1SDJWT"],
+    credential_configuration_ids: [credentialType],
     grants: {
       authorization_code: {
-        issuer_state: req.params.id,
+        issuer_state: issuer_state,
       },
     },
   });
@@ -232,11 +257,15 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   if (response_type !== "code") {
     errors.push("Invalid response_type");
   }
-  // removed due to https://openid.github.io/OpenID4VCI/openid-4-verifiable-credential-issuance-wg-draft.html#name-using-scope-parameter-to-re
-  // if (!scope.includes("openid")) {
-  //   errors.push("Invalid scope");
-  // }
 
+  // ***************************************************************************
+  // retrive cleaned ITB session and also get (if specified) the client_id_scheme
+  // ***************************************************************************
+
+  const [originalUuid, client_id_scheme] = issuerState.split("|");
+  issuerState = originalUuid;
+
+  // ITB Sessions
   const authorizationCode = null; //"SplxlOBeZQQYbYS6WxSbIA";
   const codeSessions = getAuthCodeSessions();
   if (codeSessions.sessions.indexOf(issuerState) >= 0) {
@@ -281,90 +310,176 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     /*
     //5.1.5. Dynamic Credential Request https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-12.html#name-successful-authorization-requesttt
      The credential issuer can optionally request additional details to authenticate the client e.g. DID authentication. In this case, the authorisation response will contain a response_mode parameter with the value direct_post. A sample response is as given:
-   
-    client_id, Decentralised identifier
-    redirect_uri, For redirection of the response
-    response_type ( if the issuer requests DID authentication.),
-    response_mode (The value must be direct_post)
-    scope, The value must be openid 
-    nonce,
-    request_uri: The authorisation server’s private key signed the request.
     */
-   const vpRedirectURI="openid4vp://"
-   console.log(redirect_uri + " but i will request the vp based on " + vpRedirectURI)
-    // changed this to support auth request by value not reference
-    //const redirectUrl = `${vpRedirectURI}?state=${state}&client_id=${client_id}&redirect_uri=${serverURL}/direct_post_vci&response_type=id_token&response_mode=direct_post&scope=openid&nonce=${nonce}&request_uri=${serverURL}/request_uri_dynamic`;
-    const response_uri = serverURL + "/direct_post_vci" + "/" + uuid;
-    const presentation_definition_uri =
-    serverURL + "/presentation-definition/itbsdjwt";
-    const client_metadata_uri = serverURL + "/client-metadata";
- 
-    //response_uri
-    //const redirectUrl = buildVPbyValue(client_id,presentation_definition_uri,"redirect_uri",client_metadata_uri,response_uri)
-    // client_id_scheme is set to redirect_uri in OIDC4VP v20, the client_id becomes the redirect_uri
-    const redirectUrl = buildVPbyValue(response_uri,presentation_definition_uri,"redirect_uri",client_metadata_uri,response_uri)
-    console.log("redirectUrl", redirectUrl)
-    return res.redirect(302, redirectUrl);
+
+    if (client_id_scheme == "redirect_uri") {
+      const vpRedirectURI = "openid4vp://";
+      console.log(
+        redirect_uri + " but i will request the vp based on " + vpRedirectURI
+      );
+      // changed this to support auth request by value not reference
+      //const redirectUrl = `${vpRedirectURI}?state=${state}&client_id=${client_id}&redirect_uri=${serverURL}/direct_post_vci&response_type=id_token&response_mode=direct_post&scope=openid&nonce=${nonce}&request_uri=${serverURL}/request_uri_dynamic`;
+      const response_uri = serverURL + "/direct_post_vci" + "/" + issuerState;
+      const presentation_definition_uri =
+        serverURL + "/presentation-definition/itbsdjwt";
+      const client_metadata_uri = serverURL + "/client-metadata";
+
+      //response_uri
+      //const redirectUrl = buildVPbyValue(client_id,presentation_definition_uri,"redirect_uri",client_metadata_uri,response_uri)
+      // client_id_scheme is set to redirect_uri in OIDC4VP v20, the client_id becomes the redirect_uri
+      const redirectUrl = buildVPbyValue(
+        response_uri,
+        presentation_definition_uri,
+        "redirect_uri",
+        client_metadata_uri,
+        response_uri
+      );
+      // console.log("redirectUrl", redirectUrl);
+      return res.redirect(302, redirectUrl);
+    } else if (client_id_scheme == "x509_san_dns") {
+      //TODO
+      // let client_id = "dss.aegean.gr";
+      // let request_uri = `${serverURL}/x509VPrequest/${issuerState}`;
+      // // let vpRequest_url =
+      // //   "openid4vp://?client_id=" +
+      // //   encodeURIComponent(client_id) +
+      // //   "&request_uri=" +
+      // //   encodeURIComponent(request_uri);
+      // const redirectUrl = `openid4vp://?state=${issuerState}&client_id=${client_id}&response_uri=${serverURL}/direct_post_vci&response_type=id_token&response_mode=direct_post&scope=openid&nonce=${nonce}&request_uri=${request_uri}`;
+
+      // return res.redirect(302, redirectUrl);
+      // const stateParam = issuerState
+      // const nonce = generateNonce(16);
+
+      // const uuid = issuerState
+      // const response_uri = serverURL + "/direct_post" + "/" + uuid;
+
+      // const client_metadata = {
+      //   client_name: "UAegean EWC Verifier",
+      //   logo_uri:
+      //     "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+      //   location: "Greece",
+      //   cover_uri: "string",
+      //   description: "EWC pilot case verification",
+      // };
+
+      // const clientId = "dss.aegean.gr";
+      // const presentation_definition_sdJwt = JSON.parse(
+      //   fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
+      // );
+
+      // let signedVPJWT = await buildVpRequestJWT(
+      //   clientId,
+      //   response_uri,
+      //   presentation_definition_sdJwt,
+      //   "",
+      //   "x509_san_dns",
+      //   client_metadata
+      // );
+      // res.type("text/plain").send(signedVPJWT);
+      let request_uri = `${serverURL}/x509VPrequest_dynamic/${issuerState}`;
+      const clientId = "dss.aegean.gr";
+      let vpRequest =
+        "openid4vp://?client_id=" +
+        encodeURIComponent(clientId) +
+        "&request_uri=" +
+        encodeURIComponent(request_uri);
+
+        return res.redirect(302, vpRequest);
+    }
   }
 });
 
-codeFlowRouterSDJWT.get("/request_uri_dynamic", async (req, res) => {
-  let uuid = uuidv4();
-  let client_id = serverURL + "/direct_post" + "/" + uuid;
-  const response_uri = serverURL + "/direct_post" + "/" + uuid;
+// Dynamic VP request by reference endpoint
+codeFlowRouterSDJWT.get("/x509VPrequest_dynamic/:id", async (req, res) => {
+  //TODO pass state and nonce to the jwt request
 
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-  // Construct the absolute path to verifier-config.json
-  const configPath = path.join(__dirname, "..", "data", "verifier-config.json");
-  const presentation_definition_sdJwt = JSON.parse(
-    fs.readFileSync(
-      path.join(__dirname, "..", "data", "presentation_definition_sdjwt.json")
-    )
-  );
+  const uuid = req.params.id ? req.params.id : uuidv4();
+  const response_uri = serverURL + "/direct_post_vci/"+uuid;
 
-  // Read and parse the JSON file
-  // const clientMetadata = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-
-  // clientMetadata.presentation_definition_uri =
-  //   serverURL + "/presentation-definition/" + uuid;
-  // clientMetadata.redirect_uris = [response_uri];
-  // clientMetadata.client_id = client_id;
-  const clientMetadata = {
-    vp_formats: {
-      jwt_vp: {
-        alg: ["EdDSA", "ES256K"],
-      },
-      ldp_vp: {
-        proof_type: ["Ed25519Signature2018"],
-      },
-    },
+  const client_metadata = {
+    client_name: "UAegean EWC Verifier",
+    logo_uri: "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+    location: "Greece",
+    cover_uri: "string",
+    description: "EWC pilot case verification",
   };
+        const presentation_definition_sdJwt = JSON.parse(
+        fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
+      );
 
-  const vpRequestJWT = buildVpRequestJWT(
-    client_id,
+  const clientId = "dss.aegean.gr";
+  let signedVPJWT = await buildVpRequestJWT(
+    clientId,
     response_uri,
     presentation_definition_sdJwt,
-    privateKey,
-    "redirect_uri",
-    clientMetadata
+    "",
+    "x509_san_dns",
+    client_metadata
   );
 
-  // console.log("Dynamic VP request ")
-  // console.log(JSON.stringify(vpRequestJWT, null, 2));
-
-  res.send(vpRequestJWT);
+  console.log(signedVPJWT)
+  res.type("text/plain").send(signedVPJWT);
 });
+
+// codeFlowRouterSDJWT.get("/request_uri_dynamic", async (req, res) => {
+//   let uuid = uuidv4();
+//   let client_id = serverURL + "/direct_post" + "/" + uuid;
+//   const response_uri = serverURL + "/direct_post" + "/" + uuid;
+
+//   const __filename = fileURLToPath(import.meta.url);
+//   const __dirname = path.dirname(__filename);
+//   // Construct the absolute path to verifier-config.json
+//   const configPath = path.join(__dirname, "..", "data", "verifier-config.json");
+//   const presentation_definition_sdJwt = JSON.parse(
+//     fs.readFileSync(
+//       path.join(__dirname, "..", "data", "presentation_definition_sdjwt.json")
+//     )
+//   );
+
+//   // Read and parse the JSON file
+//   // const clientMetadata = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+
+//   // clientMetadata.presentation_definition_uri =
+//   //   serverURL + "/presentation-definition/" + uuid;
+//   // clientMetadata.redirect_uris = [response_uri];
+//   // clientMetadata.client_id = client_id;
+//   const clientMetadata = {
+//     vp_formats: {
+//       jwt_vp: {
+//         alg: ["EdDSA", "ES256K"],
+//       },
+//       ldp_vp: {
+//         proof_type: ["Ed25519Signature2018"],
+//       },
+//     },
+//   };
+
+//   const vpRequestJWT = buildVpRequestJWT(
+//     client_id,
+//     response_uri,
+//     presentation_definition_sdJwt,
+//     privateKey,
+//     "redirect_uri",
+//     clientMetadata
+//   );
+
+//   // console.log("Dynamic VP request ")
+//   // console.log(JSON.stringify(vpRequestJWT, null, 2));
+
+//   res.send(vpRequestJWT);
+// });
 
 /*
   presentation by the wallet during an Issuance part of the Dynamic Credential Request 
 */
-codeFlowRouterSDJWT.post("/direct_post_vci", async (req, res) => {
+codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
   console.log("direct_post VP for VCI is below!");
   let state = req.body["state"];
-  let jwt = req.body["id_token"];
+  let jwt = req.body["vp_token"];
   console.log("direct_post_vci received jwt is::");
   console.log(jwt);
+  const uuid = req.params.id 
 
   //
   const authorizatiton_details = getSessionsAuthorizationDetail().get(state);
@@ -385,8 +500,14 @@ codeFlowRouterSDJWT.post("/direct_post_vci", async (req, res) => {
       codeSessions.results,
       codeSessions.requests
     );
-    const redirectUrl = `${codeSessions.requests.redirectUri}?code=${authorizationCode}&state=${state}`;
-    return res.redirect(302, redirectUrl);
+    let sessionIndex = codeSessions.sessions.indexOf(uuid)
+    if(sessionIndex >= 0){
+      const redirectUrl = `${codeSessions.requests[sessionIndex].redirectUri}?code=${authorizationCode}&state=${state}`;
+      return res.redirect(302, redirectUrl);
+    }else{
+      return res.sendStatus(500);
+    }
+  
   } else {
     return res.sendStatus(500);
   }
