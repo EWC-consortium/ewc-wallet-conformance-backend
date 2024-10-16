@@ -130,7 +130,7 @@ export async function buildVpRequestJWT(
       client_id: client_id, // this should match the dns record in the certificate (dss.aegean.gr)
       client_id_scheme: client_id_scheme,
       presentation_definition: presentation_definition,
-      redirect_uri: redirect_uri,
+      response_uri: redirect_uri,
       nonce: "n-0S6_WzA2Mj",
       state: "af0ifjsldkj",
       client_metadata: client_metadata, //

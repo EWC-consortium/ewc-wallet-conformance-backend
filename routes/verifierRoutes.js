@@ -170,12 +170,38 @@ verifierRouter.get("/client-metadata", async (req, res) => {
   CLIENT_ID_SCHEME x509_dns_san
 *********************************************************** */
 verifierRouter.get("/generateVPRequestx509", async (req, res) => {
-  const stateParam = req.query.id ? req.query.id : uuidv4();
+  const uuid = req.params.uuid ? req.params.uuid : uuidv4();
+
+  let client_id = "dss.aegean.gr";
+  let request_uri = `${serverURL}/x509VPrequest/${uuid}`;
+  let vpRequest =
+    "openid4vp://?client_id=" +
+    encodeURIComponent(client_id) +
+    "&request_uri=" +
+    encodeURIComponent(request_uri);
+
+  let code = qr.image(vpRequest, {
+    type: "png",
+    ec_level: "M",
+    size: 20,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  res.json({
+    qr: encodedQR,
+    deepLink: vpRequest,
+    sessionId: uuid,
+  });
+});
+
+verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
+  //TODO pass state and nonce to the jwt request
+  const stateParam = req.params.id; //req.query.id ? req.query.id : uuidv4();
   const nonce = generateNonce(16);
 
   const uuid = req.params.id ? req.params.id : uuidv4();
   const response_uri = serverURL + "/direct_post" + "/" + uuid;
- 
 
   const client_metadata = {
     client_name: "UAegean EWC Verifier",
@@ -193,7 +219,7 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
     claims: null,
   });
 
-  const vpRequest = await buildVpRequestJWT(
+  let signedVPJWT = await buildVpRequestJWT(
     clientId,
     response_uri,
     presentation_definition_sdJwt,
@@ -202,21 +228,13 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
     client_metadata
   );
 
-  let code = qr.image(vpRequest, {
-    type: "png",
-    ec_level: "M",
-    size: 20,
-    margin: 10,
-  });
-  let mediaType = "PNG";
-  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
-  res.json({
-    qr: encodedQR,
-    deepLink: vpRequest,
-    sessionId: stateParam,
-  });
-
+  console.log(signedVPJWT)
+  res.type("text/plain").send(signedVPJWT);
 });
+
+/* ********************************************
+              RESPONSES
+*******************************************/
 
 verifierRouter.post("/direct_post/:id", async (req, res) => {
   console.log("direct_post VP is below!");
