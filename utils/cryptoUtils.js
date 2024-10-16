@@ -101,6 +101,10 @@ export function buildVpRequestJSON(
   return jwtPayload;
 }
 
+
+
+
+
 export function buildVpRequestJWT(
   client_id,
   response_uri,
@@ -142,6 +146,18 @@ export function buildVpRequestJWT(
     return jwtPayload;
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 export async function decryptJWE(jweToken, privateKeyPEM) {
   try {
