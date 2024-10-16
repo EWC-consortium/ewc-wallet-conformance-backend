@@ -294,11 +294,16 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
    console.log(redirect_uri + " but i will request the vp based on " + vpRedirectURI)
     // changed this to support auth request by value not reference
     //const redirectUrl = `${vpRedirectURI}?state=${state}&client_id=${client_id}&redirect_uri=${serverURL}/direct_post_vci&response_type=id_token&response_mode=direct_post&scope=openid&nonce=${nonce}&request_uri=${serverURL}/request_uri_dynamic`;
-    const response_url = serverURL+"/request_uri_dynamic"
+    const response_uri = serverURL + "/direct_post_vci" + "/" + uuid;
     const presentation_definition_uri =
     serverURL + "/presentation-definition/itbsdjwt";
     const client_metadata_uri = serverURL + "/client-metadata";
-    const redirectUrl = buildVPbyValue(client_id,presentation_definition_uri,"redirect_uri",client_metadata_uri,response_url)
+ 
+    //response_uri
+    //const redirectUrl = buildVPbyValue(client_id,presentation_definition_uri,"redirect_uri",client_metadata_uri,response_uri)
+    // client_id_scheme is set to redirect_uri in OIDC4VP v20, the client_id becomes the redirect_uri
+    const redirectUrl = buildVPbyValue(response_uri,presentation_definition_uri,"redirect_uri",client_metadata_uri,response_uri)
+    console.log("redirectUrl", redirectUrl)
     return res.redirect(302, redirectUrl);
   }
 });
