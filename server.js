@@ -8,8 +8,10 @@ import codeFlowRouterSDJWT from "./routes/codeFlowSdJwtRoutes.js";
 import boardingPassRouter from "./routes/boardingPassRoutes.js";
 import pidRouter from "./routes/pidroutes.js";
 import passportRouter from "./routes/passportRoutes.js";
+import didWebRouter from "./routes/didweb.js"
 import educationalRouter from "./routes/educationalRoutes.js";
 import bodyParser from "body-parser"; // Body parser middleware
+
 import * as OpenApiValidator from "express-openapi-validator";
 
 import path from "path";
@@ -50,6 +52,7 @@ app.use("/", pidRouter);
 app.use("/", passportRouter);
 app.use("/", educationalRouter);
 app.use("/", boardingPassRouter);
+app.use("/", didWebRouter);
 
 // Error handler for validation errors
 app.use((err, req, res, next) => {

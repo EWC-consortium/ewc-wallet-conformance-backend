@@ -362,6 +362,14 @@ router.post("/credential", async (req, res) => {
           credPayload = VerifiableFerryBoardingPassCredentialSDJWT(
             decodedHeaderSubjectDID
           );
+        }else if (credType === "VerifiablePortableDocumentA1SDJWT") {
+          credPayload = getGenericSDJWTData(
+            decodedHeaderSubjectDID
+          );
+        }else if (credType === "VerifiablePortableDocumentA2SDJWT") {
+          credPayload = getGenericSDJWTData(
+            decodedHeaderSubjectDID
+          );
         }
 
         const cnf = { jwk: holderJWKS };

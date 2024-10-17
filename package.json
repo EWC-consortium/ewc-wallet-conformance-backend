@@ -13,8 +13,8 @@
   "dependencies": {
     "@jorgeferrero/stream-to-buffer": "^2.0.6",
     "@sd-jwt/core": "^0.6.1",
-    "@sd-jwt/crypto-nodejs": "^0.6.1",
-    "@sd-jwt/sd-jwt-vc": "^0.6.1",
+    "@sd-jwt/crypto-nodejs": "^0.7.2",
+    "@sd-jwt/sd-jwt-vc": "^0.7.2",
     "base64url": "^3.0.1",
     "express": "^4.18.3",
     "express-openapi-validator": "^5.3.7",

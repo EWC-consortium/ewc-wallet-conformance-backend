@@ -313,10 +313,11 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     */
 
     if (client_id_scheme == "redirect_uri") {
+      console.log("client_id_scheme redirect_uri")
       const vpRedirectURI = "openid4vp://";
-      console.log(
-        redirect_uri + " but i will request the vp based on " + vpRedirectURI
-      );
+      // console.log(
+      //   redirect_uri + " but i will request the vp based on " + vpRedirectURI
+      // );
       // changed this to support auth request by value not reference
       //const redirectUrl = `${vpRedirectURI}?state=${state}&client_id=${client_id}&redirect_uri=${serverURL}/direct_post_vci&response_type=id_token&response_mode=direct_post&scope=openid&nonce=${nonce}&request_uri=${serverURL}/request_uri_dynamic`;
       const response_uri = serverURL + "/direct_post_vci" + "/" + issuerState;
@@ -337,6 +338,8 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       // console.log("redirectUrl", redirectUrl);
       return res.redirect(302, redirectUrl);
     } else if (client_id_scheme == "x509_san_dns") {
+      console.log("client_id_scheme x509_san_dns")
+
       //TODO
       // let client_id = "dss.aegean.gr";
       // let request_uri = `${serverURL}/x509VPrequest/${issuerState}`;

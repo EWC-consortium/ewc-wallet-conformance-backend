@@ -7,8 +7,8 @@
   "batch_credential_endpoint": "https://server.example.com/batch",
   "display": [
     {
-      "name": "Issuer",
-      "location": "Belgium",
+      "name": "UAegean Test Issuer",
+      "location": "Greece",
       "locale": "en-GB",
       "description": "For queries about how we manage your data please contact the Data Protection Officer."
     }
