@@ -63,7 +63,7 @@ codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
 codeFlowRouterSDJWT.get(["/credential-offer-code-sd-jwt/:id"], (req, res) => {
   const credentialType = req.query.credentialType
     ? req.query.credentialType
-    : "VerifiablePortableDocumentA1SDJWT";
+    : "VerifiablePortableDocumentA2SDJWT";
 
   console.log(req.query);
   console.log(req.query.client_id_scheme);
