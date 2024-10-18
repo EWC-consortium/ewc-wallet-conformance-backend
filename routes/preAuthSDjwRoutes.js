@@ -371,7 +371,7 @@ router.post("/credential", async (req, res) => {
           credPayload = getGenericSDJWTData(decodedHeaderSubjectDID);
         }
 
-        const cnf = { jwk: holderJWKS };
+        const cnf = { jwk: holderJWKS.jwk };
         // console.log(credType);
         // console.log(credPayload.claims);
         // console.log(credPayload.disclosureFrame);
