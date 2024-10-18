@@ -40,7 +40,9 @@ codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
     codeSessions.sessions.push(uuid);
     // codeSessions.results.push({ sessionId: uuid, status: "pending" });
   }
-  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-code-sd-jwt/${uuid}?scheme=${client_id_scheme}&type=${credentialType}`;
+
+  let encodedCredentialOfferUri = encodeURIComponent(`${serverURL}/credential-offer-code-sd-jwt/${uuid}?scheme=${client_id_scheme}&credentialType=${credentialType}`)
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${encodedCredentialOfferUri}`;
 
   let code = qr.image(credentialOffer, {
     type: "png",
