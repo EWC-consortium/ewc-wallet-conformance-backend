@@ -125,9 +125,9 @@ router.get(["/credential-offer-tx-code/:id"], (req, res) => {
 router.get(["/offer-no-code"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const credentialType = req.query.credentialType
-  ? req.query.credentialType
-  : "VerifiablePortableDocumentA2SDJWT";
-  
+    ? req.query.credentialType
+    : "VerifiablePortableDocumentA2SDJWT";
+
   const preSessions = getPreCodeSessions();
   if (preSessions.sessions.indexOf(uuid) < 0) {
     preSessions.sessions.push(uuid);
@@ -293,6 +293,7 @@ router.post("/credential", async (req, res) => {
   let payload = {};
 
   if (format === "jwt_vc_json") {
+    console.log("jwt ", requestedCredentials);
     if (requestedCredentials && requestedCredentials[0] === "PID") {
       payload = createPIDPayload(token, serverURL, decodedHeaderSubjectDID);
     } else if (
@@ -327,6 +328,8 @@ router.post("/credential", async (req, res) => {
     });
   } else if (format === "vc+sd-jwt") {
     let vct = requestBody.vct;
+    console.log("vc+sd-jwt ", vct);
+
     let decodedHeaderSubjectDID;
     if (requestBody.proof && requestBody.proof.jwt) {
       // console.log(requestBody.proof.jwt)
@@ -362,14 +365,10 @@ router.post("/credential", async (req, res) => {
           credPayload = VerifiableFerryBoardingPassCredentialSDJWT(
             decodedHeaderSubjectDID
           );
-        }else if (credType === "VerifiablePortableDocumentA1SDJWT") {
-          credPayload = getGenericSDJWTData(
-            decodedHeaderSubjectDID
-          );
-        }else if (credType === "VerifiablePortableDocumentA2SDJWT") {
-          credPayload = getGenericSDJWTData(
-            decodedHeaderSubjectDID
-          );
+        } else if (credType === "VerifiablePortableDocumentA1SDJWT") {
+          credPayload = getGenericSDJWTData(decodedHeaderSubjectDID);
+        } else if (credType === "VerifiablePortableDocumentA2SDJWT") {
+          credPayload = getGenericSDJWTData(decodedHeaderSubjectDID);
         }
 
         const cnf = { jwk: holderJWKS };
@@ -387,6 +386,14 @@ router.post("/credential", async (req, res) => {
           },
           credPayload.disclosureFrame
         );
+        
+        console.log("sending credential");
+        console.log({
+          format: "vc+sd-jwt",
+          credential: credential,
+          c_nonce: generateNonce(),
+          c_nonce_expires_in: 86400,
+        });
 
         res.json({
           format: "vc+sd-jwt",

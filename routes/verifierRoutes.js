@@ -21,6 +21,7 @@ import TimedArray from "../utils/timedArray.js";
 const verifierRouter = express.Router();
 
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
+const proxyPath = process.env.PROXY_PATH || null;
 
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
@@ -196,10 +197,6 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
 });
 
 verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
-  //TODO pass state and nonce to the jwt request
-  const stateParam = req.params.id; //req.query.id ? req.query.id : uuidv4();
-  const nonce = generateNonce(16);
-
   const uuid = req.params.id ? req.params.id : uuidv4();
   const response_uri = serverURL + "/direct_post" + "/" + uuid;
 
@@ -228,7 +225,80 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
     client_metadata
   );
 
-  console.log(signedVPJWT)
+  console.log(signedVPJWT);
+  res.type("text/plain").send(signedVPJWT);
+});
+
+/*  *******************************************************
+  CLIENT_ID_SCHEME did:jwks
+*********************************************************** */
+verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
+  const uuid = req.params.uuid ? req.params.uuid : uuidv4();
+
+  let contorller = serverURL;
+  if (proxyPath) {
+    contorller = serverURL + ":" + proxyPath;
+  }
+  const client_id = `did:web:${contorller}`;
+  let request_uri = `${serverURL}/didjwks/${uuid}`;
+  let vpRequest =
+    "openid4vp://?client_id=" +
+    encodeURIComponent(client_id) +
+    "&request_uri=" +
+    encodeURIComponent(request_uri);
+
+  let code = qr.image(vpRequest, {
+    type: "png",
+    ec_level: "M",
+    size: 20,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  res.json({
+    qr: encodedQR,
+    deepLink: vpRequest,
+    sessionId: uuid,
+  });
+});
+
+verifierRouter.get("/didjwks/:id", async (req, res) => {
+  const uuid = req.params.id ? req.params.id : uuidv4();
+  const response_uri = serverURL + "/direct_post" + "/" + uuid;
+
+  const client_metadata = {
+    client_name: "UAegean EWC Verifier",
+    logo_uri: "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+    location: "Greece",
+    cover_uri: "string",
+    description: "EWC pilot case verification",
+  };
+
+  let privateKeyPem = fs.readFileSync("./didjwks/did_private_pkcs8.key", "utf8");
+
+  let contorller = serverURL;
+  if (proxyPath) {
+    contorller = serverURL + ":" + proxyPath;
+  }
+  const clientId = `did:web:${contorller}`;
+  sessions.push(uuid);
+  verificationSessions.push({
+    uuid: uuid,
+    status: "pending",
+    claims: null,
+  });
+
+  let signedVPJWT = await buildVpRequestJWT(
+    clientId,
+    response_uri,
+    presentation_definition_sdJwt,
+    privateKeyPem,
+    "did:jwks",
+    client_metadata,
+    `did:web:${serverURL}#keys-1`
+  );
+
+  console.log(signedVPJWT);
   res.type("text/plain").send(signedVPJWT);
 });
 

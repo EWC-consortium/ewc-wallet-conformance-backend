@@ -107,10 +107,14 @@ export async function buildVpRequestJWT(
   client_id,
   redirect_uri,
   presentation_definition,
-  privateKey="",
+  privateKey = "",
   client_id_scheme = "redirect_uri", // Default to "redirect_uri"
-  client_metadata = {} // Default to an empty object
+  client_metadata = {},
+  kid =null // Default to an empty object
 ) {
+  const nonce = generateNonce(16);
+  const state = generateNonce(16);
+
   if (client_id_scheme === "x509_san_dns") {
     privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
     const certificate = fs.readFileSync(
@@ -131,8 +135,8 @@ export async function buildVpRequestJWT(
       client_id_scheme: client_id_scheme,
       presentation_definition: presentation_definition,
       response_uri: redirect_uri,
-      nonce: "n-0S6_WzA2Mj",
-      state: "af0ifjsldkj",
+      nonce: nonce,
+      state: state,
       client_metadata: client_metadata, //
     };
 
@@ -151,7 +155,7 @@ export async function buildVpRequestJWT(
       .setProtectedHeader(header)
       .sign(await jose.importPKCS8(privateKey, "RS256"));
 
-      return jwt
+    return jwt;
 
     // Conditional signing based on client_id_scheme
 
@@ -168,6 +172,49 @@ export async function buildVpRequestJWT(
 
     //   return jwtPayload;
     // }
+  } else if (client_id_scheme === "did:jwks") {
+     
+    const signingKey = {
+      kty: "EC",
+      x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
+      y: "SfFShWAUGEnNx24V2b5G1jrhJNHmMwtgROBOi9OKJLc",
+      crv: "P-256",
+      use: "sig",
+      kid: kid,
+    };
+  
+    // Convert the private key to a KeyLike object
+    const privateKeyObj = await jose.importPKCS8(
+      privateKey,
+      signingKey.alg || "ES256"
+    );
+
+    const jwtPayload = {
+      response_type: "vp_token",
+      response_mode: "direct_post",
+      client_id: client_id, // DID the did of the verifier!!!!!!
+      client_id_scheme: client_id_scheme,
+      presentation_definition: presentation_definition,
+      redirect_uri: redirect_uri,
+      nonce: nonce,
+      state: state,
+      client_metadata: client_metadata,
+    };
+
+    // JWT header
+    const header = {
+      alg: signingKey.alg || "ES256",
+      typ: "JWT",
+      kid: kid,
+    };
+
+    const jwt = await new jose.SignJWT(jwtPayload)
+      .setProtectedHeader(header)
+      .sign(privateKeyObj);
+
+    return jwt;
+
+    // Conditional signing based on client_id_scheme
   } else {
     throw new Error("not supported client_id_scheme:" + client_id_scheme);
   }
