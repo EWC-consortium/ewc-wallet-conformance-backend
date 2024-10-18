@@ -305,16 +305,22 @@ export const createAllianceIDPayload = (serverURL, decodedHeaderSubjectDID) => {
 // SD-JWT HELPERS
 
  export const getPIDSDJWTData = (decodedHeaderSubjectDID) => {
+  const currentTimestamp = new Date().getTime();
+  const expTimestamp = currentDate.setFullYear(currentDate.getFullYear() + 1)
     const claims = {
       id: decodedHeaderSubjectDID || "",
       given_name: "John",
       family_name: "Doe",
       birth_date: "1990-01-01",
       age_over_18: true,
+      issuance_date: currentTimestamp,
+      expiry_date: expTimestamp.getTime(),
+      issuing_authority: "UAegean Test Issuer",
+      issuing_country: "Greece", 
     };
   
     const disclosureFrame = {
-      _sd: ["id", "given_name", "family_name", "birth_date", "age_over_18"]
+      _sd: ["id", "given_name", "family_name", "birth_date", "age_over_18", "expiry_date","issuance_date","issuing_authority","issuing_country"]
     };
   
     return { claims, disclosureFrame };
