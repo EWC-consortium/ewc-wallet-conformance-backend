@@ -15,11 +15,15 @@ import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import { generateNonce, buildVpRequestJWT } from "../utils/cryptoUtils.js";
-import { updateIssuerStateWithAuthCode, updateIssuerStateWithAuthCodeAfterVP } from "./codeFlowJwtRoutes.js";
+import {
+  updateIssuerStateWithAuthCode,
+  updateIssuerStateWithAuthCodeAfterVP,
+} from "./codeFlowJwtRoutes.js";
 
 const codeFlowRouterSDJWT = express.Router();
 
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
+const proxyPath = process.env.PROXY_PATH || null;
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 
 // ******************************************************************
@@ -41,7 +45,9 @@ codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
     // codeSessions.results.push({ sessionId: uuid, status: "pending" });
   }
 
-  let encodedCredentialOfferUri = encodeURIComponent(`${serverURL}/credential-offer-code-sd-jwt/${uuid}?scheme=${client_id_scheme}&credentialType=${credentialType}`)
+  let encodedCredentialOfferUri = encodeURIComponent(
+    `${serverURL}/credential-offer-code-sd-jwt/${uuid}?scheme=${client_id_scheme}&credentialType=${credentialType}`
+  );
   let credentialOffer = `openid-credential-offer://?credential_offer_uri=${encodedCredentialOfferUri}`;
 
   let code = qr.image(credentialOffer, {
@@ -315,7 +321,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     */
 
     if (client_id_scheme == "redirect_uri") {
-      console.log("client_id_scheme redirect_uri")
+      console.log("client_id_scheme redirect_uri");
       const vpRedirectURI = "openid4vp://";
       // console.log(
       //   redirect_uri + " but i will request the vp based on " + vpRedirectURI
@@ -340,7 +346,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       // console.log("redirectUrl", redirectUrl);
       return res.redirect(302, redirectUrl);
     } else if (client_id_scheme == "x509_san_dns") {
-      console.log("client_id_scheme x509_san_dns")
+      console.log("client_id_scheme x509_san_dns");
 
       //TODO
       // let client_id = "dss.aegean.gr";
@@ -390,7 +396,18 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
         "&request_uri=" +
         encodeURIComponent(request_uri);
 
-        return res.redirect(302, vpRequest);
+      return res.redirect(302, vpRequest);
+    } else if (client_id_scheme == "did:jwk") {
+      console.log("client_id_scheme did:jwk");
+      let request_uri = `${serverURL}/didJwksVPrequest_dynamic/${issuerState}`;
+      const clientId = "dss.aegean.gr";
+      let vpRequest =
+        "openid4vp://?client_id=" +
+        encodeURIComponent(clientId) +
+        "&request_uri=" +
+        encodeURIComponent(request_uri);
+
+      return res.redirect(302, vpRequest);
     }
   }
 });
@@ -400,7 +417,7 @@ codeFlowRouterSDJWT.get("/x509VPrequest_dynamic/:id", async (req, res) => {
   //TODO pass state and nonce to the jwt request
 
   const uuid = req.params.id ? req.params.id : uuidv4();
-  const response_uri = serverURL + "/direct_post_vci/"+uuid;
+  const response_uri = serverURL + "/direct_post_vci/" + uuid;
 
   const client_metadata = {
     client_name: "UAegean EWC Verifier",
@@ -409,9 +426,9 @@ codeFlowRouterSDJWT.get("/x509VPrequest_dynamic/:id", async (req, res) => {
     cover_uri: "string",
     description: "EWC pilot case verification",
   };
-        const presentation_definition_sdJwt = JSON.parse(
-        fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
-      );
+  const presentation_definition_sdJwt = JSON.parse(
+    fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
+  );
 
   const clientId = "dss.aegean.gr";
   let signedVPJWT = await buildVpRequestJWT(
@@ -423,7 +440,47 @@ codeFlowRouterSDJWT.get("/x509VPrequest_dynamic/:id", async (req, res) => {
     client_metadata
   );
 
-  console.log(signedVPJWT)
+  console.log(signedVPJWT);
+  res.type("text/plain").send(signedVPJWT);
+});
+
+codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
+  //TODO  build vp request appropriately using did:jwks
+
+  const uuid = req.params.id ? req.params.id : uuidv4();
+  const response_uri = serverURL + "/direct_post" + "/" + uuid;
+
+  const client_metadata = {
+    client_name: "UAegean EWC Verifier",
+    logo_uri: "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+    location: "Greece",
+    cover_uri: "string",
+    description: "EWC pilot case verification",
+  };
+
+  const privateKeyPem = fs.readFileSync(
+    "./didjwks/did_private_pkcs8.key",
+    "utf8"
+  );
+
+  let contorller = serverURL;
+  if (proxyPath) {
+    contorller = serverURL + ":" + proxyPath;
+  }
+  const clientId = `did:web:${contorller}`;
+  const presentation_definition_sdJwt = JSON.parse(
+    fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
+  );
+
+  let signedVPJWT = await buildVpRequestJWT(
+    clientId,
+    response_uri,
+    presentation_definition_sdJwt,
+    privateKeyPem,
+    "did:jwks",
+    client_metadata,
+    `did:web:${serverURL}#keys-1`
+  );
   res.type("text/plain").send(signedVPJWT);
 });
 
@@ -484,7 +541,7 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
   let jwt = req.body["vp_token"];
   console.log("direct_post_vci received jwt is::");
   console.log(jwt);
-  const uuid = req.params.id 
+  const uuid = req.params.id;
 
   //
   const authorizatiton_details = getSessionsAuthorizationDetail().get(state);
@@ -507,15 +564,14 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
       codeSessions.results,
       codeSessions.requests
     );
-    let sessionIndex = codeSessions.sessions.indexOf(uuid)
-    if(sessionIndex >= 0){
+    let sessionIndex = codeSessions.sessions.indexOf(uuid);
+    if (sessionIndex >= 0) {
       const redirectUrl = `${codeSessions.requests[sessionIndex].redirectUri}?code=${authorizationCode}&state=${state}`;
       return res.redirect(302, redirectUrl);
-    }else{
+    } else {
       console.log("issuance session not found " + uuid);
       return res.sendStatus(500);
     }
-  
   } else {
     return res.sendStatus(500);
   }
