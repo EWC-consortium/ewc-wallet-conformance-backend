@@ -215,6 +215,13 @@ router.post("/token_endpoint", async (req, res) => {
   } else {
     if (grantType == "authorization_code") {
       const codeSessions = getAuthCodeSessions();
+      const index = codeSessions.results.findIndex(
+        (result) => result.sessionId === code
+      );
+      if (index > 0) {
+        codeSessions.results[index].status = "success";
+      }
+      //TODO if PKCE validattiton fails the flow should
       validatePKCE(
         codeSessions.requests,
         code,
@@ -386,7 +393,7 @@ router.post("/credential", async (req, res) => {
           },
           credPayload.disclosureFrame
         );
-        
+
         console.log("sending credential");
         console.log({
           format: "vc+sd-jwt",

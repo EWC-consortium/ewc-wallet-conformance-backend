@@ -77,4 +77,22 @@ export function updateIssuerStateWithAuthCode(
   }
 }
 
+export function updateIssuerStateWithAuthCodeAfterVP(
+  code,
+  issuerState,
+  issuerSessions,
+  codeFlowRequestsResults,
+  codeFlowRequests
+) {
+  let index = issuerSessions.indexOf(issuerState);
+  if (index >= 0) {
+    codeFlowRequestsResults[index].sessionId = code;
+    codeFlowRequests[index].sessionId = code;
+  } else {
+    console.log("could not find session "+issuerSessions +"issuer state will not be updated with code "+code);
+  }
+}
+
+
+
 export default codeFlowRouter;

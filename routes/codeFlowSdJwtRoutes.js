@@ -15,7 +15,7 @@ import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import { generateNonce, buildVpRequestJWT } from "../utils/cryptoUtils.js";
-import { updateIssuerStateWithAuthCode } from "./codeFlowJwtRoutes.js";
+import { updateIssuerStateWithAuthCode, updateIssuerStateWithAuthCodeAfterVP } from "./codeFlowJwtRoutes.js";
 
 const codeFlowRouterSDJWT = express.Router();
 
@@ -498,10 +498,12 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
       authorizatiton_details
     );
 
-    updateIssuerStateWithAuthCode(
+    // THE WALLET SENDS A DIFFERENT SATE (THAT IS THE STATE OF THE VP NOT THE VCI)
+    // SO A DIFFERENT UPDATE IS REQUIRED HERE
+    updateIssuerStateWithAuthCodeAfterVP(
       authorizationCode,
-      state,
-      codeSessions.walletSessions,
+      uuid,
+      codeSessions.sessions,
       codeSessions.results,
       codeSessions.requests
     );
@@ -510,6 +512,7 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
       const redirectUrl = `${codeSessions.requests[sessionIndex].redirectUri}?code=${authorizationCode}&state=${state}`;
       return res.redirect(302, redirectUrl);
     }else{
+      console.log("issuance session not found " + uuid);
       return res.sendStatus(500);
     }
   

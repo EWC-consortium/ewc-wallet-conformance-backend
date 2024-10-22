@@ -81,7 +81,7 @@ let verificationResultsHistory = new TimedArray(30000); //cache data for 30sec
 
 *********************************************************** */
 verifierRouter.get("/generateVPRequest", async (req, res) => {
-  const stateParam = req.query.id ? req.query.id : uuidv4();
+  const stateParam = req.query.sessionId ? req.query.sessionId : uuidv4();
   const nonce = generateNonce(16);
 
   // The Verifier may send an Authorization Request as Request Object by value
@@ -89,16 +89,16 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
   // The Verifier articulates requirements of the Credential(s) that
   // are requested using presentation_definition and presentation_definition_uri
 
-  const uuid = req.params.id ? req.params.id : uuidv4();
+  // const uuid = req.params.id ? req.params.id : uuidv4();
   //url.searchParams.get("presentation_definition");
-  const response_uri = serverURL + "/direct_post" + "/" + uuid;
+  const response_uri = serverURL + "/direct_post" + "/" + stateParam;
   const presentation_definition_uri =
     serverURL + "/presentation-definition/itbsdjwt";
   const client_metadata_uri = serverURL + "/client-metadata";
-  const clientId = serverURL + "/direct_post" + "/" + uuid;
-  sessions.push(uuid);
+  const clientId = serverURL + "/direct_post" + "/" + stateParam;
+  sessions.push(stateParam);
   verificationSessions.push({
-    uuid: uuid,
+    uuid: stateParam,
     status: "pending",
     claims: null,
   });
@@ -127,7 +127,7 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
   // res.json({ vpRequest: vpRequest });
 });
 
-//***********PRESENTATION DEFINITON endpoint to support presentation_definition_uri Parameter */
+//PRESENTATION DEFINITON endpoint to support presentation_definition_uri Parameter */
 verifierRouter.get("/presentation-definition/:type", async (req, res) => {
   const { type } = req.params;
   const presentationDefinitions = {
@@ -171,7 +171,7 @@ verifierRouter.get("/client-metadata", async (req, res) => {
   CLIENT_ID_SCHEME x509_dns_san
 *********************************************************** */
 verifierRouter.get("/generateVPRequestx509", async (req, res) => {
-  const uuid = req.params.uuid ? req.params.uuid : uuidv4();
+  const uuid = req.params.sessionId ? req.params.sessionId : uuidv4();
 
   let client_id = "dss.aegean.gr";
   let request_uri = `${serverURL}/x509VPrequest/${uuid}`;
@@ -233,7 +233,7 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
   CLIENT_ID_SCHEME did:jwks
 *********************************************************** */
 verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
-  const uuid = req.params.uuid ? req.params.uuid : uuidv4();
+  const uuid = req.params.sessionId ? req.params.sessionId : uuidv4();
 
   let contorller = serverURL;
   if (proxyPath) {
@@ -274,7 +274,10 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
     description: "EWC pilot case verification",
   };
 
-  let privateKeyPem = fs.readFileSync("./didjwks/did_private_pkcs8.key", "utf8");
+  let privateKeyPem = fs.readFileSync(
+    "./didjwks/did_private_pkcs8.key",
+    "utf8"
+  );
 
   let contorller = serverURL;
   if (proxyPath) {

@@ -306,6 +306,7 @@ export const createAllianceIDPayload = (serverURL, decodedHeaderSubjectDID) => {
 
  export const getPIDSDJWTData = (decodedHeaderSubjectDID) => {
   const currentTimestamp = new Date().getTime();
+  const currentDate = new Date()
   const expTimestamp = currentDate.setFullYear(currentDate.getFullYear() + 1)
     const claims = {
       id: decodedHeaderSubjectDID || "",
@@ -314,7 +315,7 @@ export const createAllianceIDPayload = (serverURL, decodedHeaderSubjectDID) => {
       birth_date: "1990-01-01",
       age_over_18: true,
       issuance_date: currentTimestamp,
-      expiry_date: expTimestamp.getTime(),
+      expiry_date: expTimestamp,//expTimestamp.getTime(),
       issuing_authority: "UAegean Test Issuer",
       issuing_country: "Greece", 
     };
