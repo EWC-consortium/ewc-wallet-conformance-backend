@@ -347,47 +347,6 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       return res.redirect(302, redirectUrl);
     } else if (client_id_scheme == "x509_san_dns") {
       console.log("client_id_scheme x509_san_dns");
-
-      //TODO
-      // let client_id = "dss.aegean.gr";
-      // let request_uri = `${serverURL}/x509VPrequest/${issuerState}`;
-      // // let vpRequest_url =
-      // //   "openid4vp://?client_id=" +
-      // //   encodeURIComponent(client_id) +
-      // //   "&request_uri=" +
-      // //   encodeURIComponent(request_uri);
-      // const redirectUrl = `openid4vp://?state=${issuerState}&client_id=${client_id}&response_uri=${serverURL}/direct_post_vci&response_type=id_token&response_mode=direct_post&scope=openid&nonce=${nonce}&request_uri=${request_uri}`;
-
-      // return res.redirect(302, redirectUrl);
-      // const stateParam = issuerState
-      // const nonce = generateNonce(16);
-
-      // const uuid = issuerState
-      // const response_uri = serverURL + "/direct_post" + "/" + uuid;
-
-      // const client_metadata = {
-      //   client_name: "UAegean EWC Verifier",
-      //   logo_uri:
-      //     "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
-      //   location: "Greece",
-      //   cover_uri: "string",
-      //   description: "EWC pilot case verification",
-      // };
-
-      // const clientId = "dss.aegean.gr";
-      // const presentation_definition_sdJwt = JSON.parse(
-      //   fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
-      // );
-
-      // let signedVPJWT = await buildVpRequestJWT(
-      //   clientId,
-      //   response_uri,
-      //   presentation_definition_sdJwt,
-      //   "",
-      //   "x509_san_dns",
-      //   client_metadata
-      // );
-      // res.type("text/plain").send(signedVPJWT);
       let request_uri = `${serverURL}/x509VPrequest_dynamic/${issuerState}`;
       const clientId = "dss.aegean.gr";
       let vpRequest =
@@ -414,8 +373,6 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
 
 // Dynamic VP request by reference endpoint
 codeFlowRouterSDJWT.get("/x509VPrequest_dynamic/:id", async (req, res) => {
-  //TODO pass state and nonce to the jwt request
-
   const uuid = req.params.id ? req.params.id : uuidv4();
   const response_uri = serverURL + "/direct_post_vci/" + uuid;
 
@@ -445,10 +402,10 @@ codeFlowRouterSDJWT.get("/x509VPrequest_dynamic/:id", async (req, res) => {
 });
 
 codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
-  //TODO  build vp request appropriately using did:jwks
-
   const uuid = req.params.id ? req.params.id : uuidv4();
-  const response_uri = serverURL + "/direct_post" + "/" + uuid;
+  const response_uri = serverURL + "/direct_post_vci/" + uuid;
+
+  
 
   const client_metadata = {
     client_name: "UAegean EWC Verifier",
@@ -484,53 +441,6 @@ codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
   res.type("text/plain").send(signedVPJWT);
 });
 
-// codeFlowRouterSDJWT.get("/request_uri_dynamic", async (req, res) => {
-//   let uuid = uuidv4();
-//   let client_id = serverURL + "/direct_post" + "/" + uuid;
-//   const response_uri = serverURL + "/direct_post" + "/" + uuid;
-
-//   const __filename = fileURLToPath(import.meta.url);
-//   const __dirname = path.dirname(__filename);
-//   // Construct the absolute path to verifier-config.json
-//   const configPath = path.join(__dirname, "..", "data", "verifier-config.json");
-//   const presentation_definition_sdJwt = JSON.parse(
-//     fs.readFileSync(
-//       path.join(__dirname, "..", "data", "presentation_definition_sdjwt.json")
-//     )
-//   );
-
-//   // Read and parse the JSON file
-//   // const clientMetadata = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-
-//   // clientMetadata.presentation_definition_uri =
-//   //   serverURL + "/presentation-definition/" + uuid;
-//   // clientMetadata.redirect_uris = [response_uri];
-//   // clientMetadata.client_id = client_id;
-//   const clientMetadata = {
-//     vp_formats: {
-//       jwt_vp: {
-//         alg: ["EdDSA", "ES256K"],
-//       },
-//       ldp_vp: {
-//         proof_type: ["Ed25519Signature2018"],
-//       },
-//     },
-//   };
-
-//   const vpRequestJWT = buildVpRequestJWT(
-//     client_id,
-//     response_uri,
-//     presentation_definition_sdJwt,
-//     privateKey,
-//     "redirect_uri",
-//     clientMetadata
-//   );
-
-//   // console.log("Dynamic VP request ")
-//   // console.log(JSON.stringify(vpRequestJWT, null, 2));
-
-//   res.send(vpRequestJWT);
-// });
 
 /*
   presentation by the wallet during an Issuance part of the Dynamic Credential Request 

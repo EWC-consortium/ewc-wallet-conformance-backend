@@ -171,7 +171,7 @@ verifierRouter.get("/client-metadata", async (req, res) => {
   CLIENT_ID_SCHEME x509_dns_san
 *********************************************************** */
 verifierRouter.get("/generateVPRequestx509", async (req, res) => {
-  const uuid = req.params.sessionId ? req.params.sessionId : uuidv4();
+  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
 
   let client_id = "dss.aegean.gr";
   let request_uri = `${serverURL}/x509VPrequest/${uuid}`;
@@ -181,6 +181,16 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
     "&request_uri=" +
     encodeURIComponent(request_uri);
 
+    console.log(`pushing to sessions ${uuid}`)
+    sessions.push(uuid);
+    verificationSessions.push({
+      uuid: uuid,
+      status: "pending",
+      claims: null,
+    });
+    console.log(`verification sessions`)
+    console.log(verificationSessions)
+    
   let code = qr.image(vpRequest, {
     type: "png",
     ec_level: "M",
@@ -233,7 +243,7 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
   CLIENT_ID_SCHEME did:jwks
 *********************************************************** */
 verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
-  const uuid = req.params.sessionId ? req.params.sessionId : uuidv4();
+  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
 
   let contorller = serverURL;
   if (proxyPath) {
@@ -246,6 +256,17 @@ verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
     encodeURIComponent(client_id) +
     "&request_uri=" +
     encodeURIComponent(request_uri);
+
+    console.log(`pushing to sessions ${uuid}`)
+    
+    sessions.push(uuid);
+    verificationSessions.push({
+      uuid: uuid,
+      status: "pending",
+      claims: null,
+    });
+    console.log(`verification sessions`)
+    console.log(verificationSessions)
 
   let code = qr.image(vpRequest, {
     type: "png",

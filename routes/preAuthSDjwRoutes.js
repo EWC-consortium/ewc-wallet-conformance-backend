@@ -215,12 +215,19 @@ router.post("/token_endpoint", async (req, res) => {
   } else {
     if (grantType == "authorization_code") {
       const codeSessions = getAuthCodeSessions();
+      console.log("codeSessions ==> grantType == authorization_code")
+      console.log(codeSessions)
+      console.log(code)
       const index = codeSessions.results.findIndex(
         (result) => result.sessionId === code
       );
-      if (index > 0) {
-        codeSessions.results[index].status = "success";
+      console.log(index)
+      if (index >= 0) {
+        codeSessions.results[index]["status"] = "success";
       }
+      console.log("Updatetd Code sessions")
+      console.log(codeSessions)
+
       //TODO if PKCE validattiton fails the flow should
       validatePKCE(
         codeSessions.requests,
