@@ -405,8 +405,6 @@ codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
   const uuid = req.params.id ? req.params.id : uuidv4();
   const response_uri = serverURL + "/direct_post_vci/" + uuid;
 
-  
-
   const client_metadata = {
     client_name: "UAegean EWC Verifier",
     logo_uri: "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
@@ -441,7 +439,6 @@ codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
   res.type("text/plain").send(signedVPJWT);
 });
 
-
 /*
   presentation by the wallet during an Issuance part of the Dynamic Credential Request 
 */
@@ -475,9 +472,11 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
       codeSessions.requests
     );
     let sessionIndex = codeSessions.sessions.indexOf(uuid);
+    let issuanceState = codeSessions.results[sessionIndex].state
     if (sessionIndex >= 0) {
-      const redirectUrl = `${codeSessions.requests[sessionIndex].redirectUri}?code=${authorizationCode}&state=${state}`;
-      return res.redirect(302, redirectUrl);
+      const redirectUrl = `${codeSessions.requests[sessionIndex].redirectUri}?code=${authorizationCode}&state=${issuanceState}`;
+      // return //res.redirect(302, redirectUrl);
+      return res.send({ redirect_uri: redirectUrl });
     } else {
       console.log("issuance session not found " + uuid);
       return res.sendStatus(500);
