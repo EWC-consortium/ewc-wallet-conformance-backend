@@ -86,16 +86,16 @@ export function updateIssuerStateWithAuthCodeAfterVP(
 ) {
   let index = issuerSessions.indexOf(issuerState);
   if (index >= 0) {
-    console.log("codeFlowRequestResults of " + index)
-    console.log(codeFlowRequestsResults[index])
-    console.log(codeFlowRequests[index])
+    // console.log("codeFlowRequestResults of " + index)
+    // console.log(codeFlowRequestsResults[index])
+    // console.log(codeFlowRequests[index])
 
     codeFlowRequestsResults[index]["sessionId"] = code;
     codeFlowRequests[index]["sessionId"] = code;
 
-    console.log("UPDATED codeFlowRequestResults of " + index)
-    console.log(codeFlowRequestsResults[index])
-    console.log(codeFlowRequests[index])
+    // console.log("UPDATED codeFlowRequestResults of " + index)
+    // console.log(codeFlowRequestsResults[index])
+    // console.log(codeFlowRequests[index])
 
   } else {
     console.log("could not find session "+issuerSessions +"issuer state will not be updated with code "+code);

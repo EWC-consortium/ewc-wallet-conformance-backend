@@ -462,21 +462,36 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
       authorizatiton_details
     );
 
-    // THE WALLET SENDS A DIFFERENT SATE (THAT IS THE STATE OF THE VP NOT THE VCI)
-    // SO A DIFFERENT UPDATE IS REQUIRED HERE
-    updateIssuerStateWithAuthCodeAfterVP(
-      authorizationCode,
-      uuid,
-      codeSessions.sessions,
-      codeSessions.results,
-      codeSessions.requests
-    );
+    // // THE WALLET SENDS A DIFFERENT SATE (THAT IS THE STATE OF THE VP NOT THE VCI)
+    // // SO A DIFFERENT UPDATE IS REQUIRED HERE
+    // updateIssuerStateWithAuthCodeAfterVP(
+    //   authorizationCode,
+    //   uuid,
+    //   codeSessions.sessions,
+    //   codeSessions.results,
+    //   codeSessions.requests
+    // );
+
     let sessionIndex = codeSessions.sessions.indexOf(uuid);
-    let issuanceState = codeSessions.results[sessionIndex].state
+    let issuanceState = codeSessions.results[sessionIndex].state;
     if (sessionIndex >= 0) {
+      // updateIssuerStateWithAuthCode(
+      //   authorizationCode,
+      //   uuid,
+      //   codeSessions.results,
+      //   codeSessions.requests
+      // );
+      updateIssuerStateWithAuthCodeAfterVP(
+        authorizationCode,
+        uuid,
+        codeSessions.sessions,
+        codeSessions.results,
+        codeSessions.requests
+      );
+
       const redirectUrl = `${codeSessions.requests[sessionIndex].redirectUri}?code=${authorizationCode}&state=${issuanceState}`;
       // return //res.redirect(302, redirectUrl);
-      return res.send({ redirect_uri: redirectUrl });
+      return res.send({redirect_uri: redirectUrl });
     } else {
       console.log("issuance session not found " + uuid);
       return res.sendStatus(500);

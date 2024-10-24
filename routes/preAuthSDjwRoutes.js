@@ -215,7 +215,7 @@ router.post("/token_endpoint", async (req, res) => {
   } else {
     if (grantType == "authorization_code") {
       const codeSessions = getAuthCodeSessions();
-      console.log("codeSessions ==> grantType == authorization_code")
+    console.log("codeSessions ==> grantType == authorization_code")
       console.log(codeSessions)
       console.log(code)
       const index = codeSessions.results.findIndex(
