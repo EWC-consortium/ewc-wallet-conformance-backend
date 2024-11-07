@@ -47,6 +47,7 @@ import {
   getGenericSDJWTData,
   getEPassportSDJWTData,
   createEPassportPayload,
+  getVReceiptSDJWTData
 } from "../utils/credPayloadUtil.js";
 
 const router = express.Router();
@@ -363,7 +364,7 @@ router.post("/credential", async (req, res) => {
         verifier,
         signAlg: "ES256",
         hasher: digest,
-        hashAlg: "SHA-256",
+        hashAlg: "sha-256",
         saltGenerator: generateSalt,
       });
 
@@ -381,13 +382,16 @@ router.post("/credential", async (req, res) => {
           );
         } else if (credType === "VerifiablePortableDocumentA1SDJWT") {
           credPayload = getGenericSDJWTData(decodedHeaderSubjectDID);
-        } else if (credType === "VerifiablePortableDocumentA2SDJWT") {
+        } else if (credType === "VerifiablevReceiptSDJWT") {
+          credPayload = getVReceiptSDJWTData(decodedHeaderSubjectDID);
+        }
+        else if (credType === "VerifiablePortableDocumentA2SDJWT") {
           credPayload = getGenericSDJWTData(decodedHeaderSubjectDID);
         }
 
         const cnf = { jwk: holderJWKS.jwk };
         // console.log(credType);
-        // console.log(credPayload.claims);
+        console.log(credPayload.claims);
         // console.log(credPayload.disclosureFrame);
 
         const credential = await sdjwt.issue(

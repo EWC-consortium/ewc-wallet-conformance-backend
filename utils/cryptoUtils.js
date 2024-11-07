@@ -245,7 +245,7 @@ export async function base64UrlEncodeSha256(codeVerifier) {
   const data = encoder.encode(codeVerifier);
 
   // Calculate the SHA-256 hash of the ArrayBuffer
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashBuffer = await crypto.subtle.digest("sha-256", data);
 
   // Convert the ArrayBuffer to a Uint8Array
   const hashArray = new Uint8Array(hashBuffer);

@@ -420,8 +420,9 @@ codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
 
   let contorller = serverURL;
   if (proxyPath) {
-    contorller = serverURL + ":" + proxyPath;
+    contorller = serverURL.replace("/"+proxyPath,"") + ":" + proxyPath;
   }
+  contorller = contorller.replace("https://","")
   const clientId = `did:web:${contorller}`;
   const presentation_definition_sdJwt = JSON.parse(
     fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
@@ -434,7 +435,7 @@ codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
     privateKeyPem,
     "did:jwks",
     client_metadata,
-    `did:web:${serverURL}#keys-1`
+    `did:web:${contorller}#keys-1`
   );
   res.type("text/plain").send(signedVPJWT);
 });
@@ -473,8 +474,10 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
     // );
 
     let sessionIndex = codeSessions.sessions.indexOf(uuid);
-    let issuanceState = codeSessions.results[sessionIndex].state;
+   
     if (sessionIndex >= 0) {
+      let issuanceState = codeSessions.results[sessionIndex].state;
+
       // updateIssuerStateWithAuthCode(
       //   authorizationCode,
       //   uuid,

@@ -247,7 +247,7 @@ verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
 
   let contorller = serverURL;
   if (proxyPath) {
-    contorller = serverURL + ":" + proxyPath;
+    contorller = serverURL.replace("/"+proxyPath,"") + ":" + proxyPath;
   }
   const client_id = `did:web:${contorller}`;
   let request_uri = `${serverURL}/didjwks/${uuid}`;
@@ -302,7 +302,7 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
 
   let contorller = serverURL;
   if (proxyPath) {
-    contorller = serverURL + ":" + proxyPath;
+    contorller = serverURL.replace("/"+proxyPath,"") + ":" + proxyPath;
   }
   const clientId = `did:web:${contorller}`;
   sessions.push(uuid);
@@ -319,7 +319,7 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
     privateKeyPem,
     "did:jwks",
     client_metadata,
-    `did:web:${serverURL}#keys-1`
+    `did:web:${contorller}#keys-1`
   );
 
   console.log(signedVPJWT);
