@@ -394,7 +394,7 @@ codeFlowRouterSDJWT.get("/x509VPrequest_dynamic/:id", async (req, res) => {
     presentation_definition_sdJwt,
     "",
     "x509_san_dns",
-    client_metadata
+    client_metadata, null, serverURL
   );
 
   console.log(signedVPJWT);
@@ -435,7 +435,8 @@ codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
     privateKeyPem,
     "did:jwks",
     client_metadata,
-    `did:web:${contorller}#keys-1`
+    `did:web:${contorller}#keys-1`,
+    serverURL
   );
   res.type("text/plain").send(signedVPJWT);
 });

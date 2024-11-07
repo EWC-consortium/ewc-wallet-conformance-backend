@@ -216,6 +216,7 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
     location: "Greece",
     cover_uri: "string",
     description: "EWC pilot case verification",
+    vp_formats: 
   };
 
   const clientId = "dss.aegean.gr";
@@ -232,7 +233,9 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
     presentation_definition_sdJwt,
     "",
     "x509_san_dns",
-    client_metadata
+    client_metadata,
+    null,
+    serverURL
   );
 
   console.log(signedVPJWT);
@@ -319,7 +322,8 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
     privateKeyPem,
     "did:jwks",
     client_metadata,
-    `did:web:${contorller}#keys-1`
+    `did:web:${contorller}#keys-1`,
+    serverURL
   );
 
   console.log(signedVPJWT);
@@ -396,7 +400,9 @@ verifierRouter.get("/vpRequest/:id", async (req, res) => {
     presentation_definition_sdJwt,
     privateKey,
     client_id_scheme,
-    clientMetadata
+    clientMetadata,
+    null,
+    serverURL
   );
 
   console.log("VP request ");

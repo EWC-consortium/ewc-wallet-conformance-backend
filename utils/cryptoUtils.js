@@ -110,7 +110,8 @@ export async function buildVpRequestJWT(
   privateKey = "",
   client_id_scheme = "redirect_uri", // Default to "redirect_uri"
   client_metadata = {},
-  kid =null // Default to an empty object
+  kid =null, // Default to an empty object,
+  serverURL
 ) {
   const nonce = generateNonce(16);
   const state = generateNonce(16);
@@ -127,6 +128,10 @@ export async function buildVpRequestJWT(
       .replace("-----END CERTIFICATE-----", "")
       .replace(/\s+/g, "");
 
+    // The result is a JWS-signed JWT [RFC7519]. If signed, the Authorization Request Object SHOULD contain 
+    // the Claims iss (issuer) and aud (audience) as members with their semantics being the same as defined in the JWT [RFC7519] specification. 
+    // The value of aud should be the value of the authorization server (AS) issuer, as defined in RFC 8414 [RFC8414]  
+
     // Construct the JWT payload
     let jwtPayload = {
       response_type: "vp_token",
@@ -138,6 +143,8 @@ export async function buildVpRequestJWT(
       nonce: nonce,
       state: state,
       client_metadata: client_metadata, //
+      iss: serverURL,
+      aud: serverURL
     };
 
     // Define the JWT header
