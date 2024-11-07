@@ -382,6 +382,11 @@ codeFlowRouterSDJWT.get("/x509VPrequest_dynamic/:id", async (req, res) => {
     location: "Greece",
     cover_uri: "string",
     description: "EWC pilot case verification",
+    vp_formats: {
+      "vc+sd-jwt": {
+        alg: ["ES256", "ES384"],
+      },
+    },
   };
   const presentation_definition_sdJwt = JSON.parse(
     fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
@@ -394,7 +399,9 @@ codeFlowRouterSDJWT.get("/x509VPrequest_dynamic/:id", async (req, res) => {
     presentation_definition_sdJwt,
     "",
     "x509_san_dns",
-    client_metadata, null, serverURL
+    client_metadata,
+    null,
+    serverURL
   );
 
   console.log(signedVPJWT);
@@ -411,6 +418,11 @@ codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
     location: "Greece",
     cover_uri: "string",
     description: "EWC pilot case verification",
+    vp_formats: {
+      "vc+sd-jwt": {
+        alg: ["ES256", "ES384"],
+      },
+    },
   };
 
   const privateKeyPem = fs.readFileSync(
@@ -420,9 +432,9 @@ codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
 
   let contorller = serverURL;
   if (proxyPath) {
-    contorller = serverURL.replace("/"+proxyPath,"") + ":" + proxyPath;
+    contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
   }
-  contorller = contorller.replace("https://","")
+  contorller = contorller.replace("https://", "");
   const clientId = `did:web:${contorller}`;
   const presentation_definition_sdJwt = JSON.parse(
     fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
@@ -475,7 +487,7 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
     // );
 
     let sessionIndex = codeSessions.sessions.indexOf(uuid);
-   
+
     if (sessionIndex >= 0) {
       let issuanceState = codeSessions.results[sessionIndex].state;
 
@@ -495,7 +507,7 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
 
       const redirectUrl = `${codeSessions.requests[sessionIndex].redirectUri}?code=${authorizationCode}&state=${issuanceState}`;
       // return //res.redirect(302, redirectUrl);
-      return res.send({redirect_uri: redirectUrl });
+      return res.send({ redirect_uri: redirectUrl });
     } else {
       console.log("issuance session not found " + uuid);
       return res.sendStatus(500);

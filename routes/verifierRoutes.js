@@ -216,7 +216,14 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
     location: "Greece",
     cover_uri: "string",
     description: "EWC pilot case verification",
-    vp_formats: 
+    vp_formats: {
+      jwt_vp: {
+        alg: ["EdDSA", "ES256K"],
+      },
+      ldp_vp: {
+        proof_type: ["Ed25519Signature2018"],
+      },
+    }
   };
 
   const clientId = "dss.aegean.gr";
@@ -296,6 +303,14 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
     location: "Greece",
     cover_uri: "string",
     description: "EWC pilot case verification",
+    vp_formats: {
+      jwt_vp: {
+        alg: ["EdDSA", "ES256K"],
+      },
+      ldp_vp: {
+        proof_type: ["Ed25519Signature2018"],
+      },
+    }
   };
 
   let privateKeyPem = fs.readFileSync(
