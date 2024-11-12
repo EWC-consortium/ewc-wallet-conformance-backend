@@ -6,16 +6,18 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "SERVER_URL=https://a6bf-2a02-587-870d-e900-8ba6-393a-385b-5730.ngrok-free.app node server.js"
+    "dev": "SERVER_URL=https://cef1-2a02-587-8704-c700-f7b8-b2c7-d0e1-cf37.ngrok-free.app node server.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@jorgeferrero/stream-to-buffer": "^2.0.6",
     "@sd-jwt/core": "^0.6.1",
-    "@sd-jwt/crypto-nodejs": "^0.6.1",
-    "@sd-jwt/sd-jwt-vc": "^0.6.1",
+    "@sd-jwt/crypto-nodejs": "^0.7.2",
+    "@sd-jwt/sd-jwt-vc": "^0.7.2",
+    "base64url": "^3.0.1",
     "express": "^4.18.3",
+    "express-openapi-validator": "^5.3.7",
     "image-data-uri": "^2.0.1",
     "jose": "^5.2.3",
     "jsonwebtoken": "^9.0.2",

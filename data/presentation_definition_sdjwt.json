@@ -26,7 +26,7 @@
             "path": ["$.vct"],
             "filter": {
               "type": "string",
-              "const": "VerifiablePortableDocumentA2"
+              "const": "VerifiablePortableDocumentA1SDJWT"
             }
           }
         ],

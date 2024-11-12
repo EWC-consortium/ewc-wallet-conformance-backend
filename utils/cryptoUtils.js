@@ -1,6 +1,9 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import * as jose from "jose";
+import base64url from "base64url";
+import { error } from "console";
+import fs from "fs";
 
 export function pemToJWK(pem, keyType) {
   let key;
@@ -27,7 +30,7 @@ export function generateNonce(length = 12) {
   return crypto.randomBytes(length).toString("hex");
 }
 
-export function buildVpRequestJwt(
+export function buildVpRequestJSON(
   state,
   nonce,
   client_id,
@@ -70,18 +73,21 @@ export function buildVpRequestJwt(
     presentation_definition: presentation_definition,
     redirect_uri: response_uri,
     // response_mode: "direct_post",
-    client_metadata : "",
-    
+    nonce: "n-0S6_WzA2Mj",
+    state: "af0ifjsldkj",
+    client_metadata: {
+      vp_formats: {
+        jwt_vp: {
+          alg: ["EdDSA", "ES256K"],
+        },
+        ldp_vp: {
+          proof_type: ["Ed25519Signature2018"],
+        },
+      },
+      // Add any additional required metadata here
+    },
+
     // response_uri: response_uri, //TODO Note: If the Client Identifier scheme redirect_uri is used in conjunction with the Response Mode direct_post, and the response_uri parameter is present, the client_id value MUST be equal to the response_uri value
-    // iss: serverURL,
-    // state: state,
-    // exp: Math.floor(Date.now() / 1000) + 60,
-    // nonce: nonce,
-    // iat: Math.floor(Date.now() / 1000),
-    // nbf: Math.floor(Date.now() / 1000),
-    // redirect_uri: redirect_uri,
-    // scope: "openid",
-    
   };
 
   // const header = {
@@ -95,6 +101,130 @@ export function buildVpRequestJwt(
   //   header,
   // });
   return jwtPayload;
+}
+
+export async function buildVpRequestJWT(
+  client_id,
+  redirect_uri,
+  presentation_definition,
+  privateKey = "",
+  client_id_scheme = "redirect_uri", // Default to "redirect_uri"
+  client_metadata = {},
+  kid =null, // Default to an empty object,
+  serverURL
+) {
+  const nonce = generateNonce(16);
+  const state = generateNonce(16);
+
+  if (client_id_scheme === "x509_san_dns") {
+    privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
+    const certificate = fs.readFileSync(
+      "./x509/client_certificate.crt",
+      "utf8"
+    );
+    // Convert certificate to Base64 without headers
+    const certBase64 = certificate
+      .replace("-----BEGIN CERTIFICATE-----", "")
+      .replace("-----END CERTIFICATE-----", "")
+      .replace(/\s+/g, "");
+
+    // The result is a JWS-signed JWT [RFC7519]. If signed, the Authorization Request Object SHOULD contain 
+    // the Claims iss (issuer) and aud (audience) as members with their semantics being the same as defined in the JWT [RFC7519] specification. 
+    // The value of aud should be the value of the authorization server (AS) issuer, as defined in RFC 8414 [RFC8414]  
+
+    // Construct the JWT payload
+    let jwtPayload = {
+      response_type: "vp_token",
+      response_mode: "direct_post",
+      client_id: client_id, // this should match the dns record in the certificate (dss.aegean.gr)
+      client_id_scheme: client_id_scheme,
+      presentation_definition: presentation_definition,
+      response_uri: redirect_uri,
+      nonce: nonce,
+      state: state,
+      client_metadata: client_metadata, //
+      iss: serverURL,
+      aud: serverURL
+    };
+
+    // Define the JWT header
+    // const header = {
+    //   alg: "ES256",
+    //   kid: `aegean#authentication-key`, // Ensure this kid is resolvable from the did.json endpoint
+    // };
+    const header = {
+      alg: "RS256",
+      typ: "JWT",
+      x5c: [certBase64],
+    };
+
+    const jwt = await new jose.SignJWT(jwtPayload)
+      .setProtectedHeader(header)
+      .sign(await jose.importPKCS8(privateKey, "RS256"));
+
+    return jwt;
+
+    // Conditional signing based on client_id_scheme
+
+    //}
+    // else if (client_id_scheme !== "redirect_uri") {
+    //         // Do NOT sign the JWT for "redirect_uri" scheme
+    //     // Sign the JWT as per the scheme's requirements
+    //     const token = jwt.sign(jwtPayload, privateKey, {
+    //       algorithm: "ES256",
+    //       noTimestamp: true, // Retain if necessary
+    //       header,
+    //     });
+    //     return token;
+
+    //   return jwtPayload;
+    // }
+  } else if (client_id_scheme === "did:jwks") {
+     
+    const signingKey = {
+      kty: "EC",
+      x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
+      y: "SfFShWAUGEnNx24V2b5G1jrhJNHmMwtgROBOi9OKJLc",
+      crv: "P-256",
+      use: "sig",
+      kid: kid,
+    };
+  
+    // Convert the private key to a KeyLike object
+    const privateKeyObj = await jose.importPKCS8(
+      privateKey,
+      signingKey.alg || "ES256"
+    );
+
+    const jwtPayload = {
+      response_type: "vp_token",
+      response_mode: "direct_post",
+      client_id: client_id, // DID the did of the verifier!!!!!!
+      client_id_scheme: client_id_scheme,
+      presentation_definition: presentation_definition,
+      redirect_uri: redirect_uri,
+      nonce: nonce,
+      state: state,
+      client_metadata: client_metadata,
+    };
+
+    // JWT header
+    const header = {
+      alg: signingKey.alg || "ES256",
+      typ: "JWT",
+      kid: kid,
+    };
+
+    const jwt = await new jose.SignJWT(jwtPayload)
+      .setProtectedHeader(header)
+      .sign(privateKeyObj);
+
+    return jwt;
+
+    // Conditional signing based on client_id_scheme
+  } else {
+    throw new Error("not supported client_id_scheme:" + client_id_scheme);
+  }
 }
 
 export async function decryptJWE(jweToken, privateKeyPEM) {
@@ -116,14 +246,13 @@ export async function decryptJWE(jweToken, privateKeyPEM) {
   }
 }
 
-
 export async function base64UrlEncodeSha256(codeVerifier) {
   // Convert the code verifier string to an ArrayBuffer with ASCII encoding
   const encoder = new TextEncoder();
   const data = encoder.encode(codeVerifier);
 
   // Calculate the SHA-256 hash of the ArrayBuffer
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashBuffer = await crypto.subtle.digest("sha-256", data);
 
   // Convert the ArrayBuffer to a Uint8Array
   const hashArray = new Uint8Array(hashBuffer);
@@ -132,7 +261,10 @@ export async function base64UrlEncodeSha256(codeVerifier) {
   const base64String = btoa(String.fromCharCode.apply(null, hashArray));
 
   // Convert Base64 to Base64URL by replacing '+' with '-', '/' with '_', and stripping '='
-  const base64UrlString = base64String.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const base64UrlString = base64String
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 
   return base64UrlString;
 }
