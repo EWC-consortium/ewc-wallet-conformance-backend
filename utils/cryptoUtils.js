@@ -4,6 +4,7 @@ import * as jose from "jose";
 import base64url from "base64url";
 import { error } from "console";
 import fs from "fs";
+import {generateRefreshToken} from "./tokenUtils.js"
 
 export function pemToJWK(pem, keyType) {
   let key;
@@ -110,7 +111,7 @@ export async function buildVpRequestJWT(
   privateKey = "",
   client_id_scheme = "redirect_uri", // Default to "redirect_uri"
   client_metadata = {},
-  kid =null, // Default to an empty object,
+  kid = null, // Default to an empty object,
   serverURL
 ) {
   const nonce = generateNonce(16);
@@ -128,9 +129,9 @@ export async function buildVpRequestJWT(
       .replace("-----END CERTIFICATE-----", "")
       .replace(/\s+/g, "");
 
-    // The result is a JWS-signed JWT [RFC7519]. If signed, the Authorization Request Object SHOULD contain 
-    // the Claims iss (issuer) and aud (audience) as members with their semantics being the same as defined in the JWT [RFC7519] specification. 
-    // The value of aud should be the value of the authorization server (AS) issuer, as defined in RFC 8414 [RFC8414]  
+    // The result is a JWS-signed JWT [RFC7519]. If signed, the Authorization Request Object SHOULD contain
+    // the Claims iss (issuer) and aud (audience) as members with their semantics being the same as defined in the JWT [RFC7519] specification.
+    // The value of aud should be the value of the authorization server (AS) issuer, as defined in RFC 8414 [RFC8414]
 
     // Construct the JWT payload
     let jwtPayload = {
@@ -144,7 +145,7 @@ export async function buildVpRequestJWT(
       state: state,
       client_metadata: client_metadata, //
       iss: serverURL,
-      aud: serverURL
+      aud: serverURL,
     };
 
     // Define the JWT header
@@ -180,7 +181,6 @@ export async function buildVpRequestJWT(
     //   return jwtPayload;
     // }
   } else if (client_id_scheme === "did:jwks") {
-     
     const signingKey = {
       kty: "EC",
       x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
@@ -189,7 +189,7 @@ export async function buildVpRequestJWT(
       use: "sig",
       kid: kid,
     };
-  
+
     // Convert the private key to a KeyLike object
     const privateKeyObj = await jose.importPKCS8(
       privateKey,
@@ -225,6 +225,58 @@ export async function buildVpRequestJWT(
   } else {
     throw new Error("not supported client_id_scheme:" + client_id_scheme);
   }
+}
+
+export async function jarOAutTokenResponse(generatedAccessToken, authorization_details, id_token=null) {
+  let privateKeyPem = fs.readFileSync(
+    "./didjwks/did_private_pkcs8.key",
+    "utf8"
+  );
+
+  const signingKey = {
+    kty: "EC",
+    x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
+    y: "SfFShWAUGEnNx24V2b5G1jrhJNHmMwtgROBOi9OKJLc",
+    crv: "P-256",
+    use: "sig",
+    kid:"bbd2-2a02-587-8704-c700-8f13-d81a-2e8e-1215.ngrok-free.app#keys-1"//kid,
+  };
+
+  // Convert the private key to a KeyLike object
+  const privateKeyObj = await jose.importPKCS8(
+    privateKeyPem,
+    signingKey.alg || "ES256"
+  );
+
+  const jwtPayload = {
+    access_token: generatedAccessToken,
+    refresh_token: generateRefreshToken(),
+    token_type: "bearer",
+    expires_in: 86400,
+    // id_token: buildIdToken(serverURL, privateKey),
+    c_nonce: generateNonce(),
+    c_nonce_expires_in: 86400,
+   
+  };
+  if(id_token){
+    jwtPayload.id_token=id_token
+  }
+  if( authorization_details){
+    jwtPayload.authorization_details= authorizatiton_details;
+  }
+
+  // JWT header
+  const header = {
+    alg: signingKey.alg || "ES256",
+    typ: "JWT",
+    kid: "bbd2-2a02-587-8704-c700-8f13-d81a-2e8e-1215.ngrok-free.app#keys-1"//kid,
+  };
+
+  const jwt = await new jose.SignJWT(jwtPayload)
+    .setProtectedHeader(header)
+    .sign(privateKeyObj);
+
+  return jwt;
 }
 
 export async function decryptJWE(jweToken, privateKeyPEM) {
