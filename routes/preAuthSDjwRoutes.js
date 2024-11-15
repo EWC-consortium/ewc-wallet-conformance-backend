@@ -48,7 +48,7 @@ import {
   getGenericSDJWTData,
   getEPassportSDJWTData,
   createEPassportPayload,
-  getVReceiptSDJWTData
+  getVReceiptSDJWTData,
 } from "../utils/credPayloadUtil.js";
 
 const router = express.Router();
@@ -169,8 +169,6 @@ router.get(["/credential-offer-no-code/:id"], (req, res) => {
   });
 });
 
-
-
 /**
  * --------------------  HAIP ---------------------------------
  * pre-authorised flow with a transaction code, credential offer
@@ -188,6 +186,8 @@ router.get(["/credential-offer-no-code/:id"], (req, res) => {
 
 router.get(["/haip-offer-tx-code"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  uudi=uuid+"x509"
+
   const credentialType = req.query.credentialType
     ? req.query.credentialType
     : "VerifiablePortableDocumentA2SDJWT";
@@ -220,7 +220,6 @@ router.get(["/haip-credential-offer-tx-code/:id"], (req, res) => {
   const credentialType = req.query.type
     ? req.query.type
     : "VerifiablePortableDocumentA2SDJWT";
-  console.log(credentialType);
   res.json({
     credential_issuer: serverURL,
     credential_configuration_ids: [credentialType],
@@ -237,13 +236,6 @@ router.get(["/haip-credential-offer-tx-code/:id"], (req, res) => {
     },
   });
 });
-
-
-
-
-
-
-
 
 // *********************************************************************
 
@@ -272,85 +264,74 @@ router.post("/token_endpoint", async (req, res) => {
   //TODO CHECK IF THE  AUTHORIZATION REQUEST WAS done via a authorization_details or scope parameter
   let authorization_details = getAuthCodeAuthorizationDetail().get(code);
 
-  if (grantType == "urn:ietf:params:oauth:grant-type:pre-authorized_code") {
-    console.log("pre-auth code flow");
-    const preSessions = getPreCodeSessions();
-    let index = preSessions.sessions.indexOf(preAuthorizedCode);
-    if (index >= 0) {
-      console.log(
-        `credential for session ${preAuthorizedCode} has been issued`
-      );
-      preSessions.results[index].status = "success";
-      preSessions.accessTokens[index] = generatedAccessToken;
-      let personaId = getPersonaPart(preAuthorizedCode);
-      if (personaId) {
-        preSessions.personas[index] = personaId;
-      } else {
-        preSessions.personas[index] = null;
-      }
-      // console.log("pre-auth code flow" + preSessions.results[index].status);
-    }
+  if (!(code || preAuthorizedCode)) {
+    res.sendStatus(400); // if authorization code or preAuthorizedCode is not submitted return BAD Request
   } else {
-    if (grantType == "authorization_code") {
-      const codeSessions = getAuthCodeSessions();
-    console.log("codeSessions ==> grantType == authorization_code")
-      console.log(codeSessions)
-      console.log(code)
-      const index = codeSessions.results.findIndex(
-        (result) => result.sessionId === code
-      );
-      console.log(index)
+    if (grantType == "urn:ietf:params:oauth:grant-type:pre-authorized_code") {
+      console.log("pre-auth code flow");
+      const preSessions = getPreCodeSessions();
+      let index = preSessions.sessions.indexOf(preAuthorizedCode);
       if (index >= 0) {
-        codeSessions.results[index]["status"] = "success";
+        console.log(
+          `credential for session ${preAuthorizedCode} has been issued`
+        );
+        preSessions.results[index].status = "success";
+        preSessions.accessTokens[index] = generatedAccessToken;
+        let personaId = getPersonaPart(preAuthorizedCode);
+        if (personaId) {
+          preSessions.personas[index] = personaId;
+        } else {
+          preSessions.personas[index] = null;
+        }
+        // console.log("pre-auth code flow" + preSessions.results[index].status);
       }
-      console.log("Updatetd Code sessions")
-      console.log(codeSessions)
+    } else {
+      if (grantType == "authorization_code") {
+        const codeSessions = getAuthCodeSessions();
+        console.log("codeSessions ==> grantType == authorization_code");
+        console.log(codeSessions);
+        console.log(code);
+        const index = codeSessions.results.findIndex(
+          (result) => result.sessionId === code
+        );
+        console.log(index);
+        if (index >= 0) {
+          codeSessions.results[index]["status"] = "success";
+        }
+        console.log("Updatetd Code sessions");
+        console.log(codeSessions);
 
-      //TODO if PKCE validattiton fails the flow should
-      validatePKCE(
-        codeSessions.requests,
-        code,
-        code_verifier,
-        codeSessions.results
-      );
+        //TODO if PKCE validattiton fails the flow should
+        validatePKCE(
+          codeSessions.requests,
+          code,
+          code_verifier,
+          codeSessions.results
+        );
+      }
     }
-  }
-  //TODO return error if code flow validation fails and is not a pre-auth flow
+    //TODO return error if code flow validation fails and is not a pre-auth flow
 
-  if (authorization_details) {
-   //TODO sign this to follow JAR/HAIP
-    // res.json({
-    //   access_token: generatedAccessToken,
-    //   refresh_token: generateRefreshToken(),
-    //   token_type: "bearer",
-    //   expires_in: 86400,
-    //   // id_token: buildIdToken(serverURL, privateKey),
-    //   c_nonce: generateNonce(),
-    //   c_nonce_expires_in: 86400,
-    //   authorization_details: authorizatiton_details,
-    // });
-    let jar = jarOAutTokenResponse(generatedAccessToken,authorizatiton_details);
-    res.json({ jar});
-
-
-
-  } else {
-
-    //TODO sign this to follow JAR/HAIP
-
-    // res.json({
-    //   access_token: generatedAccessToken,
-    //   refresh_token: generateRefreshToken(),
-    //   token_type: "bearer",
-    //   expires_in: 86400,
-    //   id_token: buildIdToken(serverURL, privateKey),
-    //   c_nonce: generateNonce(),
-    //   c_nonce_expires_in: 86400,
-    // });
-    let jar = jarOAutTokenResponse(generatedAccessToken,null,buildIdToken(serverURL, privateKey));
-    res.json({ jar});
-
-
+    if (authorization_details) {
+      res.json({
+        access_token: generatedAccessToken,
+        refresh_token: generateRefreshToken(),
+        token_type: "bearer",
+        expires_in: 86400,
+        // id_token: buildIdToken(serverURL, privateKey),
+        c_nonce: generateNonce(),
+        c_nonce_expires_in: 86400,
+        authorization_details: authorizatiton_details,
+      });
+  
+    } else {
+      let jar = jarOAutTokenResponse(
+        generatedAccessToken,
+        null,
+        buildIdToken(serverURL, privateKey)
+      );
+      res.json(jar);
+    }
   }
 });
 
@@ -426,6 +407,12 @@ router.post("/credential", async (req, res) => {
       // console.log("Token:", token);
       // console.log("Request Body:", requestBody);
       let credType = vct; // VerifiablePortableDocumentA1SDJWT or VerifiablePortableDocumentA2SDJWT
+      
+      //TODO 
+      // check if the this is a HAIP flow...  (for pre-auth flow...)
+      // if this is a HAIP flow then we need to sign this with an X509 certificate
+      //................
+
       const { signer, verifier } = await createSignerVerifier(
         pemToJWK(privateKey, "private"),
         pemToJWK(publicKeyPem, "public")
@@ -455,8 +442,7 @@ router.post("/credential", async (req, res) => {
           credPayload = getGenericSDJWTData(decodedHeaderSubjectDID);
         } else if (credType === "VerifiablevReceiptSDJWT") {
           credPayload = getVReceiptSDJWTData(decodedHeaderSubjectDID);
-        }
-        else if (credType === "VerifiablePortableDocumentA2SDJWT") {
+        } else if (credType === "VerifiablePortableDocumentA2SDJWT") {
           credPayload = getGenericSDJWTData(decodedHeaderSubjectDID);
         }
 
@@ -477,12 +463,12 @@ router.post("/credential", async (req, res) => {
         );
 
         console.log("sending credential");
-        console.log({
-          format: "vc+sd-jwt",
-          credential: credential,
-          c_nonce: generateNonce(),
-          c_nonce_expires_in: 86400,
-        });
+        // console.log({
+        //   format: "vc+sd-jwt",
+        //   credential: credential,
+        //   c_nonce: generateNonce(),
+        //   c_nonce_expires_in: 86400,
+        // });
 
         res.json({
           format: "vc+sd-jwt",

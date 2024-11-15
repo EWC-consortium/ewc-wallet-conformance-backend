@@ -4,7 +4,7 @@ import * as jose from "jose";
 import base64url from "base64url";
 import { error } from "console";
 import fs from "fs";
-import {generateRefreshToken} from "./tokenUtils.js"
+import { generateRefreshToken } from "./tokenUtils.js";
 
 export function pemToJWK(pem, keyType) {
   let key;
@@ -227,20 +227,17 @@ export async function buildVpRequestJWT(
   }
 }
 
-export async function jarOAutTokenResponse(generatedAccessToken, authorization_details, id_token=null) {
-  let privateKeyPem = fs.readFileSync(
-    "./didjwks/did_private_pkcs8.key",
-    "utf8"
-  );
+export async function jarOAutTokenResponse(
+  generatedAccessToken,
+  authorization_details,
+  id_token = null
+) {
+  // these need to be singed by the same key/alg and keyId
+  // exposed in the /jwks endpoint of the OAUTH server
 
-  const signingKey = {
-    kty: "EC",
-    x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
-    y: "SfFShWAUGEnNx24V2b5G1jrhJNHmMwtgROBOi9OKJLc",
-    crv: "P-256",
-    use: "sig",
-    kid:"bbd2-2a02-587-8704-c700-8f13-d81a-2e8e-1215.ngrok-free.app#keys-1"//kid,
-  };
+  const privateKeyPem = fs.readFileSync("./private-key-pkcs8.pem", "utf-8");
+  const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
+  const signingKey = pemToJWK(publicKeyPem, "public");
 
   // Convert the private key to a KeyLike object
   const privateKeyObj = await jose.importPKCS8(
@@ -256,25 +253,30 @@ export async function jarOAutTokenResponse(generatedAccessToken, authorization_d
     // id_token: buildIdToken(serverURL, privateKey),
     c_nonce: generateNonce(),
     c_nonce_expires_in: 86400,
-   
   };
-  if(id_token){
-    jwtPayload.id_token=id_token
+  if (id_token) {
+    jwtPayload.id_token = id_token;
   }
-  if( authorization_details){
-    jwtPayload.authorization_details= authorizatiton_details;
+  if (authorization_details) {
+    jwtPayload.authorization_details = authorizatiton_details;
   }
 
   // JWT header
   const header = {
     alg: signingKey.alg || "ES256",
     typ: "JWT",
-    kid: "bbd2-2a02-587-8704-c700-8f13-d81a-2e8e-1215.ngrok-free.app#keys-1"//kid,
+    kid: "aegean#authentication-key", //kid,
   };
 
   const jwt = await new jose.SignJWT(jwtPayload)
     .setProtectedHeader(header)
     .sign(privateKeyObj);
+
+  return {
+    access_token: jwt,
+    token_type: "bearer",
+    expires_in: jwtPayload.expires_in,
+  };
 
   return jwt;
 }
