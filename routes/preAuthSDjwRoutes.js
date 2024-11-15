@@ -326,12 +326,15 @@ router.post("/token_endpoint", async (req, res) => {
       });
   
     } else {
-      let jar = jarOAutTokenResponse(
-        generatedAccessToken,
-        null,
-        buildIdToken(serverURL, privateKey)
-      );
-      res.json(jar);
+      res.json({
+        access_token: generatedAccessToken,
+        refresh_token: generateRefreshToken(),
+        token_type: "bearer",
+        expires_in: 86400,
+        id_token: buildIdToken(serverURL, privateKey),
+        c_nonce: generateNonce(),
+        c_nonce_expires_in: 86400,
+      });
     }
   }
 });
