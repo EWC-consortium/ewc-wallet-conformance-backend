@@ -29,6 +29,7 @@ import {
   createSignerVerifier,
   digest,
   generateSalt,
+  createSignerVerifierX509,
 } from "../utils/sdjwtUtils.js";
 import jwt from "jsonwebtoken";
 
@@ -412,19 +413,40 @@ router.post("/credential", async (req, res) => {
       // check if the this is a HAIP flow...  (for pre-auth flow...)
       // if this is a HAIP flow then we need to sign this with an X509 certificate
       //................
+      let sdjwt =null;
+      if(){
+        const privateKeyPem = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
+        const certificatePem = fs.readFileSync(
+          "./x509/client_certificate.crt",
+          "utf8"
+        );
 
-      const { signer, verifier } = await createSignerVerifier(
-        pemToJWK(privateKey, "private"),
-        pemToJWK(publicKeyPem, "public")
-      );
-      const sdjwt = new SDJwtVcInstance({
-        signer,
-        verifier,
-        signAlg: "ES256",
-        hasher: digest,
-        hashAlg: "sha-256",
-        saltGenerator: generateSalt,
-      });
+        const { signer, verifier } = await createSignerVerifier(privateKeyPem, certificatePem);
+        sdjwt = new SDJwtVcInstance({
+          signer,
+          verifier,
+          signAlg: 'ES256',
+          hasher: digest,
+          hashAlg: 'sha-256',
+          saltGenerator: generateSalt,
+        });
+
+      }else{
+        const { signer, verifier } = await createSignerVerifier(
+          pemToJWK(privateKey, "private"),
+          pemToJWK(publicKeyPem, "public")
+        );
+        sdjwt = new SDJwtVcInstance({
+          signer,
+          verifier,
+          signAlg: "ES256",
+          hasher: digest,
+          hashAlg: "sha-256",
+          saltGenerator: generateSalt,
+        });
+      }
+
+
 
       let credPayload = {};
       try {
