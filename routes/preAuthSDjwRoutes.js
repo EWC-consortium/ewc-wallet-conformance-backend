@@ -414,7 +414,7 @@ router.post("/credential", async (req, res) => {
       // if this is a HAIP flow then we need to sign this with an X509 certificate
       //................
       let sdjwt =null;
-      if(){
+      if(false){
         const privateKeyPem = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
         const certificatePem = fs.readFileSync(
           "./x509/client_certificate.crt",
