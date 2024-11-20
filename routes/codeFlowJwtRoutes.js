@@ -89,6 +89,9 @@ export function updateIssuerStateWithAuthCodeAfterVP(
     // console.log("codeFlowRequestResults of " + index)
     // console.log(codeFlowRequestsResults[index])
     // console.log(codeFlowRequests[index])
+    //codeSessions.sessions,
+    // codeSessions.results,
+    // codeSessions.requests
 
     codeFlowRequestsResults[index]["sessionId"] = code;
     codeFlowRequests[index]["sessionId"] = code;

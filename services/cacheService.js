@@ -12,6 +12,13 @@ let pushedAuthorizationRequests = new Map();
 let sessionsAuthorizationDetail = new Map();
 let authCodeAuthorizationDetail = new Map();
 
+
+/*
+
+*/
+
+
+
 export function getPreCodeSessions() {
   return {
     sessions: sessions,

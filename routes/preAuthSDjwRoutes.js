@@ -14,15 +14,18 @@ import {
 } from "../utils/tokenUtils.js";
 
 import {
-  getCredentialSubjectForPersona,
-  getPersonaFromAccessToken,
-} from "../utils/personasUtils.js";
-
-import {
   getAuthCodeSessions,
-  getPreCodeSessions,
   getAuthCodeAuthorizationDetail,
 } from "../services/cacheService.js";
+
+import {
+  storePreAuthSession,
+  getPreAuthSession,
+  getSessionKeyFromAccessToken,
+  getCodeFlowSession,
+  storeCodeFlowSession,
+  getSessionKeyAuthCode,
+} from "../services/cacheServiceRedis.js";
 
 import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 import {
@@ -76,11 +79,16 @@ router.get(["/offer-tx-code"], async (req, res) => {
     ? req.query.credentialType
     : "VerifiablePortableDocumentA2SDJWT";
 
-  const preSessions = getPreCodeSessions();
-  if (preSessions.sessions.indexOf(uuid) < 0) {
-    preSessions.sessions.push(uuid);
-    preSessions.results.push({ sessionId: uuid, status: "pending" });
+  let existingPreAuthSession = await getPreAuthSession(uuid);
+  if (!existingPreAuthSession) {
+    storePreAuthSession(uuid, {
+      status: "pending",
+      resulut: null,
+      persona: null,
+      accessToken: null,
+    });
   }
+
   let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-tx-code/${uuid}?type=${credentialType}`; //OfferUUID
   let code = qr.image(credentialOffer, {
     type: "png",
@@ -131,10 +139,14 @@ router.get(["/offer-no-code"], async (req, res) => {
     ? req.query.credentialType
     : "VerifiablePortableDocumentA2SDJWT";
 
-  const preSessions = getPreCodeSessions();
-  if (preSessions.sessions.indexOf(uuid) < 0) {
-    preSessions.sessions.push(uuid);
-    preSessions.results.push({ sessionId: uuid, status: "pending" });
+  let existingPreAuthSession = await getPreAuthSession(uuid);
+  if (!existingPreAuthSession) {
+    storePreAuthSession(uuid, {
+      status: "pending",
+      resulut: null,
+      persona: null,
+      accessToken: null,
+    });
   }
   let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-no-code/${uuid}?type=${credentialType}`; //OfferUUID
   let code = qr.image(credentialOffer, {
@@ -187,16 +199,20 @@ router.get(["/credential-offer-no-code/:id"], (req, res) => {
 
 router.get(["/haip-offer-tx-code"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  uudi=uuid+"x509"
+  uudi = uuid + "x509";
 
   const credentialType = req.query.credentialType
     ? req.query.credentialType
     : "VerifiablePortableDocumentA2SDJWT";
 
-  const preSessions = getPreCodeSessions();
-  if (preSessions.sessions.indexOf(uuid) < 0) {
-    preSessions.sessions.push(uuid);
-    preSessions.results.push({ sessionId: uuid, status: "pending" });
+  let existingPreAuthSession = await getPreAuthSession(uuid);
+  if (!existingPreAuthSession) {
+    storePreAuthSession(uuid, {
+      status: "pending",
+      resulut: null,
+      persona: null,
+      accessToken: null,
+    });
   }
   let credentialOffer = `haip://?credential_offer_uri=${serverURL}/haip-credential-offer-tx-code/${uuid}?type=${credentialType}`; //OfferUUID
   let code = qr.image(credentialOffer, {
@@ -270,45 +286,41 @@ router.post("/token_endpoint", async (req, res) => {
   } else {
     if (grantType == "urn:ietf:params:oauth:grant-type:pre-authorized_code") {
       console.log("pre-auth code flow");
-      const preSessions = getPreCodeSessions();
-      let index = preSessions.sessions.indexOf(preAuthorizedCode);
-      if (index >= 0) {
+      let existingPreAuthSession = await getPreAuthSession(preAuthorizedCode);
+      //if (index >= 0) {
+      if (existingPreAuthSession) {
         console.log(
           `credential for session ${preAuthorizedCode} has been issued`
         );
-        preSessions.results[index].status = "success";
-        preSessions.accessTokens[index] = generatedAccessToken;
+        existingPreAuthSession.status = "success";
+        existingPreAuthSession.accessTokens = generatedAccessToken;
         let personaId = getPersonaPart(preAuthorizedCode);
         if (personaId) {
-          preSessions.personas[index] = personaId;
-        } else {
-          preSessions.personas[index] = null;
+          existingPreAuthSession.persona = personaId;
         }
-        // console.log("pre-auth code flow" + preSessions.results[index].status);
+        storePreAuthSession(preAuthorizedCode, existingPreAuthSession);
       }
     } else {
       if (grantType == "authorization_code") {
-        const codeSessions = getAuthCodeSessions();
         console.log("codeSessions ==> grantType == authorization_code");
-        console.log(codeSessions);
         console.log(code);
-        const index = codeSessions.results.findIndex(
-          (result) => result.sessionId === code
-        );
-        console.log(index);
-        if (index >= 0) {
-          codeSessions.results[index]["status"] = "success";
+        let issuanceSessionId = await getSessionKeyAuthCode(code);
+        if (issuanceSessionId) {
+          let existingCodeSession = await getCodeFlowSession(issuanceSessionId);
+          if (existingCodeSession) {
+            existingCodeSession.results.status = "success";
+            existingCodeSession.status = "success";
+            storeCodeFlowSession(existingCodeSession.results.issuerState, existingCodeSession);
+          }
         }
-        console.log("Updatetd Code sessions");
-        console.log(codeSessions);
 
         //TODO if PKCE validattiton fails the flow should
-        validatePKCE(
-          codeSessions.requests,
-          code,
-          code_verifier,
-          codeSessions.results
-        );
+        // validatePKCE(
+        //   codeSessions.requests,
+        //   code,
+        //   code_verifier,
+        //   codeSessions.results
+        // );
       }
     }
     //TODO return error if code flow validation fails and is not a pre-auth flow
@@ -324,7 +336,6 @@ router.post("/token_endpoint", async (req, res) => {
         c_nonce_expires_in: 86400,
         authorization_details: authorizatiton_details,
       });
-  
     } else {
       res.json({
         access_token: generatedAccessToken,
@@ -411,30 +422,35 @@ router.post("/credential", async (req, res) => {
       // console.log("Token:", token);
       // console.log("Request Body:", requestBody);
       let credType = vct; // VerifiablePortableDocumentA1SDJWT or VerifiablePortableDocumentA2SDJWT
-      
-      //TODO 
+
+      //TODO
       // check if the this is a HAIP flow...  (for pre-auth flow...)
       // if this is a HAIP flow then we need to sign this with an X509 certificate
       //................
-      let sdjwt =null;
-      if(false){
-        const privateKeyPem = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
+      let sdjwt = null;
+      if (false) {
+        const privateKeyPem = fs.readFileSync(
+          "./x509/client_private_pkcs8.key",
+          "utf8"
+        );
         const certificatePem = fs.readFileSync(
           "./x509/client_certificate.crt",
           "utf8"
         );
 
-        const { signer, verifier } = await createSignerVerifier(privateKeyPem, certificatePem);
+        const { signer, verifier } = await createSignerVerifier(
+          privateKeyPem,
+          certificatePem
+        );
         sdjwt = new SDJwtVcInstance({
           signer,
           verifier,
-          signAlg: 'ES256',
+          signAlg: "ES256",
           hasher: digest,
-          hashAlg: 'sha-256',
+          hashAlg: "sha-256",
           saltGenerator: generateSalt,
         });
-
-      }else{
+      } else {
         const { signer, verifier } = await createSignerVerifier(
           pemToJWK(privateKey, "private"),
           pemToJWK(publicKeyPem, "public")
@@ -448,8 +464,6 @@ router.post("/credential", async (req, res) => {
           saltGenerator: generateSalt,
         });
       }
-
-
 
       let credPayload = {};
       try {
@@ -522,25 +536,19 @@ router.post("/credential", async (req, res) => {
 //issuerConfig.credential_endpoint = serverURL + "/credential";
 
 //ITB
-router.get(["/issueStatus"], (req, res) => {
+router.get(["/issueStatus"], async (req, res) => {
   let sessionId = req.query.sessionId;
+  let existingPreAuthSession = await getPreAuthSession(sessionId);
+  let perAuthStatus = existingPreAuthSession
+    ? existingPreAuthSession.status
+    : null;
 
-  // walletCodeSessions,codeFlowRequestsResults,codeFlowRequests
-  const preSessions = getPreCodeSessions();
-  const codeSessions = getAuthCodeSessions();
+  let codeFlowSession = await getCodeFlowSession(sessionId);
+  let codeFlowStatus = codeFlowSession ? codeFlowSession.status : null;
+
   let result =
-    checkIfExistsIssuanceStatus(
-      sessionId,
-      preSessions.sessions,
-      preSessions.results
-    ) ||
-    checkIfExistsIssuanceStatus(
-      sessionId,
-      codeSessions.sessions,
-      codeSessions.results,
-      codeSessions.walletSessions,
-      codeSessions.requests
-    );
+    perAuthStatus ||
+    codeFlowStatus;
   if (result) {
     console.log("wi9ll send result");
     console.log({
