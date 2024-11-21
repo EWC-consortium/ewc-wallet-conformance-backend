@@ -308,19 +308,14 @@ router.post("/token_endpoint", async (req, res) => {
         if (issuanceSessionId) {
           let existingCodeSession = await getCodeFlowSession(issuanceSessionId);
           if (existingCodeSession) {
+            //TODO if PKCE validattiton fails the flow should
+            validatePKCE(existingCodeSession, code, code_verifier, existingCodeSession.results)
+
             existingCodeSession.results.status = "success";
             existingCodeSession.status = "success";
             storeCodeFlowSession(existingCodeSession.results.issuerState, existingCodeSession);
           }
         }
-
-        //TODO if PKCE validattiton fails the flow should
-        // validatePKCE(
-        //   codeSessions.requests,
-        //   code,
-        //   code_verifier,
-        //   codeSessions.results
-        // );
       }
     }
     //TODO return error if code flow validation fails and is not a pre-auth flow
@@ -607,26 +602,43 @@ function checkIfExistsIssuanceStatus(
   return null;
 }
 
-async function validatePKCE(sessions, code, code_verifier, issuanceResults) {
-  for (let i = 0; i < sessions.length; i++) {
-    let element = sessions[i];
-    if (code === element.sessionId) {
-      let challenge = element.challenge;
-      let tester = await base64UrlEncodeSha256(code_verifier);
-      if (tester === challenge) {
-        issuanceResults[i].status = "success";
-        console.log("code flow status:" + issuanceResults[i].status);
-      } else {
-        console.log(
-          "PCKE ERROR tester and challenge do not match " +
-            tester +
-            "-" +
-            challenge
-        );
-      }
+// async function validatePKCE(sessions, code, code_verifier, issuanceResults) {
+//   for (let i = 0; i < sessions.length; i++) {
+//     let element = sessions[i];
+//     if (code === element.sessionId) {
+//       let challenge = element.challenge;
+//       let tester = await base64UrlEncodeSha256(code_verifier);
+//       if (tester === challenge) {
+//         issuanceResults[i].status = "success";
+//         console.log("code flow status:" + issuanceResults[i].status);
+//       } else {
+//         console.log(
+//           "PCKE ERROR tester and challenge do not match " +
+//             tester +
+//             "-" +
+//             challenge
+//         );
+//       }
+//     }
+//   }
+// }
+
+
+async function validatePKCE(sessions,code,code_verifier,issuanceResults){
+  if(code = sessions.requests.challenge){
+    let challenge = sessions.challenge
+    let tester = await base64UrlEncodeSha256(code_verifier);
+    if (tester === challenge) {
+      codeSessions.results.status = "success";
+      console.log("PKCE verification success")
+      return true
     }
   }
+  console.log("PKCE verification FAILED!!!")
+  return false
 }
+
+
 
 function getPersonaPart(inputString) {
   const personaKey = "persona=";
