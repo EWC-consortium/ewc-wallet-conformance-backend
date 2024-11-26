@@ -800,3 +800,144 @@ export const getVReceiptSDJWTData = (decodedHeaderSubjectDID) => {
 
   return { claims, disclosureFrame };
 };
+
+export const getVReceiptSDJWTDataWithPayload = (
+  payload,
+  decodedHeaderSubjectDID
+) => {
+  const claims = {
+    id: decodedHeaderSubjectDID || "",
+    ...payload,
+  };
+
+  const disclosureFrame = {
+    _sd: [
+      "id",
+
+      // Monetary Total
+      "MonetaryTotal.lineExtensionAmount",
+      "MonetaryTotal.taxInclusiveAmount",
+      "MonetaryTotal.payableAmount",
+
+      // Tax Total
+      "TaxTotal.taxSubtotal_",
+      "TaxTotal.taxAmount",
+
+      // Address
+      "Address.streetName",
+      "Address.cityName",
+      "Address.postcode",
+      "Address.countryIdentifier",
+
+      // Tax Category
+      "TaxCategory.taxScheme_",
+
+      // Item Property
+      "ItemProperty.itemPropertyName",
+      "ItemProperty.value",
+
+      // Tax Scheme
+      "TaxScheme.taxSchemeName",
+
+      // Allowance Charge
+      "AllowanceCharge.amount",
+      "AllowanceCharge.allowanceChargeReason",
+
+      // Party Name
+      "PartyName.name",
+
+      // Payment Means
+      "PaymentMeans.cardAccount_",
+      "PaymentMeans.paymentMeansCode",
+
+      // Party Identification
+      "PartyIdentification.iD",
+
+      // Purchase Receipt
+      "PurchaseReceipt.paymentMeans_",
+      "PurchaseReceipt.note",
+      "PurchaseReceipt.delivery_",
+      "PurchaseReceipt.taxIncludedIndicator",
+      "PurchaseReceipt.taxTotal_",
+      "PurchaseReceipt.accountingCustomerParty_",
+      "PurchaseReceipt.documentCurrencyCode",
+      "PurchaseReceipt.payment_",
+      "PurchaseReceipt.sellerSupplierParty",
+      "PurchaseReceipt.legalMonetaryTotal",
+      "PurchaseReceipt.salesDocumentReference",
+      "PurchaseReceipt.iD",
+      "PurchaseReceipt.issueDate",
+      "PurchaseReceipt.purchaseReceiptLine-1",
+
+      // Tax Subtotal
+      "TaxSubtotal.taxableAmount",
+      "TaxSubtotal.taxSubtotalTaxAmount",
+      "TaxSubtotal.taxCategory_",
+      "TaxSubtotal.percent",
+
+      // Item
+      "Item.commodityClassification_",
+      "Item.itemInstance_",
+      "Item.additionalItemProperty",
+
+      // Payment
+      "Payment.authorizationID",
+      "Payment.paidAmount",
+      "Payment.transactionID",
+
+      // Supplier Party
+      "SupplierParty.party_",
+      "SupplierParty.supplierPartyID",
+
+      // Party
+      "Party.partyIdentification_.iD",
+      "Party.partyName_.name",
+      "Party.postalAddress_.streetName",
+      "Party.postalAddress_.cityName",
+      "Party.postalAddress_.postcode",
+      "Party.postalAddress_.countryIdentifier",
+
+      // Commodity Classification
+      "CommodityClassification.itemClassificationCode",
+
+      // Card Account
+      "CardAccount.networkID",
+      "CardAccount.accountNumberID",
+
+      // Customer Party
+      "CustomerParty.party_.partyIdentification_.iD",
+      "CustomerParty.party_.partyName_.name",
+      "CustomerParty.party_.postalAddress_.streetName",
+      "CustomerParty.party_.postalAddress_.cityName",
+      "CustomerParty.party_.postalAddress_.postcode",
+      "CustomerParty.party_.postalAddress_.countryIdentifier",
+
+      // Purchase Receipt Line
+      "PurchaseReceiptLine.item_.commodityClassification_.itemClassificationCode",
+      "PurchaseReceiptLine.item_.itemInstance_.additionalItemProperty.itemPropertyName",
+      "PurchaseReceiptLine.item_.itemInstance_.additionalItemProperty.value",
+      "PurchaseReceiptLine.quantity",
+      "PurchaseReceiptLine.allowanceCharge_.amount",
+      "PurchaseReceiptLine.allowanceCharge_.allowanceChargeReason",
+      "PurchaseReceiptLine.taxInclusiveLineExtentionAmount",
+      "PurchaseReceiptLine.iD",
+
+      // Delivery
+      "Delivery.actualDeliveryDate",
+      "Delivery.deliveryAddress.streetName",
+      "Delivery.deliveryAddress.cityName",
+      "Delivery.deliveryAddress.postcode",
+      "Delivery.deliveryAddress.countryIdentifier",
+      "Delivery.actualDeliveryTime",
+
+      // Document Reference
+      "DocumentReference.iD",
+
+      // Item Instance
+      "ItemInstance.additionalItemProperty.itemPropertyName",
+      "ItemInstance.additionalItemProperty.value",
+    ],
+  };
+
+  return { claims, disclosureFrame };
+};

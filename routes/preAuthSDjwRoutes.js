@@ -25,6 +25,7 @@ import {
   getCodeFlowSession,
   storeCodeFlowSession,
   getSessionKeyAuthCode,
+  
 } from "../services/cacheServiceRedis.js";
 
 import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
@@ -53,6 +54,7 @@ import {
   getEPassportSDJWTData,
   createEPassportPayload,
   getVReceiptSDJWTData,
+  getVReceiptSDJWTDataWithPayload
 } from "../utils/credPayloadUtil.js";
 
 const router = express.Router();
@@ -146,6 +148,43 @@ router.get(["/offer-no-code"], async (req, res) => {
       resulut: null,
       persona: null,
       accessToken: null,
+    });
+  }
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-no-code/${uuid}?type=${credentialType}`; //OfferUUID
+  let code = qr.image(credentialOffer, {
+    type: "png",
+    ec_level: "H",
+    size: 10,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  res.json({
+    qr: encodedQR,
+    deepLink: credentialOffer,
+    sessionId: uuid,
+  });
+});
+
+/**
+ * pre-authorised flow without a transaction code request AND REQUEST BODY
+ */
+router.post(["/offer-no-code"], async (req, res) => {
+  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  const credentialType = req.query.credentialType
+    ? req.query.credentialType
+    : "VerifiablePortableDocumentA2SDJWT";
+
+  const credentialPayload = req.body;
+
+  let existingPreAuthSession = await getPreAuthSession(uuid);
+  if (!existingPreAuthSession) {
+    storePreAuthSession(uuid, {
+      status: "pending",
+      resulut: null,
+      persona: null,
+      accessToken: null,
+      credentialPayload: credentialPayload,
     });
   }
   let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-no-code/${uuid}?type=${credentialType}`; //OfferUUID
@@ -293,7 +332,7 @@ router.post("/token_endpoint", async (req, res) => {
           `credential for session ${preAuthorizedCode} has been issued`
         );
         existingPreAuthSession.status = "success";
-        existingPreAuthSession.accessTokens = generatedAccessToken;
+        existingPreAuthSession.accessToken = generatedAccessToken;
         let personaId = getPersonaPart(preAuthorizedCode);
         if (personaId) {
           existingPreAuthSession.persona = personaId;
@@ -309,11 +348,19 @@ router.post("/token_endpoint", async (req, res) => {
           let existingCodeSession = await getCodeFlowSession(issuanceSessionId);
           if (existingCodeSession) {
             //TODO if PKCE validattiton fails the flow should
-            validatePKCE(existingCodeSession, code, code_verifier, existingCodeSession.results)
+            validatePKCE(
+              existingCodeSession,
+              code,
+              code_verifier,
+              existingCodeSession.results
+            );
 
             existingCodeSession.results.status = "success";
             existingCodeSession.status = "success";
-            storeCodeFlowSession(existingCodeSession.results.issuerState, existingCodeSession);
+            storeCodeFlowSession(
+              existingCodeSession.results.issuerState,
+              existingCodeSession
+            );
           }
         }
       }
@@ -368,6 +415,12 @@ router.post("/credential", async (req, res) => {
   }
 
   let payload = {};
+
+  const sessionKey = await getSessionKeyFromAccessToken(token);
+  let sessionObject;
+  if (sessionKey) {
+    sessionObject = await getPreAuthSession(sessionKey);
+  }
 
   if (format === "jwt_vc_json") {
     console.log("jwt ", requestedCredentials);
@@ -475,7 +528,14 @@ router.post("/credential", async (req, res) => {
         } else if (credType === "VerifiablePortableDocumentA1SDJWT") {
           credPayload = getGenericSDJWTData(decodedHeaderSubjectDID);
         } else if (credType === "VerifiablevReceiptSDJWT") {
-          credPayload = getVReceiptSDJWTData(decodedHeaderSubjectDID);
+          if (sessionObject) {
+            credPayload = getVReceiptSDJWTDataWithPayload(
+              sessionObject.credentialPayload,
+              decodedHeaderSubjectDID
+            );
+          } else {
+            credPayload = getVReceiptSDJWTData(decodedHeaderSubjectDID);
+          }
         } else if (credType === "VerifiablePortableDocumentA2SDJWT") {
           credPayload = getGenericSDJWTData(decodedHeaderSubjectDID);
         }
@@ -541,9 +601,7 @@ router.get(["/issueStatus"], async (req, res) => {
   let codeFlowSession = await getCodeFlowSession(sessionId);
   let codeFlowStatus = codeFlowSession ? codeFlowSession.status : null;
 
-  let result =
-    perAuthStatus ||
-    codeFlowStatus;
+  let result = perAuthStatus || codeFlowStatus;
   if (result) {
     console.log("wi9ll send result");
     console.log({
@@ -623,22 +681,19 @@ function checkIfExistsIssuanceStatus(
 //   }
 // }
 
-
-async function validatePKCE(sessions,code,code_verifier,issuanceResults){
-  if(code = sessions.requests.challenge){
-    let challenge = sessions.challenge
+async function validatePKCE(sessions, code, code_verifier, issuanceResults) {
+  if ((code = sessions.requests.challenge)) {
+    let challenge = sessions.challenge;
     let tester = await base64UrlEncodeSha256(code_verifier);
     if (tester === challenge) {
       codeSessions.results.status = "success";
-      console.log("PKCE verification success")
-      return true
+      console.log("PKCE verification success");
+      return true;
     }
   }
-  console.log("PKCE verification FAILED!!!")
-  return false
+  console.log("PKCE verification FAILED!!!");
+  return false;
 }
-
-
 
 function getPersonaPart(inputString) {
   const personaKey = "persona=";

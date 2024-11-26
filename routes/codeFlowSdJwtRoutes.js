@@ -386,8 +386,8 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
         encodeURIComponent(request_uri);
 
       return res.redirect(302, vpRequest);
-    } else if (client_id_scheme == "did:jwk") {
-      console.log("client_id_scheme did:jwk");
+    } else if (client_id_scheme == "did") {
+      console.log("client_id_scheme did");
       let request_uri = `${serverURL}/didJwksVPrequest_dynamic/${issuerState}`;
       const clientId = "dss.aegean.gr";
       let vpRequest =
