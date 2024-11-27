@@ -1,4 +1,5 @@
 import { getCredentialSubjectForPersona } from "./personasUtils.js";
+import { v4 as uuidv4 } from "uuid";
 
 // Helper functions to create payloads for different credential types
 
@@ -43,7 +44,7 @@ export const createPIDPayload = (token, serverURL, decodedHeaderSubjectDID) => {
 export const createEPassportPayload = (serverURL, decodedHeaderSubjectDID) => {
   return {
     iss: serverURL,
-    sub: decodedHeaderSubjectDID || "",
+    sub: decodedHeaderSubjectDID || uuidv4(),
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour)
     jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
@@ -139,7 +140,7 @@ export const createStudentIDPayload = (
   );
 
   let credentialSubject = {
-    id: decodedHeaderSubjectDID || "",
+    id: decodedHeaderSubjectDID || uuidv4(),
     identifier: "john.doe@university.edu",
     schacPersonalUniqueCode: [
       "urn:schac:personalUniqueCode:int:esi:university.edu:12345",
@@ -216,10 +217,10 @@ export const createStudentIDPayload = (
   };
 };
 
-export const createAllianceIDPayload = (serverURL, decodedHeaderSubjectDID) => {
+export const createAllianceIDPayload = (serverURL, ) => {
   return {
     iss: serverURL,
-    sub: decodedHeaderSubjectDID || "",
+    sub: decodedHeaderSubjectDID || uuidv4(),
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
     iat: Math.floor(Date.now() / 1000),
     jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
@@ -260,7 +261,7 @@ export const createFerryBoardingPassPayload = (
   );
 
   let credentialSubject = {
-    id: decodedHeaderSubjectDID || "",
+    id: decodedHeaderSubjectDID || uuidv4(),
     identifier: "John Doe",
     ticketQR: "data:image/png;base64,someBase64EncodedQR",
     ticketNumber: "ABC123456789",
@@ -338,7 +339,7 @@ export const getPIDSDJWTData = (decodedHeaderSubjectDID) => {
   const currentDate = new Date();
   const expTimestamp = currentDate.setFullYear(currentDate.getFullYear() + 1);
   const claims = {
-    id: decodedHeaderSubjectDID || "",
+    id: decodedHeaderSubjectDID || uuidv4(),
     given_name: "John",
     family_name: "Doe",
     birth_date: "1990-01-01",
@@ -368,7 +369,7 @@ export const getPIDSDJWTData = (decodedHeaderSubjectDID) => {
 
 export const getStudentIDSDJWTData = (decodedHeaderSubjectDID) => {
   const claims = {
-    id: decodedHeaderSubjectDID || "",
+    id: decodedHeaderSubjectDID || uuidv4(),
     identifier: "john.doe@university.edu",
     schacPersonalUniqueCode: [
       "urn:schac:personalUniqueCode:int:esi:university.edu:12345",
@@ -416,7 +417,7 @@ export const getStudentIDSDJWTData = (decodedHeaderSubjectDID) => {
 
 export const getAllianceIDSDJWTData = (decodedHeaderSubjectDID) => {
   const claims = {
-    id: decodedHeaderSubjectDID || "",
+    id: decodedHeaderSubjectDID || uuidv4(),
     identifier: {
       schemeID: "European Student Identifier",
       value:
@@ -434,7 +435,7 @@ export const getAllianceIDSDJWTData = (decodedHeaderSubjectDID) => {
 
 export const getFerryBoardingPassSDJWTData = (decodedHeaderSubjectDID) => {
   const claims = {
-    id: decodedHeaderSubjectDID || "",
+    id: decodedHeaderSubjectDID ||uuidv4(),
     identifier: "John Doe",
     ticketQR: "data:image/png;base64,someBase64EncodedQR",
     ticketNumber: "ABC123456789",
@@ -476,13 +477,13 @@ export const getFerryBoardingPassSDJWTData = (decodedHeaderSubjectDID) => {
 
 export const getGenericSDJWTData = (decodedHeaderSubjectDID, credType) => {
   const claims = {
-    id: decodedHeaderSubjectDID || "",
+    id: decodedHeaderSubjectDID || uuidv4(),
     given_name: "John",
     last_name: "Doe",
   };
 
   const disclosureFrame = {
-    _sd: ["id", "given_name", "last_name"],
+    _sd: ["given_name", "last_name"],
   };
 
   return { claims, disclosureFrame };
@@ -490,7 +491,7 @@ export const getGenericSDJWTData = (decodedHeaderSubjectDID, credType) => {
 
 export const getEPassportSDJWTData = (decodedHeaderSubjectDID) => {
   const claims = {
-    id: decodedHeaderSubjectDID || "",
+    id: decodedHeaderSubjectDID || uuidv4(),
     electronicPassport: {
       dataGroup1: {
         birthdate: "1990-01-01",
@@ -532,7 +533,7 @@ export const getEPassportSDJWTData = (decodedHeaderSubjectDID) => {
 
 export const getVReceiptSDJWTData = (decodedHeaderSubjectDID) => {
   const claims = {
-    id: decodedHeaderSubjectDID || "",
+    id: decodedHeaderSubjectDID ||uuidv4(),
 
     // Monetary Total
     "MonetaryTotal.lineExtensionAmount": 150.75,
@@ -806,7 +807,7 @@ export const getVReceiptSDJWTDataWithPayload = (
   decodedHeaderSubjectDID
 ) => {
   const claims = {
-    id: decodedHeaderSubjectDID || "",
+    id: decodedHeaderSubjectDID || uuidv4(),
     ...payload,
   };
 

@@ -74,7 +74,6 @@ codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
 });
 
 // auth code-flow request
-
 // with dynamic cred request and client_id_scheme == redirect_uri
 codeFlowRouterSDJWT.get(["/credential-offer-code-sd-jwt/:id"], (req, res) => {
   const credentialType = req.query.credentialType
@@ -159,13 +158,19 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   let issuerState = decodeURIComponent(req.query.issuer_state); // This can be associated with the ITB session
   let state = req.query.state; //wallet state
   let client_id = decodeURIComponent(req.query.client_id); //DID of the holder requesting the credential
-  let authorizationDetails = req.query.authorization_details;
+  let authorizationDetails = req.query.authorization_details; //contains the requested credentals
   let redirect_uri = req.query.redirect_uri;
   let code_challenge = req.query.code_challenge;
   let code_challenge_method = req.query.code_challenge_method;
   let authorizationHeader = req.headers["authorization"]; // Fetch the 'Authorization' header
   let claims = "";
   let client_metadata = req.query.client_metadata;
+
+  const nonce = req.query.nonce;
+  const codeChallenge = decodeURIComponent(req.query.code_challenge);
+  const codeChallengeMethod = req.query.code_challenge_method; //this should equal to S256
+
+  let isPIDIssuanceFlow=false;
 
   //validations
   let errors = [];
@@ -201,9 +206,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   const redirectUri = redirect_uri
     ? decodeURIComponent(redirect_uri)
     : "openid4vp://";
-  const nonce = req.query.nonce;
-  const codeChallenge = decodeURIComponent(req.query.code_challenge);
-  const codeChallengeMethod = req.query.code_challenge_method; //this should equal to S256
+  
   try {
     if (client_metadata) {
       const clientMetadata = JSON.parse(decodeURIComponent(client_metadata));
@@ -238,6 +241,9 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       if (authorizationDetails.length > 0) {
         authorizationDetails.forEach((item) => {
           let cred = fetchVCTorCredentialConfigId(item);
+          if(cred === "eu.europa.ec.eudi.pid.1"){
+            isPIDIssuanceFlow = true;
+          }
           // cache authorizationDetails for the direct_post endpoint (it is needed to assosiate it with the auth. code generated there)
           getSessionsAuthorizationDetail().set(
             issuerState,

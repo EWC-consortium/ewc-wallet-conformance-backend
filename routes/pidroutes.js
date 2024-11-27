@@ -13,9 +13,13 @@ import {
 } from "../utils/tokenUtils.js";
 
 import {
-  getAuthCodeSessions,
-  getPreCodeSessions,
-} from "../services/cacheService.js";
+  storePreAuthSession,
+  getPreAuthSession,
+  getSessionKeyFromAccessToken,
+  getCodeFlowSession,
+  storeCodeFlowSession,
+  getSessionKeyAuthCode,
+} from "../services/cacheServiceRedis.js";
 
 import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 import {
@@ -36,14 +40,21 @@ const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
 
-pidRouter.get(["/pre-offer-jwt-pid"], async (req, res) => {
+pidRouter.get(["/issue-pid-pre-auth"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const preSessions = getPreCodeSessions();
-  if (preSessions.sessions.indexOf(uuid) < 0) {
-    preSessions.sessions.push(uuid);
-    preSessions.results.push({ sessionId: uuid, status: "pending" });
+  const credentialType = "eu.europa.ec.eudi.pid.1";
+
+  let existingPreAuthSession = await getPreAuthSession(uuid);
+  if (!existingPreAuthSession) {
+    storePreAuthSession(uuid, {
+      status: "pending",
+      resulut: null,
+      persona: null,
+      accessToken: null,
+      isPID: true,
+    });
   }
-  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-pre-jwt-pid/${uuid}`; //OfferUUID
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/pid-pre-auth-offer/${uuid}?type=${credentialType}`;
   let code = qr.image(credentialOffer, {
     type: "png",
     ec_level: "H",
@@ -59,58 +70,48 @@ pidRouter.get(["/pre-offer-jwt-pid"], async (req, res) => {
   });
 });
 
-//Presonals for Piloting
-pidRouter.get(["/offer-pid-persona"], async (req, res) => {
-  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const personaId = req.query.personaId;
-  const preSessions = getPreCodeSessions();
-  if (preSessions.sessions.indexOf(uuid + "-persona=" + personaId) < 0) {
-    preSessions.sessions.push(uuid + "-persona=" + personaId);
-    preSessions.results.push({ sessionId: uuid, status: "pending" });
-    preSessions.personas.push(null);
-    preSessions.accessTokens.push(null);
+pidRouter.get(["/pid-pre-auth-offer/:id"], async (req, res) => {
+  const credentialType = req.query.type
+    ? req.query.type
+    : "eu.europa.ec.eudi.pid.1";
+  console.log(credentialType);
+  if (credentialType !== "eu.europa.ec.eudi.pid.1") {
+    res.status(500);
+    return;
   }
-  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-pre-jwt-pid/${uuid}?persona=${personaId}`; //OfferUUID
-  let code = qr.image(credentialOffer, {
-    type: "png",
-    ec_level: "H",
-    size: 10,
-    margin: 10,
-  });
-  let mediaType = "PNG";
-  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+
+  // assign a pre-auth code to session to verify afterwards
+  let existingPreAuthSession = await getPreAuthSession(req.params.id);
+  if (existingPreAuthSession) {
+    existingPreAuthSession["preAuthCode"]="1234" //TODO generate a random code here
+    storePreAuthSession(req.params.id, existingPreAuthSession);
+  }
+
+
   res.json({
-    qr: encodedQR,
-    deepLink: credentialOffer,
-    sessionId: uuid,
+    credential_issuer: serverURL,
+    credential_configuration_ids: [credentialType],
+
+    //TODO Verify this can be added here.. doesn't seem part of OIDC4VCI spec... 
+    // trust_framework: {
+    //   name: "ewc-issuer-trust-list",
+    //   type: "Accreditation",
+    //   uri: "Link to the issuer trust list",
+    // },
+
+    grants: {
+      "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
+        "pre-authorized_code": req.params.id,
+        tx_code: {
+          length: 4,
+          input_mode: "numeric",
+          description:
+            "Please provide the one-time code that was sent via e-mail or offline",
+        },
+      },
+    },
   });
 });
 
-pidRouter.get(["/credential-offer-pre-jwt-pid/:id"], (req, res) => {
-  let persona = req.query.persona;
-  if (!persona) {
-    res.json({
-      credential_issuer: serverURL,
-      credentials: ["PID"],
-      grants: {
-        "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
-          "pre-authorized_code": req.params.id,
-          user_pin_required: true,
-        },
-      },
-    });
-  } else {
-    res.json({
-      credential_issuer: serverURL,
-      credentials: ["PID"],
-      grants: {
-        "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
-          "pre-authorized_code": req.params.id + "-persona=" + persona,
-          user_pin_required: true,
-        },
-      },
-    });
-  }
-});
 
 export default pidRouter;

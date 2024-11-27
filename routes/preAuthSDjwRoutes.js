@@ -25,7 +25,6 @@ import {
   getCodeFlowSession,
   storeCodeFlowSession,
   getSessionKeyAuthCode,
-  
 } from "../services/cacheServiceRedis.js";
 
 import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
@@ -54,7 +53,7 @@ import {
   getEPassportSDJWTData,
   createEPassportPayload,
   getVReceiptSDJWTData,
-  getVReceiptSDJWTDataWithPayload
+  getVReceiptSDJWTDataWithPayload,
 } from "../utils/credPayloadUtil.js";
 
 const router = express.Router();
@@ -304,9 +303,23 @@ router.post("/token_endpoint", async (req, res) => {
   const authorizationHeader = req.headers["authorization"]; // Fetch the 'Authorization' header
   console.log("token_endpoint authorizatiotn header-" + authorizationHeader);
 
+  const clientAttestation = req.headers["OAuth-Client-Attestation"]; //this is the WUA
+  const pop = req.headers["OAuth-Client-Attestation-PoP"];
+
   //pre-auth code flow
   const preAuthorizedCode = req.body["pre-authorized_code"]; // req.body["pre-authorized_code"]
   const tx_code = req.body["tx_code"];
+  //TODO check tx_code as well
+
+  // check if for this auth session we are issuing a PID credential to validate the WUA and PoP
+  if (preAuthorizedCode) {
+    let existingPreAuthSession = await getPreAuthSession(preAuthorizedCode);
+    if (existingPreAuthSession.isPID) {
+      console.log("pid issuance detected will check WUA and PoP");
+      console.log(clientAttestation);
+      console.log(pop);
+    }
+  }
 
   //code flow
   const grantType = req.body.grant_type;
@@ -404,10 +417,10 @@ router.post("/credential", async (req, res) => {
   const requestedCredentials = requestBody.credential_definition
     ? requestBody.credential_definition.type
     : null;
-  const decodedHeaderSubjectDID =
-    requestBody.proof && requestBody.proof.jwt
-      ? jwt.decode(requestBody.proof.jwt, { complete: true }).payload.iss
-      : null;
+  // const decodedHeaderSubjectDID =
+  //   requestBody.proof && requestBody.proof.jwt
+  //     ? jwt.decode(requestBody.proof.jwt, { complete: true }).payload.iss
+  //     : null;
 
   if (!requestBody.proof || !requestBody.proof.jwt) {
     console.log("NO keybinding info found!!!");
@@ -425,22 +438,22 @@ router.post("/credential", async (req, res) => {
   if (format === "jwt_vc_json") {
     console.log("jwt ", requestedCredentials);
     if (requestedCredentials && requestedCredentials[0] === "PID") {
-      payload = createPIDPayload(token, serverURL, decodedHeaderSubjectDID);
+      payload = createPIDPayload(token, serverURL, "");
     } else if (
       requestedCredentials &&
       requestedCredentials[0] === "ePassportCredential"
     ) {
-      payload = createEPassportPayload(serverURL, decodedHeaderSubjectDID);
+      payload = createEPassportPayload(serverURL, "");
     } else if (
       requestedCredentials &&
       requestedCredentials[0] === "StudentID"
     ) {
-      payload = createStudentIDPayload(serverURL, decodedHeaderSubjectDID);
+      payload = createStudentIDPayload(serverURL, "");
     } else if (
       requestedCredentials &&
       requestedCredentials[0] === "ferryBoardingPassCredential"
     ) {
-      payload = createEPassportPayload(serverURL, decodedHeaderSubjectDID);
+      payload = createEPassportPayload(serverURL, "");
     }
 
     const signOptions = { algorithm: "ES256" };
@@ -460,7 +473,6 @@ router.post("/credential", async (req, res) => {
     let vct = requestBody.vct;
     console.log("vc+sd-jwt ", vct);
 
-    let decodedHeaderSubjectDID;
     if (requestBody.proof && requestBody.proof.jwt) {
       // console.log(requestBody.proof.jwt)
       let decodedWithHeader = jwt.decode(requestBody.proof.jwt, {
@@ -515,29 +527,26 @@ router.post("/credential", async (req, res) => {
 
       let credPayload = {};
       try {
-        if (credType === "VerifiablePIDSDJWT") {
-          credPayload = getPIDSDJWTData(decodedHeaderSubjectDID);
+        if (credType === "VerifiablePIDSDJWT" || credType === "eu.europa.ec.eudi.pid.1") {
+          credPayload = getPIDSDJWTData();
         } else if (credType === "VerifiableePassportCredentialSDJWT") {
-          credPayload = getEPassportSDJWTData(decodedHeaderSubjectDID);
+          credPayload = getEPassportSDJWTData();
         } else if (credType === "VerifiableStudentIDSDJWT") {
-          credPayload = getStudentIDSDJWTData(decodedHeaderSubjectDID);
+          credPayload = getStudentIDSDJWTData();
         } else if (credType === "ferryBoardingPassCredential") {
-          credPayload = VerifiableFerryBoardingPassCredentialSDJWT(
-            decodedHeaderSubjectDID
-          );
+          credPayload = VerifiableFerryBoardingPassCredentialSDJWT();
         } else if (credType === "VerifiablePortableDocumentA1SDJWT") {
-          credPayload = getGenericSDJWTData(decodedHeaderSubjectDID);
+          credPayload = getGenericSDJWTData();
         } else if (credType === "VerifiablevReceiptSDJWT") {
           if (sessionObject) {
             credPayload = getVReceiptSDJWTDataWithPayload(
-              sessionObject.credentialPayload,
-              decodedHeaderSubjectDID
+              sessionObject.credentialPayload
             );
           } else {
-            credPayload = getVReceiptSDJWTData(decodedHeaderSubjectDID);
+            credPayload = getVReceiptSDJWTData();
           }
         } else if (credType === "VerifiablePortableDocumentA2SDJWT") {
-          credPayload = getGenericSDJWTData(decodedHeaderSubjectDID);
+          credPayload = getGenericSDJWTData();
         }
 
         const cnf = { jwk: holderJWKS.jwk };
