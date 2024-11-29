@@ -112,7 +112,9 @@ export async function buildVpRequestJWT(
   client_id_scheme = "redirect_uri", // Default to "redirect_uri"
   client_metadata = {},
   kid = null, // Default to an empty object,
-  serverURL
+  serverURL,
+  response_type= "vp_token",
+
 ) {
   const nonce = generateNonce(16);
   const state = generateNonce(16);
@@ -135,18 +137,24 @@ export async function buildVpRequestJWT(
 
     // Construct the JWT payload
     let jwtPayload = {
-      response_type: "vp_token",
+      response_type: response_type,
       response_mode: "direct_post",
       client_id: client_id, // this should match the dns record in the certificate (dss.aegean.gr)
       client_id_scheme: client_id_scheme,
-      presentation_definition: presentation_definition,
       response_uri: redirect_uri,
       nonce: nonce,
       state: state,
       client_metadata: client_metadata, //
       iss: serverURL,
       aud: serverURL,
+      scope:"openid"
     };
+
+    if(presentation_definition){
+      jwtPayload.presentation_definition= presentation_definition;
+    } 
+
+
 
     // Define the JWT header
     // const header = {
@@ -165,21 +173,6 @@ export async function buildVpRequestJWT(
 
     return jwt;
 
-    // Conditional signing based on client_id_scheme
-
-    //}
-    // else if (client_id_scheme !== "redirect_uri") {
-    //         // Do NOT sign the JWT for "redirect_uri" scheme
-    //     // Sign the JWT as per the scheme's requirements
-    //     const token = jwt.sign(jwtPayload, privateKey, {
-    //       algorithm: "ES256",
-    //       noTimestamp: true, // Retain if necessary
-    //       header,
-    //     });
-    //     return token;
-
-    //   return jwtPayload;
-    // }
   } else if (client_id_scheme === "did:jwks") {
     const signingKey = {
       kty: "EC",
@@ -197,16 +190,18 @@ export async function buildVpRequestJWT(
     );
 
     const jwtPayload = {
-      response_type: "vp_token",
+      response_type: response_type,
       response_mode: "direct_post",
       client_id: client_id, // DID the did of the verifier!!!!!!
       client_id_scheme: client_id_scheme,
-      presentation_definition: presentation_definition,
       redirect_uri: redirect_uri,
       nonce: nonce,
       state: state,
       client_metadata: client_metadata,
     };
+    if(presentation_definition){
+      jwtPayload.presentation_definition= presentation_definition
+    }
 
     // JWT header
     const header = {

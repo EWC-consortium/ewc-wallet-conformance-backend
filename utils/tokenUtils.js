@@ -51,44 +51,41 @@ export function buildVPbyValue(
   presentation_definition_uri,
   client_id_scheme = "redirect_uri",
   client_metadata_uri,
-  redirect_uri
+  redirect_uri,
+  state = "af0ifjsldkj",
+  response_type = "vp_token"
 ) {
+  console.log("response_type:", response_type); // Debug log
+  
   if (client_id_scheme == "redirect_uri") {
     redirect_uri = client_id;
   }
 
-  let result =
-    "openid4vp://?client_id=" +
-    encodeURIComponent(client_id) +
-    "&response_type=vp_token" +
-    "&response_mode=direct_post" +
-    "&response_uri=" +
-    encodeURIComponent(redirect_uri) +
-    "&presentation_definition_uri=" +
-    encodeURIComponent(presentation_definition_uri) +
-    "&client_id_scheme=" +
-    client_id_scheme +
-    "&client_metadata_uri=" +
-    encodeURIComponent(client_metadata_uri) +
-    "&nonce=n0S6_WzA2Mj" +
-    "&state=af0ifjsldkj";
-  return result;
-}
-
-export function buildVPbyReference(
-  client_id,
-  presentation_definition_uri,
-  client_id_scheme = "redirect_uri",
-  client_metadata_uri,
-  redirect_uri
-) {
-  if (client_id_scheme == "redirect_uri") {
-    throw new Error("redirect_uri is not supportted for VP by reference");
-  } else {
-    let result =
-      "openid4vp://?client_id=" +
+  if (response_type == "id_token") {
+    let resp =
+      "openid4vp://?" +
+      "client_id=" +
       encodeURIComponent(client_id) +
-      "&response_type=vp_token" +
+      "&response_type=" +
+      response_type +
+      "&response_mode=direct_post" +
+      "&response_uri=" +
+      encodeURIComponent(redirect_uri) +
+      "&client_id_scheme=" +
+      client_id_scheme +
+      "&client_metadata_uri=" +
+      encodeURIComponent(client_metadata_uri) +
+      "&nonce=n0S6_WzA2Mj" + //TODO add a random nonce here
+      "&state=" +
+      state;
+    return resp;
+  } else {
+    let res =
+      "openid4vp://?" +
+      "client_id=" +
+      encodeURIComponent(client_id) +
+      "&response_type=" +
+      response_type +
       "&response_mode=direct_post" +
       "&response_uri=" +
       encodeURIComponent(redirect_uri) +
@@ -98,8 +95,65 @@ export function buildVPbyReference(
       client_id_scheme +
       "&client_metadata_uri=" +
       encodeURIComponent(client_metadata_uri) +
-      "&nonce=n0S6_WzA2Mj" +
-      "&state=af0ifjsldkj";
-    return result;
+      "&nonce=n0S6_WzA2Mj" + //TODO add a random nonce here
+      "&state=" +
+      state 
+      +"&scope=code"
+    return res;
+  }
+}
+
+
+export function buildVPbyReference(
+  client_id,
+  presentation_definition_uri,
+  client_id_scheme = "redirect_uri",
+  client_metadata_uri,
+  redirect_uri,
+  state = "af0ifjsldkj",
+  response_type = "vp_token"
+) {
+  if (client_id_scheme == "redirect_uri") {
+    throw new Error("redirect_uri is not supportted for VP by reference");
+  } else {
+    if (response_type == "id_token") {
+      // state, client_id, redirect_uri, response_type, response_mode, scope, nonce, request_uri
+
+      let result =
+        "openid4vp://?client_id=" +
+        encodeURIComponent(client_id) +
+        "&response_type=" +
+        response_type;
+      "&response_mode=direct_post" +
+        "&response_uri=" +
+        encodeURIComponent(redirect_uri) +
+        "&client_id_scheme=" +
+        client_id_scheme +
+        "&client_metadata_uri=" +
+        encodeURIComponent(client_metadata_uri) +
+        "&nonce=n0S6_WzA2Mj" +
+        "&state=" +
+        state  
+      return result;
+    } else {
+      let result =
+        "openid4vp://?client_id=" +
+        encodeURIComponent(client_id) +
+        "&response_type=" +
+        response_type;
+      "&response_mode=direct_post" +
+        "&response_uri=" +
+        encodeURIComponent(redirect_uri) +
+        "&presentation_definition_uri=" +
+        encodeURIComponent(presentation_definition_uri) +
+        "&client_id_scheme=" +
+        client_id_scheme +
+        "&client_metadata_uri=" +
+        encodeURIComponent(client_metadata_uri) +
+        "&nonce=n0S6_WzA2Mj" +
+        "&state=" +
+        state;
+      return result;
+    }
   }
 }

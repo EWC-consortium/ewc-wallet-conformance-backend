@@ -314,6 +314,7 @@ router.post("/token_endpoint", async (req, res) => {
   // check if for this auth session we are issuing a PID credential to validate the WUA and PoP
   if (preAuthorizedCode) {
     let existingPreAuthSession = await getPreAuthSession(preAuthorizedCode);
+    //TODO validatte WUA and PoP
     if (existingPreAuthSession.isPID) {
       console.log("pid issuance detected will check WUA and PoP");
       console.log(clientAttestation);
@@ -324,7 +325,7 @@ router.post("/token_endpoint", async (req, res) => {
   //code flow
   const grantType = req.body.grant_type;
   const client_id = req.body.client_id;
-  const code = req.body["code"]; //TODO check the code ...
+  const code = req.body["code"]; 
   const code_verifier = req.body["code_verifier"];
   const redirect_uri = req.body["redirect_uri"];
 

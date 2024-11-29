@@ -157,20 +157,20 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   let scope = req.query.scope;
   let issuerState = decodeURIComponent(req.query.issuer_state); // This can be associated with the ITB session
   let state = req.query.state; //wallet state
-  let client_id = decodeURIComponent(req.query.client_id); //DID of the holder requesting the credential
+  let client_id = decodeURIComponent(req.query.client_id); // DID:key  of the holder requesting the credential
   let authorizationDetails = req.query.authorization_details; //contains the requested credentals
-  let redirect_uri = req.query.redirect_uri;
+  let redirect_uri = req.query.redirect_uri; // typically this will be openid
   let code_challenge = req.query.code_challenge;
-  let code_challenge_method = req.query.code_challenge_method;
-  let authorizationHeader = req.headers["authorization"]; // Fetch the 'Authorization' header
-  let claims = "";
-  let client_metadata = req.query.client_metadata;
+
+  let client_metadata = req.query.client_metadata; //details of the wallet
 
   const nonce = req.query.nonce;
-  const codeChallenge = decodeURIComponent(req.query.code_challenge);
-  const codeChallengeMethod = req.query.code_challenge_method; //this should equal to S256
+  code_challenge = decodeURIComponent(req.query.code_challenge);
+  let code_challenge_method = req.query.code_challenge_method; //this should equal to S256
+  let claims;
+  let authorizationHeader;
 
-  let isPIDIssuanceFlow=false;
+  let isPIDIssuanceFlow = false;
 
   //validations
   let errors = [];
@@ -206,7 +206,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   const redirectUri = redirect_uri
     ? decodeURIComponent(redirect_uri)
     : "openid4vp://";
-  
+
   try {
     if (client_metadata) {
       const clientMetadata = JSON.parse(decodeURIComponent(client_metadata));
@@ -218,6 +218,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     console.log(error);
   }
 
+  let credentialsRequested = null;
   // ************CASE 1: With authorizationDetails
   /* required parameters: response_type, client_id, code_challenge, 
     optional: code_challenge_method, authorization_details, redirect_uri, issuer_state
@@ -225,8 +226,8 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   if (authorizationDetails) {
     if (authorizationDetails && !response_type)
       errors.push("authorizationDetails missing response_type");
-    if (authorizationDetails && !client_id)
-      errors.push("authorizationDetails missing client_id");
+    // if (authorizationDetails && !client_id)
+    //   errors.push("authorizationDetails missing client_id");
     if (authorizationDetails && !code_challenge)
       errors.push("authorizationDetails missing code_challenge");
 
@@ -241,8 +242,9 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       if (authorizationDetails.length > 0) {
         authorizationDetails.forEach((item) => {
           let cred = fetchVCTorCredentialConfigId(item);
-          if(cred === "eu.europa.ec.eudi.pid.1"){
+          if (cred === "eu.europa.ec.eudi.pid.1" ||cred.indexOf("eu.europa.ec.eudi.pid.1") >=0 ) {
             isPIDIssuanceFlow = true;
+            credentialsRequested = cred;
           }
           // cache authorizationDetails for the direct_post endpoint (it is needed to assosiate it with the auth. code generated there)
           getSessionsAuthorizationDetail().set(
@@ -270,24 +272,19 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     console.log("authorization_details not found trying scope");
     if (scope) {
       console.log("requested credentials: " + scope);
+      if (scope.indexOf("eu.europa.ec.eudi.pid.1") >= 0) {
+        isPIDIssuanceFlow = true;
+        credentialsRequested = scope;
+      }
     } else {
       errors.push("no credentials requested");
       console.log(`no credentials requested`);
     }
   }
 
-  if (response_type !== "code") {
-    errors.push("Invalid response_type");
-  }
-
-  // ***************************************************************************
   // retrive cleaned ITB session and also get (if specified) the client_id_scheme
-  // ***************************************************************************
-
   const [originalUuid, client_id_scheme] = issuerState.split("|");
   issuerState = originalUuid;
-
-  // ITB Sessions
   const authorizationCode = null; //"SplxlOBeZQQYbYS6WxSbIA";
   let existingCodeSession = await getCodeFlowSession(issuerState);
   if (existingCodeSession) {
@@ -295,8 +292,8 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       walletSession: state,
       requests: {
         redirectUri: redirectUri,
-        challenge: codeChallenge,
-        method: codeChallengeMethod,
+        challenge: code_challenge,
+        method: code_challenge_method,
         sessionId: authorizationCode,
         issuerState: issuerState,
         state: state,
@@ -308,28 +305,14 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
         status: "pending",
       },
       status: "pending",
+      isPIDIssuanceFlow: isPIDIssuanceFlow,
     });
+  } else {
+    console.log("ITB session not found");
   }
 
-  // if (codeSessions.sessions.indexOf(issuerState) >= 0) {
-  //   codeSessions.requests.push({
-  //     redirectUri: redirectUri,
-  //     challenge: codeChallenge,
-  //     method: codeChallengeMethod,
-  //     sessionId: authorizationCode,
-  //     issuerState: issuerState,
-  //     state: state,
-  //   });
-  //   codeSessions.results.push({
-  //     sessionId: authorizationCode,
-  //     issuerState: issuerState,
-  //     state: state,
-  //     status: "pending",
-  //   });
-  //   codeSessions.walletSessions.push(state); // push state as send by wallet
-  // }
-  else {
-    console.log("ITB session not found");
+  if (response_type !== "code") {
+    errors.push("Invalid response_type");
   }
 
   /*
@@ -348,7 +331,9 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       error_description.trim()
     );
     const errorRedirectUrl = `${redirectUri}?error=invalid_request&error_description=${encodedErrorDescription}`;
-    //TODO mark the codeFlowSession as failed
+    existingCodeSession["status"] = "failed";
+    existingCodeSession["results"]["status"] = "failed";
+    storeCodeFlowSession(issuerState, existingCodeSession);
     return res.redirect(302, errorRedirectUrl);
   } else {
     /*
@@ -359,9 +344,6 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     if (client_id_scheme == "redirect_uri") {
       console.log("client_id_scheme redirect_uri");
       const vpRedirectURI = "openid4vp://";
-      // console.log(
-      //   redirect_uri + " but i will request the vp based on " + vpRedirectURI
-      // );
       // changed this to support auth request by value not reference
       //const redirectUrl = `${vpRedirectURI}?state=${state}&client_id=${client_id}&redirect_uri=${serverURL}/direct_post_vci&response_type=id_token&response_mode=direct_post&scope=openid&nonce=${nonce}&request_uri=${serverURL}/request_uri_dynamic`;
       const response_uri = serverURL + "/direct_post_vci" + "/" + issuerState;
@@ -369,21 +351,37 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
         serverURL + "/presentation-definition/itbsdjwt";
       const client_metadata_uri = serverURL + "/client-metadata";
 
-      //response_uri
-      //const redirectUrl = buildVPbyValue(client_id,presentation_definition_uri,"redirect_uri",client_metadata_uri,response_uri)
       // client_id_scheme is set to redirect_uri in OIDC4VP v20, the client_id becomes the redirect_uri
-      const redirectUrl = buildVPbyValue(
+      let redirectUrl = buildVPbyValue(
         response_uri,
         presentation_definition_uri,
         "redirect_uri",
         client_metadata_uri,
         response_uri
       );
-      // console.log("redirectUrl", redirectUrl);
+      if (credentialsRequested.indexOf("eu.europa.ec.eudi.pid.1") >= 0) {
+        //we should request only DID binding in this case
+        console.log("passing id_token!!");
+        redirectUrl = buildVPbyValue(
+          response_uri,
+          null,
+          "redirect_uri",
+          client_metadata_uri,
+          response_uri,
+          issuerState,
+          "id_token"
+        );
+      }
+
       return res.redirect(302, redirectUrl);
     } else if (client_id_scheme == "x509_san_dns") {
       console.log("client_id_scheme x509_san_dns");
       let request_uri = `${serverURL}/x509VPrequest_dynamic/${issuerState}`;
+      if (credentialsRequested.indexOf("eu.europa.ec.eudi.pid.1") >= 0) {
+        //we should request only DID binding in this case
+        request_uri = `${serverURL}/id_token_x509_request_dynamic/${issuerState}`;
+      }
+
       const clientId = "dss.aegean.gr";
       let vpRequest =
         "openid4vp://?client_id=" +
@@ -395,6 +393,10 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     } else if (client_id_scheme == "did") {
       console.log("client_id_scheme did");
       let request_uri = `${serverURL}/didJwksVPrequest_dynamic/${issuerState}`;
+      if (credentialsRequested.indexOf("eu.europa.ec.eudi.pid.1") >= 0) {
+        //we should request only DID binding in this case
+        request_uri = `${serverURL}/id_token_did_request_dynamic/${issuerState}`;
+      }
       const clientId = "dss.aegean.gr";
       let vpRequest =
         "openid4vp://?client_id=" +
@@ -489,6 +491,89 @@ codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
   res.type("text/plain").send(signedVPJWT);
 });
 
+// Dynamic VP request with only id_token
+codeFlowRouterSDJWT.get("/id_token_x509_request_dynamic/:id", async (req, res) => {
+    const uuid = req.params.id ? req.params.id : uuidv4();
+    const response_uri = serverURL + "/direct_post_vci/" + uuid;
+
+    const client_metadata = {
+      client_name: "UAegean EWC Verifier",
+      logo_uri:
+        "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+      location: "Greece",
+      cover_uri: "string",
+      description: "EWC pilot case verification",
+      vp_formats: {
+        "vc+sd-jwt": {
+          alg: ["ES256", "ES384"],
+        },
+      },
+    };
+    const clientId = "dss.aegean.gr";
+    let signedVPJWT = await buildVpRequestJWT(
+      clientId,
+      response_uri,
+      null,
+      "",
+      "x509_san_dns",
+      client_metadata,
+      null,
+      serverURL,
+      "id_token"
+    );
+
+    console.log(signedVPJWT);
+    res.type("text/plain").send(signedVPJWT);
+  }
+);
+
+
+codeFlowRouterSDJWT.get("/id_token_did_request_dynamic/:id", async (req, res) => {
+  const uuid = req.params.id ? req.params.id : uuidv4();
+  const response_uri = serverURL + "/direct_post_vci/" + uuid;
+  const client_metadata = {
+    client_name: "UAegean EWC Verifier",
+    logo_uri: "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+    location: "Greece",
+    cover_uri: "string",
+    description: "EWC pilot case verification",
+    vp_formats: {
+      "vc+sd-jwt": {
+        alg: ["ES256", "ES384"],
+      },
+    },
+  };
+
+  const privateKeyPem = fs.readFileSync(
+    "./didjwks/did_private_pkcs8.key",
+    "utf8"
+  );
+
+  let contorller = serverURL;
+  if (proxyPath) {
+    contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
+  }
+  contorller = contorller.replace("https://", "");
+  const clientId = `did:web:${contorller}`;
+  const presentation_definition_sdJwt = JSON.parse(
+    fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
+  );
+
+  let signedVPJWT = await buildVpRequestJWT(
+    clientId,
+    response_uri,
+    null,
+    privateKeyPem,
+    "did:jwks",
+    client_metadata,
+    `did:web:${contorller}#keys-1`,
+    serverURL,
+    "vp_token id_token"
+  );
+  res.type("text/plain").send(signedVPJWT);
+});
+
+
 /*
   presentation by the wallet during an Issuance part of the Dynamic Credential Request 
 */
@@ -513,13 +598,13 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
 
     // // THE WALLET SENDS A DIFFERENT SATE (THAT IS THE STATE OF THE VP NOT THE VCI)
     // // SO A DIFFERENT UPDATE IS REQUIRED HERE
-  
+
     let existingCodeSession = await getCodeFlowSession(uuid);
     if (existingCodeSession) {
-      let issuanceState = existingCodeSession.results.state //codeSessions.results[sessionIndex].state;
-      existingCodeSession.results.sessionId=authorizationCode
-      existingCodeSession.requests.sessionId=authorizationCode
-      storeCodeFlowSession(issuanceState,existingCodeSession)
+      let issuanceState = existingCodeSession.results.state; //codeSessions.results[sessionIndex].state;
+      existingCodeSession.results.sessionId = authorizationCode;
+      existingCodeSession.requests.sessionId = authorizationCode;
+      storeCodeFlowSession(issuanceState, existingCodeSession);
 
       const redirectUrl = `${existingCodeSession.requests.redirectUri}?code=${authorizationCode}&state=${issuanceState}`;
       // return //res.redirect(302, redirectUrl);
@@ -540,7 +625,10 @@ function fetchVCTorCredentialConfigId(data) {
     return data.vct;
   } else if (data.credential_configuration_id) {
     return data.credential_configuration_id;
-  } else {
+  } else if (data.types){
+    return data.types
+  }
+  else {
     return null; // Return null if neither is found
   }
 }
