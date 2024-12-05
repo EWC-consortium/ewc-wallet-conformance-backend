@@ -77,7 +77,10 @@ export function buildVPbyValue(
       encodeURIComponent(client_metadata_uri) +
       "&nonce=n0S6_WzA2Mj" + //TODO add a random nonce here
       "&state=" +
-      state;
+      state +
+      "&scope=openid"+
+      "&id_token_type=subject_signed"
+      ;
     return resp;
   } else {
     let res =
@@ -104,56 +107,56 @@ export function buildVPbyValue(
 }
 
 
-export function buildVPbyReference(
-  client_id,
-  presentation_definition_uri,
-  client_id_scheme = "redirect_uri",
-  client_metadata_uri,
-  redirect_uri,
-  state = "af0ifjsldkj",
-  response_type = "vp_token"
-) {
-  if (client_id_scheme == "redirect_uri") {
-    throw new Error("redirect_uri is not supportted for VP by reference");
-  } else {
-    if (response_type == "id_token") {
-      // state, client_id, redirect_uri, response_type, response_mode, scope, nonce, request_uri
+// export function buildVPbyReference(
+//   client_id,
+//   presentation_definition_uri,
+//   client_id_scheme = "redirect_uri",
+//   client_metadata_uri,
+//   redirect_uri,
+//   state = "af0ifjsldkj",
+//   response_type = "vp_token"
+// ) {
+//   if (client_id_scheme == "redirect_uri") {
+//     throw new Error("redirect_uri is not supportted for VP by reference");
+//   } else {
+//     if (response_type == "id_token") {
+//       // state, client_id, redirect_uri, response_type, response_mode, scope, nonce, request_uri
 
-      let result =
-        "openid4vp://?client_id=" +
-        encodeURIComponent(client_id) +
-        "&response_type=" +
-        response_type;
-      "&response_mode=direct_post" +
-        "&response_uri=" +
-        encodeURIComponent(redirect_uri) +
-        "&client_id_scheme=" +
-        client_id_scheme +
-        "&client_metadata_uri=" +
-        encodeURIComponent(client_metadata_uri) +
-        "&nonce=n0S6_WzA2Mj" +
-        "&state=" +
-        state  
-      return result;
-    } else {
-      let result =
-        "openid4vp://?client_id=" +
-        encodeURIComponent(client_id) +
-        "&response_type=" +
-        response_type;
-      "&response_mode=direct_post" +
-        "&response_uri=" +
-        encodeURIComponent(redirect_uri) +
-        "&presentation_definition_uri=" +
-        encodeURIComponent(presentation_definition_uri) +
-        "&client_id_scheme=" +
-        client_id_scheme +
-        "&client_metadata_uri=" +
-        encodeURIComponent(client_metadata_uri) +
-        "&nonce=n0S6_WzA2Mj" +
-        "&state=" +
-        state;
-      return result;
-    }
-  }
-}
+//       let result =
+//         "openid4vp://?client_id=" +
+//         encodeURIComponent(client_id) +
+//         "&response_type=" +
+//         response_type;
+//       "&response_mode=direct_post" +
+//         "&response_uri=" +
+//         encodeURIComponent(redirect_uri) +
+//         "&client_id_scheme=" +
+//         client_id_scheme +
+//         "&client_metadata_uri=" +
+//         encodeURIComponent(client_metadata_uri) +
+//         "&nonce=n0S6_WzA2Mj" +
+//         "&state=" +
+//         state  
+//       return result;
+//     } else {
+//       let result =
+//         "openid4vp://?client_id=" +
+//         encodeURIComponent(client_id) +
+//         "&response_type=" +
+//         response_type;
+//       "&response_mode=direct_post" +
+//         "&response_uri=" +
+//         encodeURIComponent(redirect_uri) +
+//         "&presentation_definition_uri=" +
+//         encodeURIComponent(presentation_definition_uri) +
+//         "&client_id_scheme=" +
+//         client_id_scheme +
+//         "&client_metadata_uri=" +
+//         encodeURIComponent(client_metadata_uri) +
+//         "&nonce=n0S6_WzA2Mj" +
+//         "&state=" +
+//         state;
+//       return result;
+//     }
+//   }
+// }

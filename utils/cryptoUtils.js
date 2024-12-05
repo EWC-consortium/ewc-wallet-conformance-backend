@@ -113,8 +113,7 @@ export async function buildVpRequestJWT(
   client_metadata = {},
   kid = null, // Default to an empty object,
   serverURL,
-  response_type= "vp_token",
-
+  response_type = "vp_token"
 ) {
   const nonce = generateNonce(16);
   const state = generateNonce(16);
@@ -147,14 +146,15 @@ export async function buildVpRequestJWT(
       client_metadata: client_metadata, //
       iss: serverURL,
       aud: serverURL,
-      scope:"openid"
     };
+    if (response_type.indexOf("id_token") >=0 ) {
+      jwtPayload["id_token_type"] = "subject_signed";
+      jwtPayload["scope"] = "openid";
+    }
 
-    if(presentation_definition){
-      jwtPayload.presentation_definition= presentation_definition;
-    } 
-
-
+    if (presentation_definition) {
+      jwtPayload.presentation_definition = presentation_definition;
+    }
 
     // Define the JWT header
     // const header = {
@@ -172,8 +172,7 @@ export async function buildVpRequestJWT(
       .sign(await jose.importPKCS8(privateKey, "RS256"));
 
     return jwt;
-
-  } else if (client_id_scheme === "did:jwks") {
+  } else if (client_id_scheme.indexOf("did")>=0) {
     const signingKey = {
       kty: "EC",
       x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
@@ -199,8 +198,12 @@ export async function buildVpRequestJWT(
       state: state,
       client_metadata: client_metadata,
     };
-    if(presentation_definition){
-      jwtPayload.presentation_definition= presentation_definition
+    if (presentation_definition) {
+      jwtPayload.presentation_definition = presentation_definition;
+    }
+    if (response_type.indexOf("id_token") >=0) {
+      jwtPayload["id_token_type"] = "subject_signed";
+      jwtPayload["scope"] = "openid";
     }
 
     // JWT header

@@ -418,12 +418,15 @@ router.post("/credential", async (req, res) => {
   const requestedCredentials = requestBody.credential_definition
     ? requestBody.credential_definition.type
     : null;
-  // const decodedHeaderSubjectDID =
-  //   requestBody.proof && requestBody.proof.jwt
-  //     ? jwt.decode(requestBody.proof.jwt, { complete: true }).payload.iss
-  //     : null;
 
   if (!requestBody.proof || !requestBody.proof.jwt) {
+    /*
+     Object containing the proof of possession of the cryptographic key material the issued Credential would be bound to. 
+     The proof object is REQUIRED if the proof_types_supported parameter is non-empty and present in the credential_configurations_supported parameter 
+     of the Issuer metadata for the requested Credential
+
+     This issuer atm only supports jwt proof types
+    */
     console.log("NO keybinding info found!!!");
     return res.status(400).json({ error: "No proof information found" });
   }
@@ -474,12 +477,17 @@ router.post("/credential", async (req, res) => {
     let vct = requestBody.vct;
     console.log("vc+sd-jwt ", vct);
 
+    // holder wallet binding
     if (requestBody.proof && requestBody.proof.jwt) {
       // console.log(requestBody.proof.jwt)
       let decodedWithHeader = jwt.decode(requestBody.proof.jwt, {
         complete: true,
       });
       let holderJWKS = decodedWithHeader.header;
+      //TODO validate the jwt that is part of the proof.jwt to ensure the 
+      // holder wallet is in control of the presented key... 
+      
+
       // console.log("Token:", token);
       // console.log("Request Body:", requestBody);
       let credType = vct; // VerifiablePortableDocumentA1SDJWT or VerifiablePortableDocumentA2SDJWT
