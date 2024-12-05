@@ -390,7 +390,7 @@ router.post("/token_endpoint", async (req, res) => {
         // id_token: buildIdToken(serverURL, privateKey),
         c_nonce: generateNonce(),
         c_nonce_expires_in: 86400,
-        authorization_details: authorizatiton_details,
+        authorization_details: authorization_details,
       });
     } else {
       res.json({
@@ -486,7 +486,7 @@ router.post("/credential", async (req, res) => {
       let holderJWKS = decodedWithHeader.header;
       //TODO validate the jwt that is part of the proof.jwt to ensure the 
       // holder wallet is in control of the presented key... 
-      
+
 
       // console.log("Token:", token);
       // console.log("Request Body:", requestBody);

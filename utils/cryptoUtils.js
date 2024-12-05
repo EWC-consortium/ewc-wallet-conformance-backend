@@ -147,10 +147,12 @@ export async function buildVpRequestJWT(
       iss: serverURL,
       aud: serverURL,
     };
-    if (response_type.indexOf("id_token") >=0 ) {
-      jwtPayload["id_token_type"] = "subject_signed";
-      jwtPayload["scope"] = "openid";
-    }
+    // SIOPv2 supports only redirect_uri and did so x509 cannot be used
+    
+    // if (response_type.indexOf("id_token") >=0 ) {
+    //   jwtPayload["id_token_type"] = "subject_signed";
+    //   jwtPayload["scope"] = "openid";
+    // }
 
     if (presentation_definition) {
       jwtPayload.presentation_definition = presentation_definition;

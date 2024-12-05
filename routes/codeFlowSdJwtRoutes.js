@@ -242,7 +242,10 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       if (authorizationDetails.length > 0) {
         authorizationDetails.forEach((item) => {
           let cred = fetchVCTorCredentialConfigId(item);
-          if (cred === "eu.europa.ec.eudi.pid.1" ||cred.indexOf("eu.europa.ec.eudi.pid.1") >=0 ) {
+          if (
+            cred === "eu.europa.ec.eudi.pid.1" ||
+            cred.indexOf("eu.europa.ec.eudi.pid.1") >= 0
+          ) {
             isPIDIssuanceFlow = true;
             credentialsRequested = cred;
           }
@@ -288,7 +291,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   const authorizationCode = null; //"SplxlOBeZQQYbYS6WxSbIA";
   let existingCodeSession = await getCodeFlowSession(issuerState);
   if (existingCodeSession) {
-    storeCodeFlowSession(issuerState, {
+    await storeCodeFlowSession(issuerState, {
       walletSession: state,
       requests: {
         redirectUri: redirectUri,
@@ -378,8 +381,26 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       console.log("client_id_scheme x509_san_dns");
       let request_uri = `${serverURL}/x509VPrequest_dynamic/${issuerState}`;
       if (credentialsRequested.indexOf("eu.europa.ec.eudi.pid.1") >= 0) {
-        //we should request only DID binding in this case
-        request_uri = `${serverURL}/id_token_x509_request_dynamic/${issuerState}`;
+        //for x509 no id_token binding is supported by SIOPv2/OIDC4VP
+        // it is only for did and redirect_uri. As a result we
+        // redirect with code here instead
+
+        ///
+        const authorizationCode = generateNonce(16);
+        //cache authorizatiton_detatils witth the generated code. this is needed for the token_endpoint
+        getAuthCodeAuthorizationDetail().set(
+          authorizationCode,
+          authorizationDetails
+        );
+        existingCodeSession = await getCodeFlowSession(issuerState)
+        existingCodeSession.results.sessionId = authorizationCode;
+        existingCodeSession.requests.sessionId = authorizationCode;
+        storeCodeFlowSession(issuerState, existingCodeSession);
+
+        const redirectUrl = `${redirectUri}?code=${authorizationCode}&state=${issuerState}`;
+        return res.redirect(302, redirectUrl);
+        ///
+//        request_uri = `${serverURL}/id_token_x509_request_dynamic/${issuerState}`;
       }
 
       const clientId = "dss.aegean.gr";
@@ -492,7 +513,9 @@ codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
 });
 
 // Dynamic VP request with only id_token
-codeFlowRouterSDJWT.get("/id_token_x509_request_dynamic/:id", async (req, res) => {
+codeFlowRouterSDJWT.get(
+  "/id_token_x509_request_dynamic/:id",
+  async (req, res) => {
     const uuid = req.params.id ? req.params.id : uuidv4();
     const response_uri = serverURL + "/direct_post_vci/" + uuid;
 
@@ -527,52 +550,54 @@ codeFlowRouterSDJWT.get("/id_token_x509_request_dynamic/:id", async (req, res) =
   }
 );
 
-
-codeFlowRouterSDJWT.get("/id_token_did_request_dynamic/:id", async (req, res) => {
-  const uuid = req.params.id ? req.params.id : uuidv4();
-  const response_uri = serverURL + "/direct_post_vci/" + uuid;
-  const client_metadata = {
-    client_name: "UAegean EWC Verifier",
-    logo_uri: "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
-    location: "Greece",
-    cover_uri: "string",
-    description: "EWC pilot case verification",
-    vp_formats: {
-      "vc+sd-jwt": {
-        alg: ["ES256", "ES384"],
+codeFlowRouterSDJWT.get(
+  "/id_token_did_request_dynamic/:id",
+  async (req, res) => {
+    const uuid = req.params.id ? req.params.id : uuidv4();
+    const response_uri = serverURL + "/direct_post_vci/" + uuid;
+    const client_metadata = {
+      client_name: "UAegean EWC Verifier",
+      logo_uri:
+        "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+      location: "Greece",
+      cover_uri: "string",
+      description: "EWC pilot case verification",
+      vp_formats: {
+        "vc+sd-jwt": {
+          alg: ["ES256", "ES384"],
+        },
       },
-    },
-  };
+    };
 
-  const privateKeyPem = fs.readFileSync(
-    "./didjwks/did_private_pkcs8.key",
-    "utf8"
-  );
+    const privateKeyPem = fs.readFileSync(
+      "./didjwks/did_private_pkcs8.key",
+      "utf8"
+    );
 
-  let contorller = serverURL;
-  if (proxyPath) {
-    contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
+    let contorller = serverURL;
+    if (proxyPath) {
+      contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
+    }
+    contorller = contorller.replace("https://", "");
+    const clientId = `did:web:${contorller}`;
+    const presentation_definition_sdJwt = JSON.parse(
+      fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
+    );
+
+    let signedVPJWT = await buildVpRequestJWT(
+      clientId,
+      response_uri,
+      null,
+      privateKeyPem,
+      "did:jwks",
+      client_metadata,
+      `did:web:${contorller}#keys-1`,
+      serverURL,
+      "vp_token id_token"
+    );
+    res.type("text/plain").send(signedVPJWT);
   }
-  contorller = contorller.replace("https://", "");
-  const clientId = `did:web:${contorller}`;
-  const presentation_definition_sdJwt = JSON.parse(
-    fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
-  );
-
-  let signedVPJWT = await buildVpRequestJWT(
-    clientId,
-    response_uri,
-    null,
-    privateKeyPem,
-    "did:jwks",
-    client_metadata,
-    `did:web:${contorller}#keys-1`,
-    serverURL,
-    "vp_token id_token"
-  );
-  res.type("text/plain").send(signedVPJWT);
-});
-
+);
 
 /*
   presentation by the wallet during an Issuance part of the Dynamic Credential Request 
@@ -625,10 +650,9 @@ function fetchVCTorCredentialConfigId(data) {
     return data.vct;
   } else if (data.credential_configuration_id) {
     return data.credential_configuration_id;
-  } else if (data.types){
-    return data.types
-  }
-  else {
+  } else if (data.types) {
+    return data.types;
+  } else {
     return null; // Return null if neither is found
   }
 }
