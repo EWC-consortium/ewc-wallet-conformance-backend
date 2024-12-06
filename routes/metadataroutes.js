@@ -41,7 +41,7 @@ metadataRouter.get(
 metadataRouter.get(
   [
     "/.well-known/oauth-authorization-server",
-    "/.well-known/openid-configuration",
+    // "/.well-known/openid-configuration",
     "/oauth-authorization-server/rfc-issuer", //this is required in case the issuer is behind a reverse proxy: see https://www.rfc-editor.org/rfc/rfc8414.html
   ],
   async (req, res) => {

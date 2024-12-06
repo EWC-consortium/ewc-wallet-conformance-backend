@@ -1380,10 +1380,145 @@
           "proof_signing_alg_values_supported": ["ES256"]
         }
       }
+    },
+
+
+    
+    "PaymentWalletAttestationAccountA": {
+      "scope": "PaymentWalletAttestationAccountA",
+      "claims": {
+        "iss": {
+          "display": [
+            {
+              "name": "Issuer",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "aud": {
+          "display": [
+            {
+              "name": "Audience",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "sub": {
+          "display": [
+            {
+              "name": "Subject (PSP Account Identifier)",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "iat": {
+          "display": [
+            {
+              "name": "Issued At",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "exp": {
+          "display": [
+            {
+              "name": "Expiration Time",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "accounts": {
+          "display": [
+            {
+              "name": "Accounts",
+              "locale": "en-GB"
+            }
+          ],
+          "nested_claims": {
+            "card": {
+              "display": [
+                {
+                  "name": "Card Number",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "iban": {
+              "display": [
+                {
+                  "name": "IBAN",
+                  "locale": "en-GB"
+                }
+              ]
+            }
+          }
+        },
+        "account_holder_id": {
+          "display": [
+            {
+              "name": "Account Holder ID",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "cnf": {
+          "nested_claims": {
+            "jwk": {
+              "nested_claims": {
+                "kty": {
+                  "display": [
+                    {
+                      "name": "Key Type",
+                      "locale": "en-GB"
+                    }
+                  ]
+                },
+                "crv": {
+                  "display": [
+                    {
+                      "name": "Curve",
+                      "locale": "en-GB"
+                    }
+                  ]
+                },
+                "x": {
+                  "display": [
+                    {
+                      "name": "Public Key X Coordinate",
+                      "locale": "en-GB"
+                    }
+                  ]
+                },
+                "y": {
+                  "display": [
+                    {
+                      "name": "Public Key Y Coordinate",
+                      "locale": "en-GB"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "cryptographic_binding_methods_supported": ["jwk"],
+      "display": [
+        {
+          "name": "PSP Credentials",
+          "locale": "en-GB",
+          "background_color": "#0059f8",
+          "text_color": "#FFFFFF"
+        }
+      ],
+      "credential_signing_alg_values_supported": ["ES256"],
+      "format": "vc+sd-jwt",
+      "vct": "eu.europa.ec.eudi.pid.1",
+      "proof_types_supported": {
+        "jwt": {
+          "proof_signing_alg_values_supported": ["ES256"]
+        }
+      }
     }
-
-
-
-
   }
 }
