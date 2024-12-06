@@ -54,6 +54,7 @@ import {
   createEPassportPayload,
   getVReceiptSDJWTData,
   getVReceiptSDJWTDataWithPayload,
+  createPaymentWalletAttestationPayload
 } from "../utils/credPayloadUtil.js";
 
 const router = express.Router();
@@ -458,6 +459,8 @@ router.post("/credential", async (req, res) => {
       requestedCredentials[0] === "ferryBoardingPassCredential"
     ) {
       payload = createEPassportPayload(serverURL, "");
+    }else if (requestedCredentials && requestedCredentials[0] === "PaymentWalletAttestationAccount") {
+      payload = createPIDPayload(token, serverURL, "");
     }
 
     const signOptions = { algorithm: "ES256" };
@@ -546,6 +549,8 @@ router.post("/credential", async (req, res) => {
           credPayload = VerifiableFerryBoardingPassCredentialSDJWT();
         } else if (credType === "VerifiablePortableDocumentA1SDJWT") {
           credPayload = getGenericSDJWTData();
+        } if (credType === "PaymentWalletAttestationAccount") {
+          credPayload = createPaymentWalletAttestationPayload();
         } else if (credType === "VerifiablevReceiptSDJWT") {
           if (sessionObject) {
             credPayload = getVReceiptSDJWTDataWithPayload(

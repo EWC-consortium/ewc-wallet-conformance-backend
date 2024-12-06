@@ -26,7 +26,6 @@ const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
 // *******************
 paymentRouter.get(["/issue-pwa-pre-auth"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const credentialType = "eu.europa.ec.eudi.pid.1";
 
   let existingPreAuthSession = await getPreAuthSession(uuid);
   if (!existingPreAuthSession) {
@@ -35,10 +34,10 @@ paymentRouter.get(["/issue-pwa-pre-auth"], async (req, res) => {
       resulut: null,
       persona: null,
       accessToken: null,
-      isPID: true,
+      isPID: false,
     });
   }
-  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/pid-pre-auth-offer/${uuid}?type=${credentialType}`;
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/pwa-pre-auth-offer/${uuid}`;
   let code = qr.image(credentialOffer, {
     type: "png",
     ec_level: "H",
@@ -54,16 +53,9 @@ paymentRouter.get(["/issue-pwa-pre-auth"], async (req, res) => {
   });
 });
 
-paymentRouter.get(["/pid-pre-auth-offer/:id"], async (req, res) => {
-  const credentialType = req.query.type
-    ? req.query.type
-    : "eu.europa.ec.eudi.pid.1";
+paymentRouter.get(["/pwa-pre-auth-offer/:id"], async (req, res) => {
+  const credentialType = "PaymentWalletAttestationAccount";
   console.log(credentialType);
-  if (credentialType !== "eu.europa.ec.eudi.pid.1") {
-    res.status(500);
-    return;
-  }
-
   // assign a pre-auth code to session to verify afterwards
   let existingPreAuthSession = await getPreAuthSession(req.params.id);
   if (existingPreAuthSession) {

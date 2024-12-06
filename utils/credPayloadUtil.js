@@ -942,3 +942,46 @@ export const getVReceiptSDJWTDataWithPayload = (
 
   return { claims, disclosureFrame };
 };
+
+
+export const createPaymentWalletAttestationPayload = (serverURL) => {
+  const currentTime = Math.floor(Date.now() / 1000);
+  const expirationTime = currentTime + 60 * 60 * 24 * 30; // Token expiration (30 days)
+
+  // Credential Subject data for claims
+  const credentialSubject = {
+    id: "PSP-account-identifier", // Replace with actual account identifier
+    fundingSource: {
+      type: "Credit Card", // Example funding source type
+      panEndsIn: "1234", // Example PAN ends in
+      iin: "400000", // Example IIN
+      aliasId: "alias-12345", // Example alias ID
+      scheme: "Visa", // Example card scheme
+      icon: "https://cdn4.iconfinder.com/data/icons/flat-brand-logo-2/512/visa-512.png", // Example card icon URL
+    },
+  };
+  // Claims for the payload
+  const claims = {
+    aud: `${serverURL}/.well-known/oauth-authorization-server`,
+    sub: "PSP-account-identifier",
+    exp: expirationTime,
+    scope: "PaymentWalletAttestationAccount",
+    credentialSubject,
+  };
+  // Disclosure frame for selective disclosure
+  const disclosureFrame = {
+    _sd: [
+      "credentialSubject.id", // Account ID
+      "credentialSubject.fundingSource.type", // Funding Source Type
+      "credentialSubject.fundingSource.panEndsIn", // PAN Ends In
+      "credentialSubject.fundingSource.iin", // IIN
+      "credentialSubject.fundingSource.aliasId", // Alias ID
+      "credentialSubject.fundingSource.scheme", // Card Scheme
+      "credentialSubject.fundingSource.icon", // Card Icon URL
+    ],
+  };
+
+  return { claims, disclosureFrame };
+};
+
+

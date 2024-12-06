@@ -7,6 +7,7 @@ import codeFlowRouter from "./routes/codeFlowJwtRoutes.js";
 import codeFlowRouterSDJWT from "./routes/codeFlowSdJwtRoutes.js";
 import boardingPassRouter from "./routes/boardingPassRoutes.js";
 import pidRouter from "./routes/pidroutes.js";
+import paymentRouter from "./routes/paymentRoutes.js";
 import passportRouter from "./routes/passportRoutes.js";
 import didWebRouter from "./routes/didweb.js"
 import educationalRouter from "./routes/educationalRoutes.js";
@@ -53,6 +54,7 @@ app.use("/", passportRouter);
 app.use("/", educationalRouter);
 app.use("/", boardingPassRouter);
 app.use("/", didWebRouter);
+app.use("/",paymentRouter);
 
 // Error handler for validation errors
 app.use((err, req, res, next) => {
