@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "SERVER_URL=https://8fbd-2a02-587-871c-4a00-53e2-a18d-f6c1-cf7a.ngrok-free.app node server.js"
+    "dev": "SERVER_URL=https://1958-2a02-587-871e-ba00-4a70-9f9a-e039-b7b4.ngrok-free.app node server.js"
   },
   "author": "",
   "license": "ISC",

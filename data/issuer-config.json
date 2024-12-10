@@ -1294,8 +1294,8 @@
       }
     },
 
-    "eu.europa.ec.eudi.pid.1": {
-      "scope": "eu.europa.ec.eudi.pid.1",
+    "urn:eu.europa.ec.eudi.pid.1": {
+      "scope": "urn:eu.europa.ec.eudi.pid.1",
       "claims": {
         "given_name": {
           "display": [
@@ -1378,7 +1378,7 @@
       "credential_signing_alg_values_supported": ["ES256"],
       "format": "vc+sd-jwt",
 
-      "vct": "eu.europa.ec.eudi.pid.1",
+      "vct": "urn:eu.europa.ec.eudi.pid.1",
       "proof_types_supported": {
         "jwt": {
           "proof_signing_alg_values_supported": ["ES256"]

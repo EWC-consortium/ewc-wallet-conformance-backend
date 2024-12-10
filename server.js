@@ -11,6 +11,7 @@ import paymentRouter from "./routes/paymentRoutes.js";
 import passportRouter from "./routes/passportRoutes.js";
 import didWebRouter from "./routes/didweb.js"
 import educationalRouter from "./routes/educationalRoutes.js";
+import sharedRouter from "./routes/sharedIssuanceFlows.js";
 import bodyParser from "body-parser"; // Body parser middleware
 
 import * as OpenApiValidator from "express-openapi-validator";
@@ -55,6 +56,7 @@ app.use("/", educationalRouter);
 app.use("/", boardingPassRouter);
 app.use("/", didWebRouter);
 app.use("/",paymentRouter);
+app.use("/",sharedRouter);
 
 // Error handler for validation errors
 app.use((err, req, res, next) => {

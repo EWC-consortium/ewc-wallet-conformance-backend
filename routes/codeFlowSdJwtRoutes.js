@@ -242,12 +242,12 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       if (authorizationDetails.length > 0) {
         authorizationDetails.forEach((item) => {
           let cred = fetchVCTorCredentialConfigId(item);
+          credentialsRequested = cred;
           if (
-            cred === "eu.europa.ec.eudi.pid.1" ||
-            cred.indexOf("eu.europa.ec.eudi.pid.1") >= 0
+            cred === "urn:eu.europa.ec.eudi.pid.1" ||
+            cred.indexOf("urn:eu.europa.ec.eudi.pid.1") >= 0
           ) {
             isPIDIssuanceFlow = true;
-            credentialsRequested = cred;
           }
           // cache authorizationDetails for the direct_post endpoint (it is needed to assosiate it with the auth. code generated there)
           getSessionsAuthorizationDetail().set(
@@ -275,9 +275,9 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     console.log("authorization_details not found trying scope");
     if (scope) {
       console.log("requested credentials: " + scope);
-      if (scope.indexOf("eu.europa.ec.eudi.pid.1") >= 0) {
+      credentialsRequested = scope;
+      if (scope.indexOf("urn:eu.europa.ec.eudi.pid.1") >= 0) {
         isPIDIssuanceFlow = true;
-        credentialsRequested = scope;
       }
     } else {
       errors.push("no credentials requested");
@@ -362,7 +362,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
         client_metadata_uri,
         response_uri
       );
-      if (credentialsRequested.indexOf("eu.europa.ec.eudi.pid.1") >= 0) {
+      if (credentialsRequested.indexOf("urn:eu.europa.ec.eudi.pid.1") >= 0) {
         //we should request only DID binding in this case
         console.log("passing id_token!!");
         redirectUrl = buildVPbyValue(
@@ -380,7 +380,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     } else if (client_id_scheme == "x509_san_dns") {
       console.log("client_id_scheme x509_san_dns");
       let request_uri = `${serverURL}/x509VPrequest_dynamic/${issuerState}`;
-      if (credentialsRequested.indexOf("eu.europa.ec.eudi.pid.1") >= 0) {
+      if (credentialsRequested.indexOf("urn:eu.europa.ec.eudi.pid.1") >= 0) {
         //for x509 no id_token binding is supported by SIOPv2/OIDC4VP
         // it is only for did and redirect_uri. As a result we
         // redirect with code here instead
@@ -414,7 +414,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     } else if (client_id_scheme == "did") {
       console.log("client_id_scheme did");
       let request_uri = `${serverURL}/didJwksVPrequest_dynamic/${issuerState}`;
-      if (credentialsRequested.indexOf("eu.europa.ec.eudi.pid.1") >= 0) {
+      if (credentialsRequested.indexOf("urn:eu.europa.ec.eudi.pid.1") >= 0) {
         //we should request only DID binding in this case
         request_uri = `${serverURL}/id_token_did_request_dynamic/${issuerState}`;
       }
