@@ -1,22 +1,6 @@
 import express from "express";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
-import {
-  pemToJWK,
-  generateNonce,
-  base64UrlEncodeSha256,
-  jarOAutTokenResponse,
-} from "../utils/cryptoUtils.js";
-import {
-  buildAccessToken,
-  generateRefreshToken,
-  buildIdToken,
-} from "../utils/tokenUtils.js";
-
-import {
-  getAuthCodeSessions,
-  getAuthCodeAuthorizationDetail,
-} from "../services/cacheService.js";
 
 import {
   storePreAuthSession,
@@ -27,35 +11,12 @@ import {
   getSessionKeyAuthCode,
 } from "../services/cacheServiceRedis.js";
 
-import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
-import {
-  createSignerVerifier,
-  digest,
-  generateSalt,
-  createSignerVerifierX509,
-} from "../utils/sdjwtUtils.js";
-import jwt from "jsonwebtoken";
+
 
 import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
-import { request } from "http";
-import {
-  createPIDPayload,
-  createStudentIDPayload,
-  createAllianceIDPayload,
-  createFerryBoardingPassPayload,
-  getPIDSDJWTData,
-  getStudentIDSDJWTData,
-  getAllianceIDSDJWTData,
-  getFerryBoardingPassSDJWTData,
-  getGenericSDJWTData,
-  getEPassportSDJWTData,
-  createEPassportPayload,
-  getVReceiptSDJWTData,
-  getVReceiptSDJWTDataWithPayload,
-  createPaymentWalletAttestationPayload
-} from "../utils/credPayloadUtil.js";
+
 
 const router = express.Router();
 
@@ -238,7 +199,6 @@ router.get(["/credential-offer-no-code/:id"], (req, res) => {
 
 router.get(["/haip-offer-tx-code"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  uudi = uuid + "x509";
 
   const credentialType = req.query.credentialType
     ? req.query.credentialType
@@ -251,6 +211,7 @@ router.get(["/haip-offer-tx-code"], async (req, res) => {
       resulut: null,
       persona: null,
       accessToken: null,
+      isHaip: true
     });
   }
   let credentialOffer = `haip://?credential_offer_uri=${serverURL}/haip-credential-offer-tx-code/${uuid}?type=${credentialType}`; //OfferUUID

@@ -5,6 +5,9 @@ import { pem2jwk } from 'pem-jwk';
 import forge from 'node-forge';
 import fs from 'fs';
 
+import { importPKCS8, importX509, exportJWK } from 'jose';
+
+
 export const createSignerVerifier = async (privateKey, publicKey) => {
   // const { privateKey, publicKey } = await ES256.generateKeyPair();
 
@@ -30,26 +33,32 @@ export const createSignerVerifier = async (privateKey, publicKey) => {
 
 
 export const createSignerVerifierX509 = async (privateKeyPem, certificatePem) => {
-  // Convert private key PEM to JWK
-  const privateKeyJWK = pem2jwk(privateKeyPem);
+  try {
+    // Import the private key using jose
+    const privateKey = await importPKCS8(privateKeyPem, 'ES256');
 
-  // Extract public key from X.509 certificate
-  const cert = forge.pki.certificateFromPem(certificatePem);
-  const publicKeyPem = forge.pki.publicKeyToPem(cert.publicKey);
+    // Import the public key from the certificate using jose
+    const publicKey = await importX509(certificatePem, 'ES256');
 
-  // Convert public key PEM to JWK
-  const publicKeyJWK = pem2jwk(publicKeyPem);
+    // Export the keys to JWK format
+    const privateKeyJWK = await exportJWK(privateKey);
+    const publicKeyJWK = await exportJWK(publicKey);
 
-  // Set key operations and usage
-  privateKeyJWK['key_ops'] = ['sign'];
-  privateKeyJWK['use'] = 'sig';
-  privateKeyJWK['ext'] = true;
+    // Set key operations and usage flags
+    privateKeyJWK.key_ops = ['sign'];
+    privateKeyJWK.use = 'sig';
+    privateKeyJWK.ext = true;
 
-  publicKeyJWK['key_ops'] = ['verify'];
-  publicKeyJWK['ext'] = true;
+    publicKeyJWK.key_ops = ['verify'];
+    publicKeyJWK.ext = true;
 
-  return {
-    signer: await ES256.getSigner(privateKeyJWK),
-    verifier: await ES256.getVerifier(publicKeyJWK),
-  };
+    // Obtain signer and verifier using ES256 library functions
+    const signer = await ES256.getSigner(privateKeyJWK);
+    const verifier = await ES256.getVerifier(publicKeyJWK);
+
+    return { signer, verifier };
+  } catch (error) {
+    console.error('Error creating signer and verifier:', error);
+    throw error;
+  }
 };
