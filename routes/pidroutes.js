@@ -45,7 +45,7 @@ const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
 // *******************
 pidRouter.get(["/issue-pid-pre-auth"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const credentialType = "urn:eu.europa.ec.eudi.pid.1";
+  const credentialType = "urn:eu.europa.ec.eudi:pid:1";
 
   let existingPreAuthSession = await getPreAuthSession(uuid);
   if (!existingPreAuthSession) {
@@ -76,9 +76,9 @@ pidRouter.get(["/issue-pid-pre-auth"], async (req, res) => {
 pidRouter.get(["/pid-pre-auth-offer/:id"], async (req, res) => {
   const credentialType = req.query.type
     ? req.query.type
-    : "urn:eu.europa.ec.eudi.pid.1";
+    : "urn:eu.europa.ec.eudi:pid:1";
   console.log(credentialType);
-  if (credentialType !== "urn:eu.europa.ec.eudi.pid.1") {
+  if (credentialType !== "urn:eu.europa.ec.eudi:pid:1") {
     res.status(500);
     return;
   }
@@ -112,7 +112,7 @@ pidRouter.get(["/pid-pre-auth-offer/:id"], async (req, res) => {
 // *******************
 pidRouter.get(["/issue-pid-code"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const credentialType = "urn:eu.europa.ec.eudi.pid.1";
+  const credentialType = "urn:eu.europa.ec.eudi:pid:1";
 
   const client_id_scheme = req.query.client_id_scheme
     ? req.query.client_id_scheme
@@ -149,7 +149,7 @@ pidRouter.get(["/issue-pid-code"], async (req, res) => {
 });
 
 pidRouter.get(["/pid-code-offer/:id"], (req, res) => {
-  const credentialType = "urn:eu.europa.ec.eudi.pid.1";
+  const credentialType = "urn:eu.europa.ec.eudi:pid:1";
   console.log(req.query.client_id_scheme);
   const client_id_scheme = req.query.scheme ? req.query.scheme : "redirect_uri";
   const issuer_state = `${req.params.id}|${client_id_scheme}`; // using "|" as a delimiter

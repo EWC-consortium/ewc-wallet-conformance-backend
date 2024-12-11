@@ -85,7 +85,7 @@ paymentRouter.get(["/pwa-pre-auth-offer/:id"], async (req, res) => {
 // *******************
 paymentRouter.get(["/issue-pid-code"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const credentialType = "urn:eu.europa.ec.eudi.pid.1";
+  const credentialType = "urn:eu.europa.ec.eudi:pid:1";
 
   const client_id_scheme = req.query.client_id_scheme
     ? req.query.client_id_scheme
@@ -122,7 +122,7 @@ paymentRouter.get(["/issue-pid-code"], async (req, res) => {
 });
 
 paymentRouter.get(["/pid-code-offer/:id"], (req, res) => {
-  const credentialType = "urn:eu.europa.ec.eudi.pid.1";
+  const credentialType = "urn:eu.europa.ec.eudi:pid:1";
   console.log(req.query.client_id_scheme);
   const client_id_scheme = req.query.scheme ? req.query.scheme : "redirect_uri";
   const issuer_state = `${req.params.id}|${client_id_scheme}`; // using "|" as a delimiter
