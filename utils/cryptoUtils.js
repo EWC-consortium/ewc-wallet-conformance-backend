@@ -5,6 +5,8 @@ import base64url from "base64url";
 import { error } from "console";
 import fs from "fs";
 import { generateRefreshToken } from "./tokenUtils.js";
+import { Resolver } from "did-resolver";
+import { getResolver } from "@cef-ebsi/key-did-resolver";
 
 export function pemToJWK(pem, keyType) {
   let key;
@@ -492,3 +494,13 @@ const base64urlDecode = (input) => {
   let decodedString = new TextDecoder().decode(bytes);
   return JSON.parse(decodedString);
 };
+
+export async function didKeyToJwks(did) {
+  // getResolver will return an object with a key/value pair of { "key": resolver } where resolver is a function used by the generic DID resolver.
+  const keyResolver = getResolver();
+  const didResolver = new Resolver(keyResolver);
+  const doc = await didResolver.resolve(did);
+  console.log(doc.didDocument.verificationMethod.publicKeyJwk)
+
+  return doc.didDocument.verificationMethod[0].publicKeyJwk
+}

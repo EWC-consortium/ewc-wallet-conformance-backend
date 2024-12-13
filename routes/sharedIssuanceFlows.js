@@ -6,6 +6,7 @@ import {
   generateNonce,
   base64UrlEncodeSha256,
   jarOAutTokenResponse,
+  didKeyToJwks,
 } from "../utils/cryptoUtils.js";
 import {
   buildAccessToken,
@@ -33,6 +34,7 @@ import {
   digest,
   generateSalt,
   createSignerVerifierX509,
+  pemToBase64Der,
 } from "../utils/sdjwtUtils.js";
 import jwt from "jsonwebtoken";
 
@@ -55,6 +57,19 @@ const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
+const privateKeyPemX509 = fs.readFileSync(
+  "./x509EC/ec_private_pkcs8.key",
+  "utf8"
+);
+const certificatePemX509 = fs.readFileSync(
+  "./x509EC/client_certificate.crt",
+  "utf8"
+);
+
+const { signer, verifier } = await createSignerVerifierX509(
+  privateKeyPemX509,
+  certificatePemX509
+);
 
 //   console.log("privateKey");
 //   console.log(privateKey);
@@ -256,6 +271,9 @@ sharedRouter.post("/credential", async (req, res) => {
         complete: true,
       });
       let holderJWKS = decodedWithHeader.header;
+  
+
+
       //TODO validate the jwt that is part of the proof.jwt to ensure the
       // holder wallet is in control of the presented key...
 
@@ -266,21 +284,8 @@ sharedRouter.post("/credential", async (req, res) => {
       // if this is a HAIP flow then we need to sign this with an X509 certificate
       //................
       let sdjwt = null;
-      let isHaip = sessionObject?sessionObject.isHaip:false;
+      let isHaip = sessionObject ? sessionObject.isHaip : false;
       if (isHaip) {
-        const privateKeyPem = fs.readFileSync(
-          "./x509EC/ec_private_pkcs8.key",
-          "utf8"
-        );
-        const certificatePem = fs.readFileSync(
-          "./x509EC/client_certificate.crt",
-          "utf8"
-        );
-
-        const { signer, verifier } = await createSignerVerifierX509(
-          privateKeyPem,
-          certificatePem
-        );
         sdjwt = new SDJwtVcInstance({
           signer,
           verifier,
@@ -334,29 +339,60 @@ sharedRouter.post("/credential", async (req, res) => {
           credPayload = getGenericSDJWTData();
         }
 
-        const cnf = { jwk: holderJWKS.jwk };
+        let cnf = { jwk: holderJWKS.jwk };
+        if(!cnf.jwk){
+          cnf = await didKeyToJwks(holderJWKS.kid)
+        }
+
         // console.log(credType);
         // console.log(credPayload.claims);
         // console.log(credPayload.disclosureFrame);
 
-        const credential = await sdjwt.issue(
-          {
-            iss: serverURL,
-            iat: Math.floor(Date.now() / 1000),
-            vct: credType,
-            ...credPayload.claims,
-            cnf: cnf,
-          },
-          credPayload.disclosureFrame
-        );
+        let credential;
+        /*
+         {
+      header: { typ: 'dc+sd-jwt', custom: 'data' }, // You can add custom header data to the SD JWT
+    }
+        */
+
+        if (isHaip) {
+          console.log("HAIP issue flow.. will add x509 header");
+          const certBase64 = pemToBase64Der(certificatePemX509);
+          const x5cHeader = [certBase64];
+
+          credential = await sdjwt.issue(
+            {
+              iss: serverURL,
+              iat: Math.floor(Date.now() / 1000),
+              vct: credType,
+              ...credPayload.claims,
+              cnf: cnf,
+            },
+            credPayload.disclosureFrame,
+            {
+              header: { x5c: x5cHeader },
+            }
+          );
+        } else {
+          credential = await sdjwt.issue(
+            {
+              iss: serverURL,
+              iat: Math.floor(Date.now() / 1000),
+              vct: credType,
+              ...credPayload.claims,
+              cnf: cnf,
+            },
+            credPayload.disclosureFrame
+          );
+        }
 
         console.log("sending credential");
-        // console.log({
-        //   format: "vc+sd-jwt",
-        //   credential: credential,
-        //   c_nonce: generateNonce(),
-        //   c_nonce_expires_in: 86400,
-        // });
+        console.log({
+          format: "vc+sd-jwt",
+          credential: credential,
+          c_nonce: generateNonce(),
+          c_nonce_expires_in: 86400,
+        });
 
         res.json({
           format: "vc+sd-jwt",
