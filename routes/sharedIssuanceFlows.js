@@ -87,8 +87,6 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
       console.log(clientAttestation);
       console.log(pop);
     }
-  }else{
-    return res.sendStatus(500)
   }
 
   //code flow
@@ -268,7 +266,7 @@ sharedRouter.post("/credential", async (req, res) => {
       // if this is a HAIP flow then we need to sign this with an X509 certificate
       //................
       let sdjwt = null;
-      let isHaip = sessionObject.isHaip;
+      let isHaip = sessionObject?sessionObject.isHaip:false;
       if (isHaip) {
         const privateKeyPem = fs.readFileSync(
           "./x509EC/ec_private_pkcs8.key",

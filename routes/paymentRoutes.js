@@ -1,14 +1,24 @@
 import express from "express";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
-
+import { decodeSdJwt, getClaims, } from "@sd-jwt/decode";
+import { digest } from '@sd-jwt/crypto-nodejs';
+import crypto from "crypto";
+import {extractClaims} from "../utils/sdjwtUtils.js"
 
 import {
   storePreAuthSession,
   getPreAuthSession,
   getCodeFlowSession,
   storeCodeFlowSession,
+  storeVerificationSession,
+  getVerificationSession,
 } from "../services/cacheServiceRedis.js";
+
+import {
+  buildVpRequestJWT,
+  buildPaymentVpRequestJWT,
+} from "../utils/cryptoUtils.js";
 
 import qr from "qr-image";
 import imageDataURI from "image-data-uri";
@@ -18,8 +28,10 @@ const paymentRouter = express.Router();
 
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 
-const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
-const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
+const presentation_definition_sdJwt = JSON.parse(
+  fs.readFileSync("./data/presentation_definition_pid+pwa.json", "utf-8")
+  // fs.readFileSync("./data/presentation_definition_pid|photoID+PWA.json", "utf-8")
+);
 
 // *******************
 // PRE-Auth Request
@@ -136,6 +148,142 @@ paymentRouter.get(["/pid-code-offer/:id"], (req, res) => {
       },
     },
   });
+});
+
+// *********************************************************
+// ************** PAYMENT ROUTES ***************************
+// *********************************************************
+
+paymentRouter.post("/generatePaymentRequest", async (req, res) => {
+  const uuid = req.body.sessionId ? req.query.sessionId : uuidv4();
+  const value = req.body.value ? req.body.value : null;
+  const merchant = req.body.merchant ? req.body.merchant : null;
+  const currency = req.body.currency ? req.body.currency : null;
+  const isReccuring = req.body.isReccuring ? req.body.isReccuring : false;
+  const startDate = req.body.startDate;
+  const expiryDate = req.body.expiryDate;
+  const frequency = req.body.frequency;
+
+  let client_id = "dss.aegean.gr";
+  let request_uri = `${serverURL}/payment-request/${uuid}`;
+  let vpRequest =
+    "openid4vp://?client_id=" +
+    encodeURIComponent(client_id) +
+    "&request_uri=" +
+    encodeURIComponent(request_uri);
+
+  console.log(`pushing to sessions ${uuid}`);
+  storeVerificationSession(uuid, {
+    walletSession: null,
+    requests: null,
+    results: null,
+    value: value,
+    merchant: merchant,
+    currency: currency,
+    isReccuring: isReccuring,
+    startDate: startDate,
+    expiryDate: expiryDate,
+    frequency: frequency,
+    status: "pending",
+    paymentStatus: "pending",
+  });
+
+  let code = qr.image(vpRequest, {
+    type: "png",
+    ec_level: "M",
+    size: 20,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  res.json({
+    qr: encodedQR,
+    deepLink: vpRequest,
+    sessionId: uuid,
+  });
+});
+
+paymentRouter.get("/payment-request/:id", async (req, res) => {
+  const uuid = req.params.id ? req.params.id : uuidv4();
+  const response_uri = serverURL + "/payment_direct_post" + "/" + uuid;
+
+  const client_metadata = {
+    client_name: "Fast Ferries Demo Merchant",
+    logo_uri:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQM7KDXeOMPwTHaVRdSVf1D91HIk59_NnpHHA&s",
+    location: "Greece",
+    cover_uri: "string",
+    description: "EWC pilot merchant",
+    vp_formats: {
+      jwt_vp: {
+        alg: ["EdDSA", "ES256K"],
+      },
+    },
+  };
+
+  const clientId = "dss.aegean.gr";
+  // check session, if it doesn't exist this should fail
+  let session = getVerificationSession(uuid);
+  if (!session) {
+    return res.send(404);
+  }
+
+  const hash = crypto.createHash("sha256");
+  hash.update(JSON.stringify(presentation_definition_sdJwt));
+  storeVerificationSession(uuid, session);
+
+  let signedVPJWT = await buildPaymentVpRequestJWT(
+    clientId,
+    response_uri,
+    presentation_definition_sdJwt,
+    "",
+    "x509_san_dns",
+    client_metadata,
+    null,
+    serverURL,
+    "vp_token",
+    session.merchant,
+    session.currency,
+    session.value,
+    session.isReccuring,
+    session.startDate,
+    session.expiryDate,
+    session.frequency
+  );
+
+  console.log(signedVPJWT);
+  res.type("text/plain").send(signedVPJWT);
+});
+
+paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
+  console.log("payment_direct_post VP is below!");
+  const sessionId = req.params.id;
+  const session = getVerificationSession(sessionId);
+
+  let sdjwt = req.body["vp_token"];
+  let presentationSubmission = req.body["presentation_submission"];
+
+  if (!session) {
+    return res.sendStatus(404); //session not found
+  }
+  if (!sdjwt) {
+    return res.sendStatus(500);
+  }
+
+  const decodedSdJwt = await decodeSdJwt(sdjwt, digest);
+  const claims = await getClaims(
+    decodedSdJwt.jwt.payload,
+    decodedSdJwt.disclosures,
+    digest
+  );
+  console.log(claims);
+  // console.log("verifiableCredential")
+  // console.log(claims.vp.verifiableCredential) // this is an array
+
+
+  session.status = "success";
+  storeVerificationSession(sessionId, session);
+  return res.sendStatus(200);
 });
 
 export default paymentRouter;

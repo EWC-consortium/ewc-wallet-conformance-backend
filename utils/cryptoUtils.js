@@ -148,7 +148,7 @@ export async function buildVpRequestJWT(
       aud: serverURL,
     };
     // SIOPv2 supports only redirect_uri and did so x509 cannot be used
-    
+
     // if (response_type.indexOf("id_token") >=0 ) {
     //   jwtPayload["id_token_type"] = "subject_signed";
     //   jwtPayload["scope"] = "openid";
@@ -174,7 +174,7 @@ export async function buildVpRequestJWT(
       .sign(await jose.importPKCS8(privateKey, "RS256"));
 
     return jwt;
-  } else if (client_id_scheme.indexOf("did")>=0) {
+  } else if (client_id_scheme.indexOf("did") >= 0) {
     const signingKey = {
       kty: "EC",
       x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
@@ -203,7 +203,148 @@ export async function buildVpRequestJWT(
     if (presentation_definition) {
       jwtPayload.presentation_definition = presentation_definition;
     }
-    if (response_type.indexOf("id_token") >=0) {
+    if (response_type.indexOf("id_token") >= 0) {
+      jwtPayload["id_token_type"] = "subject_signed";
+      jwtPayload["scope"] = "openid";
+    }
+
+    // JWT header
+    const header = {
+      alg: signingKey.alg || "ES256",
+      typ: "JWT",
+      kid: kid,
+    };
+
+    const jwt = await new jose.SignJWT(jwtPayload)
+      .setProtectedHeader(header)
+      .sign(privateKeyObj);
+
+    return jwt;
+
+    // Conditional signing based on client_id_scheme
+  } else {
+    throw new Error("not supported client_id_scheme:" + client_id_scheme);
+  }
+}
+
+export async function buildPaymentVpRequestJWT(
+  client_id,
+  redirect_uri,
+  presentation_definition,
+  privateKey = "",
+  client_id_scheme = "redirect_uri", // Default to "redirect_uri"
+  client_metadata = {},
+  kid = null, // Default to an empty object,
+  serverURL,
+  response_type = "vp_token",
+
+  merchant,
+  currency,
+  value,
+  isRecurring,
+  start_date,
+  expiry_date,
+  frequency
+) {
+  const nonce = generateNonce(16);
+  const state = generateNonce(16);
+
+  if (client_id_scheme === "x509_san_dns") {
+    privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
+    const certificate = fs.readFileSync(
+      "./x509/client_certificate.crt",
+      "utf8"
+    );
+    // Convert certificate to Base64 without headers
+    const certBase64 = certificate
+      .replace("-----BEGIN CERTIFICATE-----", "")
+      .replace("-----END CERTIFICATE-----", "")
+      .replace(/\s+/g, "");
+
+    // Construct the JWT payload
+    let jwtPayload = {
+      type: "payment_data", // REQUIRED. The string that identifies the type of transaction data.
+      credential_ids: ["PaymentWalletAttestationAccount"], // REQUIRED. An array of strings, each referencing a Credential requested by the Verifier that can be used to authorize this transaction.
+      transaction_data_hashes_alg: ["sha-256"], //OPTIONAL. An array of strings, each representing a hash algorithm identifier.
+      payment_data: {
+        // REQUIRED. An object related to payment transactions
+        payee: merchant,
+        currency_amount: {
+          currency: currency,
+          value: value,
+        },
+      },
+      response_type: response_type,
+      response_mode: "direct_post",
+      client_id: client_id, // this should match the dns record in the certificate (dss.aegean.gr)
+      client_id_scheme: client_id_scheme,
+      response_uri: redirect_uri,
+      nonce: nonce,
+      state: state,
+      client_metadata: client_metadata, //
+      iss: serverURL,
+      aud: serverURL,
+    };
+
+    if (isRecurring) {
+      jwtPayload.payment_data.recurring_schedule = {
+        // OPTIONAL. If present, it indicates a recurring payment with the following details:
+        start_date: start_date,
+        expiry_date: expiry_date,
+        frequency: frequency,
+      };
+    }
+
+    if (presentation_definition) {
+      jwtPayload.presentation_definition = presentation_definition;
+    }
+
+    // Define the JWT header
+    // const header = {
+    //   alg: "ES256",
+    //   kid: `aegean#authentication-key`, // Ensure this kid is resolvable from the did.json endpoint
+    // };
+    const header = {
+      alg: "RS256",
+      typ: "JWT",
+      x5c: [certBase64],
+    };
+
+    const jwt = await new jose.SignJWT(jwtPayload)
+      .setProtectedHeader(header)
+      .sign(await jose.importPKCS8(privateKey, "RS256"));
+
+    return jwt;
+  } else if (client_id_scheme.indexOf("did") >= 0) {
+    const signingKey = {
+      kty: "EC",
+      x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
+      y: "SfFShWAUGEnNx24V2b5G1jrhJNHmMwtgROBOi9OKJLc",
+      crv: "P-256",
+      use: "sig",
+      kid: kid,
+    };
+
+    // Convert the private key to a KeyLike object
+    const privateKeyObj = await jose.importPKCS8(
+      privateKey,
+      signingKey.alg || "ES256"
+    );
+
+    const jwtPayload = {
+      response_type: response_type,
+      response_mode: "direct_post",
+      client_id: client_id, // DID the did of the verifier!!!!!!
+      client_id_scheme: client_id_scheme,
+      redirect_uri: redirect_uri,
+      nonce: nonce,
+      state: state,
+      client_metadata: client_metadata,
+    };
+    if (presentation_definition) {
+      jwtPayload.presentation_definition = presentation_definition;
+    }
+    if (response_type.indexOf("id_token") >= 0) {
       jwtPayload["id_token_type"] = "subject_signed";
       jwtPayload["scope"] = "openid";
     }
