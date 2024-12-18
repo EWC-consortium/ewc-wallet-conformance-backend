@@ -1,0 +1,36 @@
+{
+  "id": "607ad085-4278-4d67-8d10-f03607ff3a75",
+  "input_descriptors": [
+    {
+      "constraints": {
+        "fields": [
+          {
+            "filter": {
+              "const": "PaymentWalletAttestation",
+              "type": "string"
+            },
+            "path": ["$.vct"]
+          },
+          {
+            "path": ["$.accounts"]
+          },
+          {
+            "path": ["$.account_holder_id"]
+          }
+        ],
+        "limit_disclosure": "required"
+      },
+      "format": {
+        "vc+sd-jwt": {
+          "alg": ["ES256"]
+        },
+        "vp+sd-jwt": {
+          "alg": ["ES256"]
+        }
+      },
+      "id": "3006c738-576f-4e03-9212-1b16041a85c6",
+      "name": "Payment Transaction",
+      "purpose": "This is the payment for the ferry ticket."
+    }
+  ]
+}

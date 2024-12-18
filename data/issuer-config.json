@@ -1386,8 +1386,8 @@
       }
     },
 
-    "PaymentWalletAttestationAccount": {
-      "scope": "PaymentWalletAttestationAccount",
+    "PaymentWalletAttestation": {
+      "scope": "PaymentWalletAttestation",
       "claims": {
         "id": {
           "display": [
@@ -1454,6 +1454,22 @@
               ]
             }
           }
+        },
+        "accounts": {
+          "display": [
+            {
+              "name": "account",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "account_holder_id": {
+          "display": [
+            {
+              "name": "account_holder_id",
+              "locale": "en-GB"
+            }
+          ]
         }
       },
       "cryptographic_binding_methods_supported": ["jwk"],
@@ -1471,12 +1487,15 @@
       ],
       "credential_signing_alg_values_supported": ["ES256"],
       "format": "vc+sd-jwt",
-      "vct": "PaymentWalletAttestationAccount",
+      "vct": "PaymentWalletAttestation",
       "proof_types_supported": {
         "jwt": {
           "proof_signing_alg_values_supported": ["ES256"]
         }
       }
     }
+
+
+    
   }
 }

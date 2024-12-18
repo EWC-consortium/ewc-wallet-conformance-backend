@@ -9,6 +9,8 @@ import {
   buildVpRequestJWT,
 } from "../utils/cryptoUtils.js";
 
+import { processDescriptorEntry,extractClaimsFromRequest } from "../utils/vpHeplers.js";
+
 import { buildVPbyValue } from "../utils/tokenUtils.js";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
 import { digest } from "@sd-jwt/crypto-nodejs";
@@ -181,16 +183,16 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
     "&request_uri=" +
     encodeURIComponent(request_uri);
 
-    console.log(`pushing to sessions ${uuid}`)
-    sessions.push(uuid);
-    verificationSessions.push({
-      uuid: uuid,
-      status: "pending",
-      claims: null,
-    });
-    console.log(`verification sessions`)
-    console.log(verificationSessions)
-    
+  console.log(`pushing to sessions ${uuid}`);
+  sessions.push(uuid);
+  verificationSessions.push({
+    uuid: uuid,
+    status: "pending",
+    claims: null,
+  });
+  console.log(`verification sessions`);
+  console.log(verificationSessions);
+
   let code = qr.image(vpRequest, {
     type: "png",
     ec_level: "M",
@@ -223,7 +225,7 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
       ldp_vp: {
         proof_type: ["Ed25519Signature2018"],
       },
-    }
+    },
   };
 
   const clientId = "dss.aegean.gr";
@@ -257,7 +259,7 @@ verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
 
   let contorller = serverURL;
   if (proxyPath) {
-    contorller = serverURL.replace("/"+proxyPath,"") + ":" + proxyPath;
+    contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
   }
   const client_id = `did:web:${contorller}`;
   let request_uri = `${serverURL}/didjwks/${uuid}`;
@@ -267,16 +269,16 @@ verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
     "&request_uri=" +
     encodeURIComponent(request_uri);
 
-    console.log(`pushing to sessions ${uuid}`)
-    
-    sessions.push(uuid);
-    verificationSessions.push({
-      uuid: uuid,
-      status: "pending",
-      claims: null,
-    });
-    console.log(`verification sessions`)
-    console.log(verificationSessions)
+  console.log(`pushing to sessions ${uuid}`);
+
+  sessions.push(uuid);
+  verificationSessions.push({
+    uuid: uuid,
+    status: "pending",
+    claims: null,
+  });
+  console.log(`verification sessions`);
+  console.log(verificationSessions);
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -310,7 +312,7 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
       ldp_vp: {
         proof_type: ["Ed25519Signature2018"],
       },
-    }
+    },
   };
 
   let privateKeyPem = fs.readFileSync(
@@ -320,7 +322,7 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
 
   let contorller = serverURL;
   if (proxyPath) {
-    contorller = serverURL.replace("/"+proxyPath,"") + ":" + proxyPath;
+    contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
   }
   const clientId = `did:web:${contorller}`;
   sessions.push(uuid);
@@ -351,33 +353,28 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
 
 verifierRouter.post("/direct_post/:id", async (req, res) => {
   console.log("direct_post VP is below!");
-  const sessionId = req.params.id;
+  try {
+    const { sessionId, extractedClaims } = await extractClaimsFromRequest(req, digest);
 
-  let sdjwt = req.body["vp_token"];
-  if (sdjwt) {
-    let presentationSubmission = req.body["presentation_submission"];
-    let state = req.body["state"];
-    // console.log(state);
-    // console.log(response);
-    const decodedSdJwt = await decodeSdJwt(sdjwt, digest);
-    const claims = await getClaims(
-      decodedSdJwt.jwt.payload,
-      decodedSdJwt.disclosures,
-      digest
-    );
-    console.log(claims);
-    let index = sessions.indexOf(sessionId);
-    console.log("index is");
-    console.log(index);
+    const index = sessions.indexOf(sessionId);
+    console.log("index is", index);
+    console.log("extracted claims are")
+    console.log(extractedClaims)
+
     if (index >= 0) {
       verificationSessions[index].status = "success";
-      verificationSessions[index].claims = claims;
-      console.log(`verificatiton success`);
+      verificationSessions[index].claims = { ...extractedClaims };
+      console.log(`verification success`);
       console.log(verificationSessions[index]);
+    } else {
+      console.warn(`Session ID ${sessionId} not found.`);
+      // Optionally handle the case where sessionId is not found
     }
+
     res.sendStatus(200);
-  } else {
-    res.sendStatus(500);
+  } catch (error) {
+    console.error("Error processing request:", error.message);
+    res.status(400).json({ error: error.message });
   }
 });
 

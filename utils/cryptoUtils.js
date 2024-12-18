@@ -265,16 +265,27 @@ export async function buildPaymentVpRequestJWT(
 
     // Construct the JWT payload
     let jwtPayload = {
-      type: "payment_data", // REQUIRED. The string that identifies the type of transaction data.
-      credential_ids: ["PaymentWalletAttestationAccount"], // REQUIRED. An array of strings, each referencing a Credential requested by the Verifier that can be used to authorize this transaction.
-      transaction_data_hashes_alg: ["sha-256"], //OPTIONAL. An array of strings, each representing a hash algorithm identifier.
-      payment_data: {
-        // REQUIRED. An object related to payment transactions
-        payee: merchant,
-        currency_amount: {
-          currency: currency,
-          value: value,
-        },
+      transaction_data:{
+        type: "payment_data", // REQUIRED. The string that identifies the type of transaction data.
+        credential_ids: ["PaymentWalletAttestation"], // REQUIRED. An array of strings, each referencing a Credential requested by the Verifier that can be used to authorize this transaction.
+        transaction_data_hashes_alg: ["sha-256"], //OPTIONAL. An array of strings, each representing a hash algorithm identifier.
+        payment_data: {
+          // REQUIRED. An object related to payment transactions
+          // payee: merchant,
+          // currency_amount: {
+          //   currency: currency,
+          //   value: value,
+          // },
+          payee: "Merchant XYZ",
+          currency_amount: {
+            currency: "EUR",
+            value: "23.50",
+          },
+          recurring_schedule: {
+            start_date: "2024-11-01",
+            frequency: 30,
+          },
+        }
       },
       response_type: response_type,
       response_mode: "direct_post",
@@ -500,7 +511,7 @@ export async function didKeyToJwks(did) {
   const keyResolver = getResolver();
   const didResolver = new Resolver(keyResolver);
   const doc = await didResolver.resolve(did);
-  console.log(doc.didDocument.verificationMethod.publicKeyJwk)
+  console.log(doc.didDocument.verificationMethod.publicKeyJwk);
 
-  return doc.didDocument.verificationMethod[0].publicKeyJwk
+  return doc.didDocument.verificationMethod[0].publicKeyJwk;
 }

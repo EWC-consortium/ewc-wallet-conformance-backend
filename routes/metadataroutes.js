@@ -61,7 +61,7 @@ metadataRouter.get(["/", "/jwks"], (req, res) => {
   res.json({
     keys: [
       { ...jwks, kid: `aegean#authentication-key`, use: "sig" },
-      { ...jwks, kid: `aegean#authentication-key`, use: "keyAgreement" }, //key to encrypt the sd-jwt response])
+      { ...jwks, kid: `aegean#agreement-key`, use: "keyAgreement" }, //key to encrypt the sd-jwt response])
     ],
   });
 });

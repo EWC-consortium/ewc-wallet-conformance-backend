@@ -325,7 +325,7 @@ sharedRouter.post("/credential", async (req, res) => {
         } else if (credType === "VerifiablePortableDocumentA1SDJWT") {
           credPayload = getGenericSDJWTData();
         }
-        if (credType === "PaymentWalletAttestationAccount") {
+        if (credType === "PaymentWalletAttestation") {
           credPayload = createPaymentWalletAttestationPayload();
         } else if (credType === "VerifiablevReceiptSDJWT") {
           if (sessionObject) {
@@ -382,7 +382,10 @@ sharedRouter.post("/credential", async (req, res) => {
               ...credPayload.claims,
               cnf: cnf,
             },
-            credPayload.disclosureFrame
+            credPayload.disclosureFrame,
+            {
+              header: { kid: "aegean#authentication-key" },
+            }
           );
         }
 

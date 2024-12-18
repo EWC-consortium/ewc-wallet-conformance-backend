@@ -1,10 +1,11 @@
 import express from "express";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
-import { decodeSdJwt, getClaims, } from "@sd-jwt/decode";
-import { digest } from '@sd-jwt/crypto-nodejs';
+import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
+import {extractClaimsFromRequest} from "../utils/vpHeplers.js"
+import { digest } from "@sd-jwt/crypto-nodejs";
 import crypto from "crypto";
-import {extractClaims} from "../utils/sdjwtUtils.js"
+import { extractClaims } from "../utils/sdjwtUtils.js";
 
 import {
   storePreAuthSession,
@@ -29,8 +30,10 @@ const paymentRouter = express.Router();
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 
 const presentation_definition_sdJwt = JSON.parse(
-  fs.readFileSync("./data/presentation_definition_pid+pwa.json", "utf-8")
+  //fs.readFileSync("./data/presentation_definition_pid+pwa.json", "utf-8")
   // fs.readFileSync("./data/presentation_definition_pid|photoID+PWA.json", "utf-8")
+  // fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
+  fs.readFileSync("./data/presentation_definition_pwa.json", "utf-8")
 );
 
 // *******************
@@ -66,7 +69,7 @@ paymentRouter.get(["/issue-pwa-pre-auth"], async (req, res) => {
 });
 
 paymentRouter.get(["/pwa-pre-auth-offer/:id"], async (req, res) => {
-  const credentialType = "PaymentWalletAttestationAccount";
+  const credentialType = "PaymentWalletAttestation";
   console.log(credentialType);
   // assign a pre-auth code to session to verify afterwards
   let existingPreAuthSession = await getPreAuthSession(req.params.id);
@@ -256,34 +259,29 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
 });
 
 paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
-  console.log("payment_direct_post VP is below!");
-  const sessionId = req.params.id;
-  const session = getVerificationSession(sessionId);
-
-  let sdjwt = req.body["vp_token"];
-  let presentationSubmission = req.body["presentation_submission"];
-
-  if (!session) {
-    return res.sendStatus(404); //session not found
+  try{
+    console.log("payment_direct_post VP is below!");
+    const { sessionId, extractedClaims } = await extractClaimsFromRequest(
+      req,
+      digest
+    );
+  
+    console.log(extractedClaims)
+    const session = getVerificationSession(sessionId);
+  
+    if (!session) {
+      return res.sendStatus(404); //session not found
+    }
+    
+  
+    session.status = "success";
+    storeVerificationSession(sessionId, session);
+    return res.sendStatus(200);
+  } catch (error) {
+    console.error("Error processing request:", error.message);
+    res.status(400).json({ error: error.message });
   }
-  if (!sdjwt) {
-    return res.sendStatus(500);
-  }
-
-  const decodedSdJwt = await decodeSdJwt(sdjwt, digest);
-  const claims = await getClaims(
-    decodedSdJwt.jwt.payload,
-    decodedSdJwt.disclosures,
-    digest
-  );
-  console.log(claims);
-  // console.log("verifiableCredential")
-  // console.log(claims.vp.verifiableCredential) // this is an array
-
-
-  session.status = "success";
-  storeVerificationSession(sessionId, session);
-  return res.sendStatus(200);
+  
 });
 
 export default paymentRouter;

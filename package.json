@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "SERVER_URL=https://6c3c-2a02-587-871e-ba00-ff22-61af-11a8-4fb9.ngrok-free.app node server.js"
+    "dev": "SERVER_URL=https://b051-2a02-587-8705-4500-8a19-5f7a-410-6c23.ngrok-free.app node server.js"
   },
   "author": "",
   "license": "ISC",
@@ -21,10 +21,12 @@
     "base64url": "^3.0.1",
     "bs58": "^6.0.0",
     "did-resolver": "^4.1.0",
-    "express": "^4.18.3",
+    "express": "^4.21.2",
     "express-openapi-validator": "^5.3.7",
     "image-data-uri": "^2.0.1",
     "jose": "^5.9.6",
+    "jsonpath": "^1.1.1",
+    "jsonpointer": "^5.0.1",
     "jsonwebtoken": "^9.0.2",
     "key-did-resolver": "^4.0.0",
     "multicodec": "^3.2.1",
