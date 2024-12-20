@@ -79,6 +79,7 @@ pidRouter.get(["/pid-pre-auth-offer/:id"], async (req, res) => {
     : "urn:eu.europa.ec.eudi.pid.1";
   console.log(credentialType);
   if (credentialType !== "urn:eu.europa.ec.eudi.pid.1") {
+    console.log("credential type not urn:eu.europa.ec.eudi.pid.1")
     res.status(500);
     return;
   }

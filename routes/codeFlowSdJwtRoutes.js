@@ -653,6 +653,7 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
       return res.sendStatus(500);
     }
   } else {
+    console.log("no jwt presented");
     return res.sendStatus(500);
   }
 });

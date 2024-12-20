@@ -154,7 +154,7 @@ verifierRouter.get("/presentation-definition/:type", async (req, res) => {
     res.type("application/json").send(selectedDefinition);
   } else {
     // Log the error for debugging purposes (optional)
-    console.error(`No presentation definition found for type: ${type}`);
+    console.error(`No presentation definition found for type: ${type} sending 500 error`);
 
     // Send a 500 Internal Server Error response
     res.status(500).json({
