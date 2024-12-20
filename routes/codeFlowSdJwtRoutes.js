@@ -139,6 +139,9 @@ codeFlowRouterSDJWT.post("/par", async (req, res) => {
     clientMetadata: clientMetadata,
   });
 
+  console.log("par state " + state);
+  console.log("issuer state " + issuerState);
+
   res.json({
     request_uri: requestURI,
     expires_in: 90,
@@ -287,9 +290,13 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
 
   // retrive cleaned ITB session and also get (if specified) the client_id_scheme
   const [originalUuid, client_id_scheme] = issuerState.split("|");
-  issuerState = originalUuid;
+  // issuerState = originalUuid;
   const authorizationCode = null; //"SplxlOBeZQQYbYS6WxSbIA";
   let existingCodeSession = await getCodeFlowSession(issuerState);
+  existingCodeSession =
+    existingCodeSession == null
+      ? await getCodeFlowSession(originalUuid)
+      : existingCodeSession;
   if (existingCodeSession) {
     await storeCodeFlowSession(issuerState, {
       walletSession: state,
@@ -371,7 +378,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
           "redirect_uri",
           client_metadata_uri,
           response_uri,
-          issuerState,
+          existingCodeSession.state,
           "id_token"
         );
       }
@@ -392,15 +399,15 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
           authorizationCode,
           authorizationDetails
         );
-        existingCodeSession = await getCodeFlowSession(issuerState)
+        existingCodeSession = await getCodeFlowSession(issuerState);
         existingCodeSession.results.sessionId = authorizationCode;
         existingCodeSession.requests.sessionId = authorizationCode;
         storeCodeFlowSession(issuerState, existingCodeSession);
 
-        const redirectUrl = `${redirectUri}?code=${authorizationCode}&state=${issuerState}`;
+        const redirectUrl = `${redirectUri}?code=${authorizationCode}&state=${existingCodeSession.state}`;
         return res.redirect(302, redirectUrl);
         ///
-//        request_uri = `${serverURL}/id_token_x509_request_dynamic/${issuerState}`;
+        //        request_uri = `${serverURL}/id_token_x509_request_dynamic/${issuerState}`;
       }
 
       const clientId = "dss.aegean.gr";
@@ -517,7 +524,9 @@ codeFlowRouterSDJWT.get(
   "/id_token_x509_request_dynamic/:id",
   async (req, res) => {
     const uuid = req.params.id ? req.params.id : uuidv4();
-    const response_uri = serverURL + "/direct_post_vci/" + uuid;
+    let existingCodeSession = await getCodeFlowSession(uuid);
+    const response_uri = serverURL + "/direct_post_vci/" + existingCodeSession.requests.state
+    ;
 
     const client_metadata = {
       client_name: "UAegean EWC Verifier",
@@ -554,7 +563,10 @@ codeFlowRouterSDJWT.get(
   "/id_token_did_request_dynamic/:id",
   async (req, res) => {
     const uuid = req.params.id ? req.params.id : uuidv4();
-    const response_uri = serverURL + "/direct_post_vci/" + uuid;
+
+    let existingCodeSession = await getCodeFlowSession(uuid);
+    const response_uri =
+      serverURL + "/direct_post_vci/" + existingCodeSession.requests.state;
     const client_metadata = {
       client_name: "UAegean EWC Verifier",
       logo_uri:
@@ -604,11 +616,12 @@ codeFlowRouterSDJWT.get(
 */
 codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
   console.log("direct_post VP for VCI is below!");
-  let state = req.body["state"];
+  let state = req.body["state"]; //wallet state
   let jwt = req.body["vp_token"];
-  console.log("direct_post_vci received jwt is::");
-  console.log(jwt);
-  const uuid = req.params.id;
+  // console.log("direct_post_vci received jwt is::");
+  // console.log(jwt);
+  const issuerState = req.params.id;
+  console.log("direct_post_vci state" + issuerState);
 
   //
   const authorizatiton_details = getSessionsAuthorizationDetail().get(state);
@@ -623,19 +636,20 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
 
     // // THE WALLET SENDS A DIFFERENT SATE (THAT IS THE STATE OF THE VP NOT THE VCI)
     // // SO A DIFFERENT UPDATE IS REQUIRED HERE
+    console.log("wallet state " + state);
 
-    let existingCodeSession = await getCodeFlowSession(uuid);
+    let existingCodeSession = await getCodeFlowSession(issuerState);
     if (existingCodeSession) {
       let issuanceState = existingCodeSession.results.state; //codeSessions.results[sessionIndex].state;
       existingCodeSession.results.sessionId = authorizationCode;
       existingCodeSession.requests.sessionId = authorizationCode;
       storeCodeFlowSession(issuanceState, existingCodeSession);
 
-      const redirectUrl = `${existingCodeSession.requests.redirectUri}?code=${authorizationCode}&state=${issuanceState}`;
+      const redirectUrl = `${existingCodeSession.requests.redirectUri}?code=${authorizationCode}&state=${existingCodeSession.requests.state}`;
       // return //res.redirect(302, redirectUrl);
       return res.send({ redirect_uri: redirectUrl });
     } else {
-      console.log("issuance session not found " + uuid);
+      console.log("issuance session not found " + issuerState);
       return res.sendStatus(500);
     }
   } else {

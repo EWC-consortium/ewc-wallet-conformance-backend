@@ -246,10 +246,57 @@ export async function buildPaymentVpRequestJWT(
   isRecurring,
   start_date,
   expiry_date,
-  frequency
+  frequency,
+  credential_ids
 ) {
   const nonce = generateNonce(16);
   const state = generateNonce(16);
+
+  const transactionData = {
+    type: "payment_data", // REQUIRED. The string that identifies the type of transaction data.
+    credential_ids: [credential_ids], // REQUIRED. An array of strings, each referencing a Credential requested by the Verifier that can be used to authorize this transaction.
+    transaction_data_hashes_alg: "sha-256", //OPTIONAL. An array of strings, each representing a hash algorithm identifier.
+    payment_data: {
+      payee: merchant,
+      currency_amount: {
+        currency: currency,
+        value: value,
+      },
+    },
+  };
+  const base64EncodedTxData = Buffer.from(
+    JSON.stringify(transactionData)
+  ).toString("base64");
+
+  // Construct the JWT payload
+  let jwtPayload = {
+    transaction_data: [base64EncodedTxData],
+    response_type: response_type,
+    response_mode: "direct_post",
+    client_id: client_id, // this should match the dns record in the certificate (dss.aegean.gr)
+    client_id_scheme: client_id_scheme,
+    response_uri: redirect_uri,
+    nonce: nonce,
+    state: state,
+    client_metadata: client_metadata, //
+    iss: serverURL,
+    aud: serverURL,
+    scope: "openid",
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 1, // Token expiration time (1 days)
+  };
+
+  if (isRecurring) {
+    jwtPayload.payment_data.recurring_schedule = {
+      // OPTIONAL. If present, it indicates a recurring payment with the following details:
+      start_date: start_date,
+      expiry_date: expiry_date,
+      frequency: frequency,
+    };
+  }
+
+  if (presentation_definition) {
+    jwtPayload.presentation_definition = presentation_definition;
+  }
 
   if (client_id_scheme === "x509_san_dns") {
     privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
@@ -263,60 +310,6 @@ export async function buildPaymentVpRequestJWT(
       .replace("-----END CERTIFICATE-----", "")
       .replace(/\s+/g, "");
 
-    // Construct the JWT payload
-    let jwtPayload = {
-      transaction_data:{
-        type: "payment_data", // REQUIRED. The string that identifies the type of transaction data.
-        credential_ids: ["PaymentWalletAttestation"], // REQUIRED. An array of strings, each referencing a Credential requested by the Verifier that can be used to authorize this transaction.
-        transaction_data_hashes_alg: ["sha-256"], //OPTIONAL. An array of strings, each representing a hash algorithm identifier.
-        payment_data: {
-          // REQUIRED. An object related to payment transactions
-          // payee: merchant,
-          // currency_amount: {
-          //   currency: currency,
-          //   value: value,
-          // },
-          payee: "Merchant XYZ",
-          currency_amount: {
-            currency: "EUR",
-            value: "23.50",
-          },
-          recurring_schedule: {
-            start_date: "2024-11-01",
-            frequency: 30,
-          },
-        }
-      },
-      response_type: response_type,
-      response_mode: "direct_post",
-      client_id: client_id, // this should match the dns record in the certificate (dss.aegean.gr)
-      client_id_scheme: client_id_scheme,
-      response_uri: redirect_uri,
-      nonce: nonce,
-      state: state,
-      client_metadata: client_metadata, //
-      iss: serverURL,
-      aud: serverURL,
-    };
-
-    if (isRecurring) {
-      jwtPayload.payment_data.recurring_schedule = {
-        // OPTIONAL. If present, it indicates a recurring payment with the following details:
-        start_date: start_date,
-        expiry_date: expiry_date,
-        frequency: frequency,
-      };
-    }
-
-    if (presentation_definition) {
-      jwtPayload.presentation_definition = presentation_definition;
-    }
-
-    // Define the JWT header
-    // const header = {
-    //   alg: "ES256",
-    //   kid: `aegean#authentication-key`, // Ensure this kid is resolvable from the did.json endpoint
-    // };
     const header = {
       alg: "RS256",
       typ: "JWT",
@@ -327,7 +320,7 @@ export async function buildPaymentVpRequestJWT(
       .setProtectedHeader(header)
       .sign(await jose.importPKCS8(privateKey, "RS256"));
 
-    return jwt;
+    return { jwt, base64EncodedTxData };
   } else if (client_id_scheme.indexOf("did") >= 0) {
     const signingKey = {
       kty: "EC",

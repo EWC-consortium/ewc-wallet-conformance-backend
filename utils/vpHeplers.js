@@ -60,7 +60,7 @@ export async function processDescriptorEntry(vpToken, descriptor) {
  * @returns {Promise<Array>} - An array of extracted claims.
  * @throws {Error} - Throws error if validation fails or processing encounters issues.
  */
-export async function extractClaimsFromRequest(req, digest) {
+export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
   const sessionId = req.params.id;
 
   const vpToken = req.body["vp_token"];
@@ -88,6 +88,8 @@ export async function extractClaimsFromRequest(req, digest) {
   }
 
   let extractedClaims = [];
+  let keybindJwt;
+
 
   for (const descriptor of descriptorMap) {
     const vpResult = await processDescriptorEntry(
@@ -107,6 +109,11 @@ export async function extractClaimsFromRequest(req, digest) {
       for (const element of submittedSdjwt) {
         try {
           const decodedSdJwt = await decodeSdJwt(element, digest);
+          if(isPaymentVP){
+            //
+            keybindJwt = decodedSdJwt.kbJwt;
+          }
+
           const claims = await getClaims(
             decodedSdJwt.jwt.payload,
             decodedSdJwt.disclosures,
@@ -135,5 +142,5 @@ export async function extractClaimsFromRequest(req, digest) {
     }
   }
 
-  return { sessionId, extractedClaims };
+  return { sessionId, extractedClaims, keybindJwt };
 }

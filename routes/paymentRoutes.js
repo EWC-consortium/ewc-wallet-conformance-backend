@@ -2,7 +2,7 @@ import express from "express";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
-import {extractClaimsFromRequest} from "../utils/vpHeplers.js"
+import { extractClaimsFromRequest } from "../utils/vpHeplers.js";
 import { digest } from "@sd-jwt/crypto-nodejs";
 import crypto from "crypto";
 import { extractClaims } from "../utils/sdjwtUtils.js";
@@ -226,7 +226,7 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
 
   const clientId = "dss.aegean.gr";
   // check session, if it doesn't exist this should fail
-  let session = getVerificationSession(uuid);
+  let session = await getVerificationSession(uuid);
   if (!session) {
     return res.send(404);
   }
@@ -235,7 +235,7 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
   hash.update(JSON.stringify(presentation_definition_sdJwt));
   storeVerificationSession(uuid, session);
 
-  let signedVPJWT = await buildPaymentVpRequestJWT(
+  let { jwt, base64EncodedTxData } = await buildPaymentVpRequestJWT(
     clientId,
     response_uri,
     presentation_definition_sdJwt,
@@ -251,29 +251,66 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
     session.isReccuring,
     session.startDate,
     session.expiryDate,
-    session.frequency
+    session.frequency,
+    presentation_definition_sdJwt.input_descriptors[0].id
   );
+  session.txData = base64EncodedTxData;
 
-  console.log(signedVPJWT);
-  res.type("text/plain").send(signedVPJWT);
+  //update session with tx data
+  await storeVerificationSession(uuid, session);
+
+  console.log(jwt);
+  res.type("text/plain").send(jwt);
 });
 
 paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
-  try{
+  try {
     console.log("payment_direct_post VP is below!");
-    const { sessionId, extractedClaims } = await extractClaimsFromRequest(
-      req,
-      digest
+    const transaction_data_hashes = req.body.transaction_data_hashes;
+    const transaction_data_hashes_alg = req.body.transaction_data_hashes_alg;
+    const { sessionId, extractedClaims, keybindJwt } =
+      await extractClaimsFromRequest(req, digest, true);
+
+    const session = await getVerificationSession(sessionId);
+
+    console.log(extractedClaims);
+    let sdHash = keybindJwt.payload.sd_hash;
+    let transactionDataHashesArray = keybindJwt.payload.transaction_data_hashes;
+    let xtDataHashAlg = keybindJwt.payload.transaction_data_hashes_alg;
+
+    //Validate the transaction_data
+    //1. Validate that the original base64url encoded transaction_data string results
+    // in the same hash value when hashed with the given function as the hash contained
+    // in transaction_data_hashes in the key binding JWT.
+    const txData = session.txData;
+    // Convert Base64URL to Standard Base64
+    const base64String = txData.replace(/-/g, "+").replace(/_/g, "/");
+    // Add padding if missing
+    const paddedBase64String = base64String.padEnd(
+      base64String.length + ((4 - (base64String.length % 4)) % 4),
+      "="
     );
-  
-    console.log(extractedClaims)
-    const session = getVerificationSession(sessionId);
-  
+    // Step 3: Decode the Base64 string into binary
+    const decodedData = Buffer.from(paddedBase64String, "base64");
+    // Step 4: Hash the decoded binary data using SHA-256
+    const hash = crypto.createHash("sha256").update(decodedData).digest();
+    console.log(hash);
+    const hashBase64Url = hash
+      .toString("base64") // Convert to Base64
+      .replace(/\+/g, "-") // Replace '+' with '-'
+      .replace(/\//g, "_") // Replace '/' with '_'
+      .replace(/=+$/, ""); // Remove padding '='
+
+    console.log("SHA-256 Base64URL-encoded Hash:", hashBase64Url);
+
+    console.log(transactionDataHashesArray[0]);
+
+    //2.
+
     if (!session) {
       return res.sendStatus(404); //session not found
     }
-    
-  
+
     session.status = "success";
     storeVerificationSession(sessionId, session);
     return res.sendStatus(200);
@@ -281,7 +318,6 @@ paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
     console.error("Error processing request:", error.message);
     res.status(400).json({ error: error.message });
   }
-  
 });
 
 export default paymentRouter;
