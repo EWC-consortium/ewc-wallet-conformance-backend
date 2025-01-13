@@ -9,7 +9,7 @@ import {
   buildVpRequestJWT,
 } from "../utils/cryptoUtils.js";
 
-import { processDescriptorEntry,extractClaimsFromRequest } from "../utils/vpHeplers.js";
+import { extractClaimsFromRequest } from "../utils/vpHeplers.js";
 
 import { buildVPbyValue } from "../utils/tokenUtils.js";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
@@ -19,6 +19,8 @@ import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import jwt from "jsonwebtoken";
 import TimedArray from "../utils/timedArray.js";
+
+import { getVPSession, storeVPSession } from "../services/cacheServiceRedis.js";
 
 const verifierRouter = express.Router();
 
@@ -98,12 +100,28 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
     serverURL + "/presentation-definition/itbsdjwt";
   const client_metadata_uri = serverURL + "/client-metadata";
   const clientId = serverURL + "/direct_post" + "/" + stateParam;
-  sessions.push(stateParam);
-  verificationSessions.push({
+  // sessions.push(stateParam);
+  // verificationSessions.push({
+  //   uuid: stateParam,
+  //   status: "pending",
+  //   claims: null,
+  // });
+
+  // Find the field object that has path $.vct
+  const vctField =
+    presentation_definition_sdJwt.input_descriptors[0].constraints.fields.find(
+      (field) => field.path && field.path.includes("$.vct")
+    );
+
+  storeVPSession(stateParam, {
     uuid: stateParam,
     status: "pending",
     claims: null,
+    presentation_definition_uri: presentation_definition_uri,
+    // Safely extract the filter object if vctField is found
+    credentialRequested: vctField?.filter,
   });
+
   const vpRequest = buildVPbyValue(
     clientId,
     presentation_definition_uri,
@@ -154,7 +172,9 @@ verifierRouter.get("/presentation-definition/:type", async (req, res) => {
     res.type("application/json").send(selectedDefinition);
   } else {
     // Log the error for debugging purposes (optional)
-    console.error(`No presentation definition found for type: ${type} sending 500 error`);
+    console.error(
+      `No presentation definition found for type: ${type} sending 500 error`
+    );
 
     // Send a 500 Internal Server Error response
     res.status(500).json({
@@ -182,16 +202,32 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
     encodeURIComponent(client_id) +
     "&request_uri=" +
     encodeURIComponent(request_uri);
+    const presentation_definition_uri =
+    serverURL + "/presentation-definition/itbsdjwt";
+  // console.log(`pushing to sessions ${uuid}`);
+  // sessions.push(uuid);
+  // verificationSessions.push({
+  //   uuid: uuid,
+  //   status: "pending",
+  //   claims: null,
+  // });
+  // console.log(`verification sessions`);
+  // console.log(verificationSessions);
 
-  console.log(`pushing to sessions ${uuid}`);
-  sessions.push(uuid);
-  verificationSessions.push({
+  // Find the field object that has path $.vct
+  const vctField =
+    presentation_definition_sdJwt.input_descriptors[0].constraints.fields.find(
+      (field) => field.path && field.path.includes("$.vct")
+    );
+
+  storeVPSession(uuid, {
     uuid: uuid,
     status: "pending",
     claims: null,
+    presentation_definition_uri: presentation_definition_uri,
+    // Safely extract the filter object if vctField is found
+    credentialRequested: vctField?.filter,
   });
-  console.log(`verification sessions`);
-  console.log(verificationSessions);
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -229,12 +265,12 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
   };
 
   const clientId = "dss.aegean.gr";
-  sessions.push(uuid);
-  verificationSessions.push({
-    uuid: uuid,
-    status: "pending",
-    claims: null,
-  });
+  // sessions.push(uuid);
+  // verificationSessions.push({
+  //   uuid: uuid,
+  //   status: "pending",
+  //   claims: null,
+  // });
 
   let signedVPJWT = await buildVpRequestJWT(
     clientId,
@@ -256,7 +292,8 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
 *********************************************************** */
 verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-
+  const presentation_definition_uri =
+  serverURL + "/presentation-definition/itbsdjwt";
   let contorller = serverURL;
   if (proxyPath) {
     contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
@@ -269,16 +306,28 @@ verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
     "&request_uri=" +
     encodeURIComponent(request_uri);
 
-  console.log(`pushing to sessions ${uuid}`);
+  // console.log(`pushing to sessions ${uuid}`);
 
-  sessions.push(uuid);
-  verificationSessions.push({
+  // sessions.push(uuid);
+  // verificationSessions.push({
+  //   uuid: uuid,
+  //   status: "pending",
+  //   claims: null,
+  // });
+  // console.log(`verification sessions`);
+  // console.log(verificationSessions);
+  const vctField =
+    presentation_definition_sdJwt.input_descriptors[0].constraints.fields.find(
+      (field) => field.path && field.path.includes("$.vct")
+    );
+  storeVPSession(uuid, {
     uuid: uuid,
     status: "pending",
     claims: null,
+    presentation_definition_uri: presentation_definition_uri,
+    // Safely extract the filter object if vctField is found
+    credentialRequested: vctField?.filter,
   });
-  console.log(`verification sessions`);
-  console.log(verificationSessions);
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -325,12 +374,12 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
     contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
   }
   const clientId = `did:web:${contorller}`;
-  sessions.push(uuid);
-  verificationSessions.push({
-    uuid: uuid,
-    status: "pending",
-    claims: null,
-  });
+  // sessions.push(uuid);
+  // verificationSessions.push({
+  //   uuid: uuid,
+  //   status: "pending",
+  //   claims: null,
+  // });
 
   let signedVPJWT = await buildVpRequestJWT(
     clientId,
@@ -354,24 +403,31 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
 verifierRouter.post("/direct_post/:id", async (req, res) => {
   console.log("direct_post VP is below!");
   try {
-    const { sessionId, extractedClaims } = await extractClaimsFromRequest(req, digest);
+    const { sessionId, extractedClaims } = await extractClaimsFromRequest(
+      req,
+      digest
+    );
 
-    const index = sessions.indexOf(sessionId);
-    console.log("index is", index);
-    console.log("extracted claims are")
-    console.log(extractedClaims)
+    // const index = sessions.indexOf(sessionId);
+    // console.log("index is", index);
+    // console.log("extracted claims are");
+    // console.log(extractedClaims);
+    const vpSession = await getVPSession(sessionId);
 
-    if (index >= 0) {
-      verificationSessions[index].status = "success";
-      verificationSessions[index].claims = { ...extractedClaims };
-      console.log(`verification success`);
-      console.log(verificationSessions[index]);
+    if (vpSession) {
+      // verificationSessions[index].status = "success";
+      // verificationSessions[index].claims = { ...extractedClaims };
+      // console.log(`verification success`);
+      // console.log(verificationSessions[index]);
+      vpSession.status = "success";
+      vpSession.claims = { ...extractedClaims };
+      storeVPSession(sessionId, vpSession);
+      res.sendStatus(200);
     } else {
       console.warn(`Session ID ${sessionId} not found.`);
+      res.status(400).json({ error: `Session ID ${sessionId} not found.` });
       // Optionally handle the case where sessionId is not found
     }
-
-    res.sendStatus(200);
   } catch (error) {
     console.error("Error processing request:", error.message);
     res.status(400).json({ error: error.message });
@@ -642,21 +698,23 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
   res.sendStatus(200); // OK
 });
 
-verifierRouter.get(["/verificationStatus"], (req, res) => {
+verifierRouter.get(["/verificationStatus"], async (req, res) => {
   let sessionId = req.query.sessionId;
-  let index = sessions.indexOf(sessionId); // sessions.indexOf(sessionId+""); //
-  console.log("index is");
-  console.log(index);
+  // let index = sessions.indexOf(sessionId); // sessions.indexOf(sessionId+""); //
+  const vpSession = await getVPSession(sessionId);
+
+  // console.log("index is");
+  // console.log(index);
   let result = null;
-  if (index >= 0) {
-    let status = verificationSessions[index].status;
+  if (vpSession) {
+    let status = vpSession.status;
     console.log(`sending status ${status} for session ${sessionId}`);
     if (status === "success") {
-      result = verificationSessions[index].claims;
-      sessions.splice(index, 1);
-      verificationSessions.splice(index, 1);
-      sessionHistory.addElement(sessionId);
-      verificationResultsHistory.addElement(result);
+      result = vpSession.claims;
+      // sessions.splice(index, 1);
+      // verificationSessions.splice(index, 1);
+      // sessionHistory.addElement(sessionId);
+      // verificationResultsHistory.addElement(result);
     }
     // console.log(`new sessions`);
     // console.log(sessions);
@@ -677,16 +735,12 @@ verifierRouter.get(["/verificationStatus"], (req, res) => {
   }
 });
 
-verifierRouter.get(["/verificationStatusHistory"], (req, res) => {
+verifierRouter.get(["/verificationStatusHistory"], async (req, res) => {
   let sessionId = req.query.sessionId;
-  let index = sessionHistory.getCurrentArray().indexOf(sessionId);
-  if (index >= 0) {
-    res.json({
-      status: "success",
-      reason: "ok",
-      sessionId: sessionId,
-      claims: verificationResultsHistory.getCurrentArray()[index],
-    });
+  const vpSession = await getVPSession(sessionId);
+  // let index = sessionHistory.getCurrentArray().indexOf(sessionId);
+  if (vpSession) {
+    res.json(vpSession);
   } else {
     res.json({
       status: "failed",
