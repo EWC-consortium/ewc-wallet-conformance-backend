@@ -119,15 +119,7 @@ pidRouter.get(["/issue-pid-code"], async (req, res) => {
     ? req.query.client_id_scheme
     : "redirect_uri";
 
-  let existingCodeSession = await getCodeFlowSession(uuid);
-  if (!existingCodeSession) {
-    storeCodeFlowSession(uuid, {
-      walletSession: null,
-      requests: null,
-      results: null,
-      status: "pending",
-    });
-  }
+
 
   let encodedCredentialOfferUri = encodeURIComponent(
     `${serverURL}/pid-code-offer/${uuid}?scheme=${client_id_scheme}`
@@ -149,11 +141,22 @@ pidRouter.get(["/issue-pid-code"], async (req, res) => {
   });
 });
 
-pidRouter.get(["/pid-code-offer/:id"], (req, res) => {
+pidRouter.get(["/pid-code-offer/:id"], async (req, res) => {
   const credentialType = "urn:eu.europa.ec.eudi.pid.1";
   console.log(req.query.client_id_scheme);
   const client_id_scheme = req.query.scheme ? req.query.scheme : "redirect_uri";
-  const issuer_state = `${req.params.id}|${client_id_scheme}`; // using "|" as a delimiter
+  const issuer_state = `${req.params.id}`; //|${client_id_scheme} // using "|" as a delimiter
+
+  let existingCodeSession = await getCodeFlowSession(issuer_state);
+  if (!existingCodeSession) {
+    storeCodeFlowSession(issuer_state, {
+      walletSession: null,
+      requests: null,
+      results: null,
+      status: "pending",
+      client_id_scheme: client_id_scheme,
+    });
+  }
 
   res.json({
     credential_issuer: serverURL,

@@ -49,6 +49,8 @@ codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
       requests: null,
       results: null,
       status: "pending",
+      client_id_scheme: client_id_scheme,
+      flowType: "code",
     });
     // codeSessions.results.push({ sessionId: uuid, status: "pending" });
   }
@@ -89,16 +91,60 @@ codeFlowRouterSDJWT.get(["/credential-offer-code-sd-jwt/:id"], (req, res) => {
     will be passed into the session of the issuer and fetched in the 
     authorize endpoint to decide what schema to use
   */
-  const issuer_state = `${req.params.id}|${client_id_scheme}`; // using "|" as a delimiter
+  // const issuer_state = `${req.params.id}|${client_id_scheme}`; // using "|" as a delimiter
 
   res.json({
     credential_issuer: serverURL,
     credential_configuration_ids: [credentialType],
     grants: {
       authorization_code: {
-        issuer_state: issuer_state,
+        issuer_state: req.params.id, //issuer_state,
       },
     },
+  });
+});
+
+codeFlowRouterSDJWT.get(["/offer-code-defered"], async (req, res) => {
+  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  const credentialType = req.query.credentialType
+    ? req.query.credentialType
+    : "VerifiablePortableDocumentA2SDJWT";
+
+  const client_id_scheme = req.query.client_id_scheme
+    ? req.query.client_id_scheme
+    : "redirect_uri";
+
+  let existingCodeSession = await getCodeFlowSession(uuid);
+  if (!existingCodeSession) {
+    storeCodeFlowSession(uuid, {
+      walletSession: null,
+      requests: null,
+      results: null,
+      status: "pending",
+      client_id_scheme: client_id_scheme,
+      flowType: "code",
+      isDeferred: true,
+    });
+    // codeSessions.results.push({ sessionId: uuid, status: "pending" });
+  }
+
+  let encodedCredentialOfferUri = encodeURIComponent(
+    `${serverURL}/credential-offer-code-sd-jwt/${uuid}?scheme=${client_id_scheme}&credentialType=${credentialType}`
+  );
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${encodedCredentialOfferUri}`;
+
+  let code = qr.image(credentialOffer, {
+    type: "png",
+    ec_level: "H",
+    size: 10,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  res.json({
+    qr: encodedQR,
+    deepLink: credentialOffer,
+    sessionId: uuid,
   });
 });
 
@@ -289,14 +335,14 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
   }
 
   // retrive cleaned ITB session and also get (if specified) the client_id_scheme
-  const [originalUuid, client_id_scheme] = issuerState.split("|");
+  // const [originalUuid, client_id_scheme] = issuerState.split("|");
   // issuerState = originalUuid;
   const authorizationCode = null; //"SplxlOBeZQQYbYS6WxSbIA";
   let existingCodeSession = await getCodeFlowSession(issuerState);
-  existingCodeSession =
-    existingCodeSession == null
-      ? await getCodeFlowSession(originalUuid)
-      : existingCodeSession;
+  // existingCodeSession =
+  //   existingCodeSession == null
+  //     ? await getCodeFlowSession(issuerState) //originalUUUuid
+  //     : existingCodeSession;
   if (existingCodeSession) {
     await storeCodeFlowSession(issuerState, {
       walletSession: state,
@@ -315,9 +361,12 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
         status: "pending",
       },
       status: "pending",
+      client_id_scheme: existingCodeSession.client_id_scheme,
       isPIDIssuanceFlow: isPIDIssuanceFlow,
+      flowType: "code",
     });
   } else {
+    errors.push("ITB session expired");
     console.log("ITB session not found");
   }
 
@@ -341,15 +390,19 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       error_description.trim()
     );
     const errorRedirectUrl = `${redirectUri}?error=invalid_request&error_description=${encodedErrorDescription}`;
-    existingCodeSession["status"] = "failed";
-    existingCodeSession["results"]["status"] = "failed";
-    storeCodeFlowSession(issuerState, existingCodeSession);
+    if(existingCodeSession){
+      existingCodeSession["status"] = "failed";
+      existingCodeSession["results"]["status"] = "failed";
+      storeCodeFlowSession(issuerState, existingCodeSession);
+    }
+    
     return res.redirect(302, errorRedirectUrl);
   } else {
     /*
     //5.1.5. Dynamic Credential Request https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-12.html#name-successful-authorization-requesttt
      The credential issuer can optionally request additional details to authenticate the client e.g. DID authentication. In this case, the authorisation response will contain a response_mode parameter with the value direct_post. A sample response is as given:
     */
+    let client_id_scheme = existingCodeSession.client_id_scheme;
 
     if (client_id_scheme == "redirect_uri") {
       console.log("client_id_scheme redirect_uri");
@@ -418,7 +471,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
         encodeURIComponent(request_uri);
 
       return res.redirect(302, vpRequest);
-    } else if (client_id_scheme == "did") {
+    } else if (client_id_scheme.indexOf("did")>=0 ) {
       console.log("client_id_scheme did");
       let request_uri = `${serverURL}/didJwksVPrequest_dynamic/${issuerState}`;
       if (credentialsRequested.indexOf("urn:eu.europa.ec.eudi.pid.1") >= 0) {
@@ -525,9 +578,8 @@ codeFlowRouterSDJWT.get(
   async (req, res) => {
     const uuid = req.params.id ? req.params.id : uuidv4();
     let existingCodeSession = await getCodeFlowSession(uuid);
-    const response_uri = serverURL + "/direct_post_vci/" + existingCodeSession.requests.state
-    ;
-
+    const response_uri =
+      serverURL + "/direct_post_vci/" + existingCodeSession.requests.state;
     const client_metadata = {
       client_name: "UAegean EWC Verifier",
       logo_uri:

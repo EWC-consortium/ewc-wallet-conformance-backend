@@ -98,60 +98,7 @@ paymentRouter.get(["/pwa-pre-auth-offer/:id"], async (req, res) => {
 // *******************
 // Auth Code Request
 // *******************
-paymentRouter.get(["/issue-pid-code"], async (req, res) => {
-  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const credentialType = "urn:eu.europa.ec.eudi.pid.1";
-
-  const client_id_scheme = req.query.client_id_scheme
-    ? req.query.client_id_scheme
-    : "redirect_uri";
-
-  let existingCodeSession = await getCodeFlowSession(uuid);
-  if (!existingCodeSession) {
-    storeCodeFlowSession(uuid, {
-      walletSession: null,
-      requests: null,
-      results: null,
-      status: "pending",
-    });
-  }
-
-  let encodedCredentialOfferUri = encodeURIComponent(
-    `${serverURL}/pid-code-offer/${uuid}?scheme=${client_id_scheme}`
-  );
-  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${encodedCredentialOfferUri}`;
-
-  let code = qr.image(credentialOffer, {
-    type: "png",
-    ec_level: "H",
-    size: 10,
-    margin: 10,
-  });
-  let mediaType = "PNG";
-  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
-  res.json({
-    qr: encodedQR,
-    deepLink: credentialOffer,
-    sessionId: uuid,
-  });
-});
-
-paymentRouter.get(["/pid-code-offer/:id"], (req, res) => {
-  const credentialType = "urn:eu.europa.ec.eudi.pid.1";
-  console.log(req.query.client_id_scheme);
-  const client_id_scheme = req.query.scheme ? req.query.scheme : "redirect_uri";
-  const issuer_state = `${req.params.id}|${client_id_scheme}`; // using "|" as a delimiter
-
-  res.json({
-    credential_issuer: serverURL,
-    credential_configuration_ids: [credentialType],
-    grants: {
-      authorization_code: {
-        issuer_state: issuer_state,
-      },
-    },
-  });
-});
+ 
 
 // *********************************************************
 // ************** PAYMENT ROUTES ***************************
