@@ -457,7 +457,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
         existingCodeSession.requests.sessionId = authorizationCode;
         storeCodeFlowSession(issuerState, existingCodeSession);
 
-        const redirectUrl = `${redirectUri}?code=${authorizationCode}&state=${existingCodeSession.state}`;
+        const redirectUrl = `${redirectUri}?code=${authorizationCode}&state=${existingCodeSession.requests.state}`;
         return res.redirect(302, redirectUrl);
         ///
         //        request_uri = `${serverURL}/id_token_x509_request_dynamic/${issuerState}`;

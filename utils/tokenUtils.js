@@ -27,7 +27,7 @@ export function buildIdToken(issuerURL, privateKey) {
   const payload = {
     iss: issuerURL,
     sub: "user123",
-    aud: "yourClientId", // The client ID of the application making the authentication request
+    aud: "https://self-issued.me/v2", // The client ID of the application making the authentication request
     exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour from now)
     iat: Math.floor(Date.now() / 1000), // Token issued at time
     auth_time: Math.floor(Date.now() / 1000) - 60 * 5, // Assume the user authenticated 5 minutes ago

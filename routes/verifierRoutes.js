@@ -117,7 +117,7 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
     uuid: stateParam,
     status: "pending",
     claims: null,
-    presentation_definition_uri: presentation_definition_uri,
+    presentation_definition: presentation_definition_sdJwt,
     // Safely extract the filter object if vctField is found
     credentialRequested: vctField?.filter,
   });
@@ -202,7 +202,7 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
     encodeURIComponent(client_id) +
     "&request_uri=" +
     encodeURIComponent(request_uri);
-    const presentation_definition_uri =
+  const presentation_definition_uri =
     serverURL + "/presentation-definition/itbsdjwt";
   // console.log(`pushing to sessions ${uuid}`);
   // sessions.push(uuid);
@@ -224,7 +224,7 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
     uuid: uuid,
     status: "pending",
     claims: null,
-    presentation_definition_uri: presentation_definition_uri,
+    presentation_definition: presentation_definition_sdJwt,
     // Safely extract the filter object if vctField is found
     credentialRequested: vctField?.filter,
   });
@@ -293,7 +293,7 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
 verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const presentation_definition_uri =
-  serverURL + "/presentation-definition/itbsdjwt";
+    serverURL + "/presentation-definition/itbsdjwt";
   let contorller = serverURL;
   if (proxyPath) {
     contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
@@ -324,7 +324,7 @@ verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
     uuid: uuid,
     status: "pending",
     claims: null,
-    presentation_definition_uri: presentation_definition_uri,
+    presentation_definition: presentation_definition_sdJwt,
     // Safely extract the filter object if vctField is found
     credentialRequested: vctField?.filter,
   });
@@ -401,28 +401,47 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
 *******************************************/
 
 verifierRouter.post("/direct_post/:id", async (req, res) => {
-  console.log("direct_post VP is below!");
+
   try {
+    // console.log("direct_post VP is below!");    
     const { sessionId, extractedClaims } = await extractClaimsFromRequest(
       req,
       digest
     );
-
-    // const index = sessions.indexOf(sessionId);
-    // console.log("index is", index);
-    // console.log("extracted claims are");
-    // console.log(extractedClaims);
     const vpSession = await getVPSession(sessionId);
 
     if (vpSession) {
+
       // verificationSessions[index].status = "success";
       // verificationSessions[index].claims = { ...extractedClaims };
       // console.log(`verification success`);
       // console.log(verificationSessions[index]);
-      vpSession.status = "success";
-      vpSession.claims = { ...extractedClaims };
-      storeVPSession(sessionId, vpSession);
-      res.sendStatus(200);
+      // if(vpSession.)
+
+      const credentialRequested = vpSession.credentialRequested;
+      let potentialValues = credentialRequested;
+      if (!Array.isArray(credentialRequested)) {
+        potentialValues = [credentialRequested.const];
+      }else{
+        potentialValues = credentialRequested.map(value =>value.const)
+      }
+
+      const vctValuesReceived = extractedClaims
+        .filter((item) => item.vct)
+        .map((item) => item.vct);
+      let matches = potentialValues.filter((vct) => vctValuesReceived.includes(vct));
+      if (matches.length === potentialValues.length) {
+        console.log("all requested credentials presented ");
+        console.log(matches);
+        vpSession.status = "success";
+        vpSession.claims = { ...extractedClaims };
+        storeVPSession(sessionId, vpSession);
+        res.sendStatus(200);
+      } else {
+        res
+          .status(400)
+          .json({ error: `not all requested credentials where submitted` });
+      }
     } else {
       console.warn(`Session ID ${sessionId} not found.`);
       res.status(400).json({ error: `Session ID ${sessionId} not found.` });

@@ -2,6 +2,7 @@ import jp from "jsonpath";
 import jwt from "jsonwebtoken";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
 import { digest } from "@sd-jwt/crypto-nodejs";
+import { getVPSession } from "../services/cacheServiceRedis.js";
 
 /**
  * Placeholder decoding/parsing functions.
@@ -21,6 +22,8 @@ async function decodeJwtVC(jwtString) {
  */
 export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
   const sessionId = req.params.id;
+  const requestedInputDescriptors = (await getVPSession(sessionId))
+    .presentation_definition.input_descriptors;
 
   const vpToken = req.body["vp_token"];
   if (!vpToken) {
@@ -53,7 +56,7 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
     const vpResult = await processDescriptorEntry(
       vpToken,
       descriptor,
-      extractedClaims
+      requestedInputDescriptors
     );
     let submittedSdjwt;
     try {
@@ -107,10 +110,26 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
  * Process a single descriptor map entry, recursively handling path_nested.
  * @param {Object} vpToken - The current "traversal" object (initially the top-level VP token payload).
  * @param {Object} descriptor - A single entry from `descriptor_map`.
+ * @param {Object} requestedDescriptor - the request made by the verifier that the submission should match
  * @returns The fully decoded Claim object or null if decoding fails.
  */
-export async function processDescriptorEntry(vpToken, descriptor) {
+/*
+ vpToken,
+      descriptor,
+      extractedClaims,
+      requestedInputDescriptors
+*/
+export async function processDescriptorEntry(
+  vpToken,
+  descriptor,
+  requestedDescriptor
+) {
   const { id, format, path, path_nested } = descriptor;
+
+  const isValidDescriptorEntry = compareSubmissionToDefinition(
+    descriptor,
+    requestedDescriptor
+  );
 
   if (!path_nested) {
     // the vp is in the root
@@ -142,4 +161,94 @@ export async function processDescriptorEntry(vpToken, descriptor) {
       return null;
     }
   }
+}
+
+function compareSubmissionToDefinition(submission, definitionsArray) {
+
+
+
+  let matchingSubmissions = definitionsArray.filter((definition) => {
+    // 2) Compare definition_id in the submission to definition.id
+    if (submission.definition_id !== definition.id && submission.id !== definition.id) {
+      console.warn(
+        "Mismatch: submission.definition_id !== definition.id",
+        submission.definition_id,
+        definition.id
+      );
+      return false;
+    }
+
+    // 3) Check each descriptor_map item
+    if (!Array.isArray(submission.descriptor_map)) {
+      console.warn("descriptor_map is missing or not an array");
+      return false;
+    }
+
+    // Check that the root format (e.g. "vc+sd-jwt") also exists in definition.format
+    // For example, if descriptor_map[0].format = "vc+sd-jwt", ensure definition.format has that key
+    for (const desc of submission.descriptor_map) {
+      const descFormat = desc.format; // e.g. "vc+sd-jwt"
+      if (!definition.format || !definition.format[descFormat]) {
+        console.warn(
+          `Definition does not have a root format for "${descFormat}"`
+        );
+        return false;
+      }
+
+      // 4) Find matching input_descriptor
+      const matchingDescriptor = definition.input_descriptors.find(
+        (d) => d.id === desc.id
+      );
+      if (!matchingDescriptor) {
+        console.warn(
+          "No matching input_descriptor found for descriptor_map id:",
+          desc.id
+        );
+        return false;
+      }
+
+      // 5) Compare descriptor_map.format with input_descriptor.format
+      //    i.e. check if input_descriptor.format has the same key as descFormat
+      if (
+        !matchingDescriptor.format ||
+        !matchingDescriptor.format[descFormat]
+      ) {
+        console.warn(
+          `descriptor_map.format "${descFormat}" not found in input_descriptors.format`
+        );
+        return false;
+      }
+
+      // 6) Check path_nested.format if applicable
+      if (desc.path_nested && desc.path_nested.format) {
+        const nestedFormat = desc.path_nested.format;
+        // For instance, if you want "jwt_vc" to match "vc+sd-jwt" in some logic:
+        // This might be an application-specific check. For example:
+        if (nestedFormat !== descFormat) {
+          console.warn(
+            `Nested format mismatch: path_nested.format="${nestedFormat}" vs descriptor_map.format="${descFormat}"`
+          );
+          // return false;  // Decide if you want to fail or just warn
+        }
+      }
+
+      // We could also compare the "alg" arrays, etc., as needed
+      // e.g. compare definition.format["vc+sd-jwt"].alg with matchingDescriptor.format["vc+sd-jwt"].alg
+      // This is optional and depends on your logic:
+      const rootAlgs = definition.format[descFormat]?.alg || [];
+      const descAlgs = matchingDescriptor.format[descFormat]?.alg || [];
+      const algsMatch =
+        rootAlgs.length === descAlgs.length &&
+        rootAlgs.every((val) => descAlgs.includes(val));
+      if (!algsMatch) {
+        console.warn("Root alg array does not match descriptor alg array");
+        return false;
+      }
+    }
+
+    // If we get here, everything passed the checks
+    return true;
+  });
+
+  return matchingSubmissions.length > 0;
 }
