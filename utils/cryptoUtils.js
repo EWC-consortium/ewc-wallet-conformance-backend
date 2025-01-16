@@ -201,6 +201,8 @@ export async function buildVpRequestJWT(
       nonce: nonce,
       state: state,
       client_metadata: client_metadata,
+      iss: serverURL,
+      aud: "https://self-issued.me/v2",
     };
     if (presentation_definition) {
       jwtPayload.presentation_definition = presentation_definition;
