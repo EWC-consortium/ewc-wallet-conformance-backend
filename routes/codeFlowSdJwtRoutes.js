@@ -390,12 +390,12 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       error_description.trim()
     );
     const errorRedirectUrl = `${redirectUri}?error=invalid_request&error_description=${encodedErrorDescription}`;
-    if(existingCodeSession){
+    if (existingCodeSession) {
       existingCodeSession["status"] = "failed";
       existingCodeSession["results"]["status"] = "failed";
       storeCodeFlowSession(issuerState, existingCodeSession);
     }
-    
+
     return res.redirect(302, errorRedirectUrl);
   } else {
     /*
@@ -471,7 +471,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
         encodeURIComponent(request_uri);
 
       return res.redirect(302, vpRequest);
-    } else if (client_id_scheme.indexOf("did")>=0 ) {
+    } else if (client_id_scheme.indexOf("did") >= 0) {
       console.log("client_id_scheme did");
       let request_uri = `${serverURL}/didJwksVPrequest_dynamic/${issuerState}`;
       if (credentialsRequested.indexOf("urn:eu.europa.ec.eudi.pid.1") >= 0) {
@@ -503,7 +503,8 @@ codeFlowRouterSDJWT.get("/x509VPrequest_dynamic/:id", async (req, res) => {
     description: "EWC pilot case verification",
     vp_formats: {
       "vc+sd-jwt": {
-        alg: ["ES256", "ES384"],
+        "sd-jwt_alg_values": ["ES256", "ES384"],
+        "kb-jwt_alg_values": ["ES256", "ES384"],
       },
     },
   };
@@ -539,7 +540,8 @@ codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
     description: "EWC pilot case verification",
     vp_formats: {
       "vc+sd-jwt": {
-        alg: ["ES256", "ES384"],
+        "sd-jwt_alg_values": ["ES256", "ES384"],
+        "kb-jwt_alg_values": ["ES256", "ES384"],
       },
     },
   };
@@ -589,7 +591,8 @@ codeFlowRouterSDJWT.get(
       description: "EWC pilot case verification",
       vp_formats: {
         "vc+sd-jwt": {
-          alg: ["ES256", "ES384"],
+          "sd-jwt_alg_values": ["ES256", "ES384"],
+          "kb-jwt_alg_values": ["ES256", "ES384"],
         },
       },
     };
@@ -628,7 +631,8 @@ codeFlowRouterSDJWT.get(
       description: "EWC pilot case verification",
       vp_formats: {
         "vc+sd-jwt": {
-          alg: ["ES256", "ES384"],
+          "sd-jwt_alg_values": ["ES256", "ES384"],
+          "kb-jwt_alg_values": ["ES256", "ES384"],
         },
       },
     };

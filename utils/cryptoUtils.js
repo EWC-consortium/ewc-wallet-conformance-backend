@@ -80,8 +80,9 @@ export function buildVpRequestJSON(
     state: "af0ifjsldkj",
     client_metadata: {
       vp_formats: {
-        jwt_vp: {
-          alg: ["EdDSA", "ES256K"],
+        "vc+sd-jwt": {
+          "sd-jwt_alg_values": ["ES256", "ES384"],
+          "kb-jwt_alg_values": ["ES256", "ES384"],
         },
         ldp_vp: {
           proof_type: ["Ed25519Signature2018"],

@@ -255,8 +255,9 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
     cover_uri: "string",
     description: "EWC pilot case verification",
     vp_formats: {
-      jwt_vp: {
-        alg: ["EdDSA", "ES256K"],
+      "vc+sd-jwt": {
+        "sd-jwt_alg_values": ["ES256", "ES384"],
+        "kb-jwt_alg_values": ["ES256", "ES384"],
       },
       ldp_vp: {
         proof_type: ["Ed25519Signature2018"],
@@ -355,8 +356,9 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
     cover_uri: "string",
     description: "EWC pilot case verification",
     vp_formats: {
-      jwt_vp: {
-        alg: ["EdDSA", "ES256K"],
+      "vc+sd-jwt": {
+        "sd-jwt_alg_values": ["ES256", "ES384"],
+        "kb-jwt_alg_values": ["ES256", "ES384"],
       },
       ldp_vp: {
         proof_type: ["Ed25519Signature2018"],
@@ -401,9 +403,8 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
 *******************************************/
 
 verifierRouter.post("/direct_post/:id", async (req, res) => {
-
   try {
-    // console.log("direct_post VP is below!");    
+    // console.log("direct_post VP is below!");
     const { sessionId, extractedClaims } = await extractClaimsFromRequest(
       req,
       digest
@@ -411,7 +412,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     const vpSession = await getVPSession(sessionId);
 
     if (vpSession) {
-
       // verificationSessions[index].status = "success";
       // verificationSessions[index].claims = { ...extractedClaims };
       // console.log(`verification success`);
@@ -422,14 +422,16 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       let potentialValues = credentialRequested;
       if (!Array.isArray(credentialRequested)) {
         potentialValues = [credentialRequested.const];
-      }else{
-        potentialValues = credentialRequested.map(value =>value.const)
+      } else {
+        potentialValues = credentialRequested.map((value) => value.const);
       }
 
       const vctValuesReceived = extractedClaims
         .filter((item) => item.vct)
         .map((item) => item.vct);
-      let matches = potentialValues.filter((vct) => vctValuesReceived.includes(vct));
+      let matches = potentialValues.filter((vct) =>
+        vctValuesReceived.includes(vct)
+      );
       if (matches.length === potentialValues.length) {
         console.log("all requested credentials presented ");
         console.log(matches);
