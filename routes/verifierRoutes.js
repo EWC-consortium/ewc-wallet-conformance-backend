@@ -438,20 +438,20 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         vpSession.status = "success";
         vpSession.claims = { ...extractedClaims };
         storeVPSession(sessionId, vpSession);
-        res.sendStatus(200);
+        return res.status(200).json({ status: "ok" });
       } else {
-        res
+        return res
           .status(400)
           .json({ error: `not all requested credentials where submitted` });
       }
     } else {
       console.warn(`Session ID ${sessionId} not found.`);
-      res.status(400).json({ error: `Session ID ${sessionId} not found.` });
+      return res.status(400).json({ error: `Session ID ${sessionId} not found.` });
       // Optionally handle the case where sessionId is not found
     }
   } catch (error) {
     console.error("Error processing request:", error.message);
-    res.status(400).json({ error: error.message });
+    return res.status(400).json({ error: error.message });
   }
 });
 

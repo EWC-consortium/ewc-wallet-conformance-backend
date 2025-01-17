@@ -260,7 +260,7 @@ paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
 
     session.status = "success";
     storeVerificationSession(sessionId, session);
-    return res.sendStatus(200);
+    return  res.status(200).json({ status: "ok" });
   } catch (error) {
     console.error("Error processing request:", error.message);
     res.status(400).json({ error: error.message });
