@@ -217,7 +217,7 @@ export const createStudentIDPayload = (
   };
 };
 
-export const createAllianceIDPayload = (serverURL, ) => {
+export const createAllianceIDPayload = (serverURL) => {
   return {
     iss: serverURL,
     sub: decodedHeaderSubjectDID || uuidv4(),
@@ -435,7 +435,7 @@ export const getAllianceIDSDJWTData = (decodedHeaderSubjectDID) => {
 
 export const getFerryBoardingPassSDJWTData = (decodedHeaderSubjectDID) => {
   const claims = {
-    id: decodedHeaderSubjectDID ||uuidv4(),
+    id: decodedHeaderSubjectDID || uuidv4(),
     identifier: "John Doe",
     ticketQR: "data:image/png;base64,someBase64EncodedQR",
     ticketNumber: "ABC123456789",
@@ -477,7 +477,7 @@ export const getFerryBoardingPassSDJWTData = (decodedHeaderSubjectDID) => {
 
 export const getGenericSDJWTData = (decodedHeaderSubjectDID, credType) => {
   const claims = {
-    id: decodedHeaderSubjectDID || uuidv4(),
+    // id: decodedHeaderSubjectDID || uuidv4(),
     given_name: "John",
     last_name: "Doe",
   };
@@ -533,7 +533,7 @@ export const getEPassportSDJWTData = (decodedHeaderSubjectDID) => {
 
 export const getVReceiptSDJWTData = (decodedHeaderSubjectDID) => {
   const claims = {
-    id: decodedHeaderSubjectDID ||uuidv4(),
+    id: decodedHeaderSubjectDID || uuidv4(),
 
     // Monetary Total
     "MonetaryTotal.lineExtensionAmount": 150.75,
@@ -943,7 +943,6 @@ export const getVReceiptSDJWTDataWithPayload = (
   return { claims, disclosureFrame };
 };
 
-
 export const createPaymentWalletAttestationPayload = (serverURL) => {
   const currentTime = Math.floor(Date.now() / 1000);
   const expirationTime = currentTime + 60 * 60 * 24 * 30; // Token expiration (30 days)
@@ -951,37 +950,39 @@ export const createPaymentWalletAttestationPayload = (serverURL) => {
   // Credential Subject data for claims
   const credentialSubject = {
     id: "PSP-account-identifier", // Replace with actual account identifier
-    fundingSource: {
-      type: "Credit Card", // Example funding source type
-      panEndsIn: "1234", // Example PAN ends in
-      iin: "400000", // Example IIN
-      aliasId: "alias-12345", // Example alias ID
-      scheme: "Visa", // Example card scheme
-      icon: "https://cdn4.iconfinder.com/data/icons/flat-brand-logo-2/512/visa-512.png", // Example card icon URL
-    },
+    // fundingSource: {
+    //   type: "Credit Card", // Example funding source type
+    //   panEndsIn: "1234", // Example PAN ends in
+    //   iin: "400000", // Example IIN
+    //   aliasId: "alias-12345", // Example alias ID
+    //   scheme: "Visa", // Example card scheme
+    //   icon: "https://cdn4.iconfinder.com/data/icons/flat-brand-logo-2/512/visa-512.png", // Example card icon URL
+    // },
+    accounts: ["123"], //
+    account_holder_id: "luke skywalker", //
   };
   // Claims for the payload
   const claims = {
     aud: `${serverURL}/.well-known/oauth-authorization-server`,
-    sub: "PSP-account-identifier",
+    sub: "PSP-account-identifier", // Ensure consistency with 'id' in credentialSubject
     exp: expirationTime,
-    scope: "PaymentWalletAttestationAccount",
-    credentialSubject,
+    // scope: "PaymentWalletAttestation",
+    ...credentialSubject,
   };
   // Disclosure frame for selective disclosure
   const disclosureFrame = {
     _sd: [
-      "credentialSubject.id", // Account ID
-      "credentialSubject.fundingSource.type", // Funding Source Type
-      "credentialSubject.fundingSource.panEndsIn", // PAN Ends In
-      "credentialSubject.fundingSource.iin", // IIN
-      "credentialSubject.fundingSource.aliasId", // Alias ID
-      "credentialSubject.fundingSource.scheme", // Card Scheme
-      "credentialSubject.fundingSource.icon", // Card Icon URL
+      "id", // Account ID
+      // "credentialSubject.fundingSource.type", // Funding Source Type
+      // "credentialSubject.fundingSource.panEndsIn", // PAN Ends In
+      // "credentialSubject.fundingSource.iin", // IIN
+      // "credentialSubject.fundingSource.aliasId", // Alias ID
+      // "credentialSubject.fundingSource.scheme", // Card Scheme
+      // "credentialSubject.fundingSource.icon", // Card Icon URL
+      "accounts", // Account Identifier
+      "account_holder_id", // Account Holder ID
     ],
   };
 
   return { claims, disclosureFrame };
 };
-
-

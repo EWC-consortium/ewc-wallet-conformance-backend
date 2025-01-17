@@ -34,6 +34,35 @@ pre-auth-sessions : {
 */
 
 
+// Function to store a verificaiton session in Redis
+export async function storeVerificationSession(sessionKey, sessionValue) {
+  try {
+    const key = `verification:${sessionKey}`;
+    const ttlInSeconds = 180; // 3 minutes
+    await client.setEx(key, ttlInSeconds, JSON.stringify(sessionValue)); // Set with expiration
+    console.log(`Session stored under key: ${key}`);
+  } catch (err) {
+    console.error('Error storing session:', err);
+  }
+}
+
+// Function to retrieve a pre-auth session from Redis
+export async function getVerificationSession(sessionKey) {
+  try {
+    const key = `verification:${sessionKey}`;
+    const result = await client.get(key);
+    if (result) {
+      // console.log('Session retrieved:', JSON.parse(result));
+      return JSON.parse(result);
+    } else {
+      console.log('Session not found for key:', key);
+      return null;
+    }
+  } catch (err) {
+    console.error('Error retrieving session:', err);
+  }
+}
+
 
 // Function to store a pre-auth session in Redis
 export async function storePreAuthSession(sessionKey, sessionValue) {
@@ -136,8 +165,32 @@ export async function getSessionKeyAuthCode(code) {
 }
 
 
+export async function storeVPSession(sessionKey, sessionValue) {
+  try {
+    const key = `vp-sessions:${sessionKey}`;
+    const ttlInSeconds = 180; // 3 minutes
+    await client.setEx(key, ttlInSeconds, JSON.stringify(sessionValue)); // Set with expiration
+    console.log(`VP Session stored under key: ${key}`);
+  } catch (err) {
+    console.error('Error storing session:', err);
+  }
+}
 
-
+export async function getVPSession(sessionKey) {
+  try {
+    const key = `vp-sessions:${sessionKey}`;
+    const result = await client.get(key);
+    if (result) {
+      console.log('VP Session retrieved:', JSON.parse(result));
+      return JSON.parse(result);
+    } else {
+      console.log('Session not found for key:', key);
+      return null;
+    }
+  } catch (err) {
+    console.error('Error retrieving session:', err);
+  }
+}
 
 
 export function getPreCodeSessions() {

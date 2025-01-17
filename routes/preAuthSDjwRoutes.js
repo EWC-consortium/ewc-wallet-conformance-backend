@@ -11,12 +11,9 @@ import {
   getSessionKeyAuthCode,
 } from "../services/cacheServiceRedis.js";
 
-
-
 import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
-
 
 const router = express.Router();
 
@@ -49,6 +46,7 @@ router.get(["/offer-tx-code"], async (req, res) => {
       resulut: null,
       persona: null,
       accessToken: null,
+      flowType: "pre-auth",
     });
   }
 
@@ -109,6 +107,7 @@ router.get(["/offer-no-code"], async (req, res) => {
       resulut: null,
       persona: null,
       accessToken: null,
+      flowType: "pre-auth",
     });
   }
   let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-no-code/${uuid}?type=${credentialType}`; //OfferUUID
@@ -146,6 +145,7 @@ router.post(["/offer-no-code"], async (req, res) => {
       persona: null,
       accessToken: null,
       credentialPayload: credentialPayload,
+      flowType: "pre-auth",
     });
   }
   let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-no-code/${uuid}?type=${credentialType}`; //OfferUUID
@@ -211,7 +211,8 @@ router.get(["/haip-offer-tx-code"], async (req, res) => {
       resulut: null,
       persona: null,
       accessToken: null,
-      isHaip: true
+      isHaip: true,
+      flowType: "pre-auth",
     });
   }
   let credentialOffer = `haip://?credential_offer_uri=${serverURL}/haip-credential-offer-tx-code/${uuid}?type=${credentialType}`; //OfferUUID
@@ -253,11 +254,5 @@ router.get(["/haip-credential-offer-tx-code/:id"], (req, res) => {
     },
   });
 });
-
-
-
-
-
-
 
 export default router;
