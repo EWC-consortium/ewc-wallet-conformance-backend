@@ -45,7 +45,7 @@ const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
 // *******************
 pidRouter.get(["/issue-pid-pre-auth"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const credentialType = "urn:eu.europa.ec.eudi:pid:1";
+  const credentialType = "urn:eu.europa.ec.eudi.pid.1";
 
   let existingPreAuthSession = await getPreAuthSession(uuid);
   if (!existingPreAuthSession) {
@@ -76,7 +76,7 @@ pidRouter.get(["/issue-pid-pre-auth"], async (req, res) => {
 pidRouter.get(["/pid-pre-auth-offer/:id"], async (req, res) => {
   const credentialType = req.query.type
     ? req.query.type
-    : "urn:eu.europa.ec.eudi:pid:1";
+    : "urn:eu.europa.ec.eudi.pid.1";
   console.log(credentialType);
   if (credentialType !== "urn:eu.europa.ec.eudi.pid.1") {
     console.log("credential type not urn:eu.europa.ec.eudi.pid.1")
@@ -113,7 +113,7 @@ pidRouter.get(["/pid-pre-auth-offer/:id"], async (req, res) => {
 // *******************
 pidRouter.get(["/issue-pid-code"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const credentialType = "urn:eu.europa.ec.eudi:pid:1";
+  const credentialType = "urn:eu.europa.ec.eudi.pid.1";
 
   const client_id_scheme = req.query.client_id_scheme
     ? req.query.client_id_scheme
