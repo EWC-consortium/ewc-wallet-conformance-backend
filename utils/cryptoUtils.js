@@ -147,7 +147,7 @@ export async function buildVpRequestJWT(
       nonce: nonce,
       state: state,
       client_metadata: client_metadata, //
-      iss: serverURL,
+      iss: client_id,//serverURL,
       aud: "https://self-issued.me/v2",
     };
     // SIOPv2 supports only redirect_uri and did so x509 cannot be used
@@ -202,7 +202,7 @@ export async function buildVpRequestJWT(
       nonce: nonce,
       state: state,
       client_metadata: client_metadata,
-      iss: serverURL,
+      iss: client_id,
       aud: "https://self-issued.me/v2",
     };
     if (presentation_definition) {
@@ -282,7 +282,7 @@ export async function buildPaymentVpRequestJWT(
     nonce: nonce,
     state: state,
     client_metadata: client_metadata, //
-    iss: serverURL,
+    iss: client_id,//serverURL,
     aud: "https://self-issued.me/v2",
     scope: "openid",
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 1, // Token expiration time (1 days)
