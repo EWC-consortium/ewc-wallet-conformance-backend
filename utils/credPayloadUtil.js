@@ -477,7 +477,7 @@ export const getFerryBoardingPassSDJWTData = (decodedHeaderSubjectDID) => {
 
 export const getGenericSDJWTData = (decodedHeaderSubjectDID, credType) => {
   const claims = {
-    id: decodedHeaderSubjectDID || uuidv4(),
+    // id: decodedHeaderSubjectDID || uuidv4(),
     given_name: "John",
     last_name: "Doe",
   };
