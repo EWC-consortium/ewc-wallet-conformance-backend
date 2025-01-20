@@ -299,6 +299,7 @@ verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
   if (proxyPath) {
     contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
   }
+  contorller = contorller.replace("https://", "");
   const client_id = `did:web:${contorller}`;
   let request_uri = `${serverURL}/didjwks/${uuid}`;
   let vpRequest =
@@ -375,6 +376,7 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
   if (proxyPath) {
     contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
   }
+  contorller = contorller.replace("https://", "");
   const clientId = `did:web:${contorller}`;
   // sessions.push(uuid);
   // verificationSessions.push({
