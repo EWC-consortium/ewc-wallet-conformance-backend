@@ -50,7 +50,10 @@ router.get(["/offer-tx-code"], async (req, res) => {
     });
   }
 
-  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-tx-code/${uuid}?type=${credentialType}`; //OfferUUID
+    let encodedCredentialOfferUri = encodeURIComponent(
+    `${serverURL}/credential-offer-tx-code/${uuid}?type=${credentialType}`)
+
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${encodedCredentialOfferUri}`; //OfferUUID
   let code = qr.image(credentialOffer, {
     type: "png",
     ec_level: "H",
@@ -110,7 +113,8 @@ router.get(["/offer-no-code"], async (req, res) => {
       flowType: "pre-auth",
     });
   }
-  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-no-code/${uuid}?type=${credentialType}`; //OfferUUID
+  let encodedCredentialOfferUri = encodeURIComponent(`${serverURL}/credential-offer-no-code/${uuid}?type=${credentialType}`)
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${encodedCredentialOfferUri}`; //OfferUUID
   let code = qr.image(credentialOffer, {
     type: "png",
     ec_level: "H",
@@ -148,7 +152,8 @@ router.post(["/offer-no-code"], async (req, res) => {
       flowType: "pre-auth",
     });
   }
-  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${serverURL}/credential-offer-no-code/${uuid}?type=${credentialType}`; //OfferUUID
+  let encodedCredentialOfferUri = encodeURIComponent(`${serverURL}/credential-offer-no-code/${uuid}?type=${credentialType}`)
+  let credentialOffer = `openid-credential-offer://?credential_offer_uri=${encodedCredentialOfferUri}`; //OfferUUID
   let code = qr.image(credentialOffer, {
     type: "png",
     ec_level: "H",
@@ -215,7 +220,8 @@ router.get(["/haip-offer-tx-code"], async (req, res) => {
       flowType: "pre-auth",
     });
   }
-  let credentialOffer = `haip://?credential_offer_uri=${serverURL}/haip-credential-offer-tx-code/${uuid}?type=${credentialType}`; //OfferUUID
+  let encodedCredentialOfferUri = encodeURIComponent(`${serverURL}/haip-credential-offer-tx-code/${uuid}?type=${credentialType}`)
+  let credentialOffer = `haip://?credential_offer_uri=${encodedCredentialOfferUri}`; //OfferUUID
   let code = qr.image(credentialOffer, {
     type: "png",
     ec_level: "H",
