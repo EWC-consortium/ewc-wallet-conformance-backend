@@ -104,7 +104,7 @@ paymentRouter.get(["/pwa-pre-auth-offer/:id"], async (req, res) => {
 // *********************************************************
 
 paymentRouter.post("/generatePaymentRequest", async (req, res) => {
-  const uuid = req.body.sessionId ? req.query.sessionId : uuidv4();
+  const uuid = req.body.sessionId ? req.body.sessionId : uuidv4();
   const value = req.body.value ? req.body.value : null;
   const merchant = req.body.merchant ? req.body.merchant : null;
   const currency = req.body.currency ? req.body.currency : null;
