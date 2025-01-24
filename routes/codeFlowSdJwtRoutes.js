@@ -478,7 +478,12 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
         //we should request only DID binding in this case
         request_uri = `${serverURL}/id_token_did_request_dynamic/${issuerState}`;
       }
-      const clientId = "dss.aegean.gr";
+      let contorller = serverURL;
+      if (proxyPath) {
+        contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
+      }
+      contorller = contorller.replace("https://", "");
+      const clientId = `did:web:${contorller}`;
       let vpRequest =
         "openid4vp://?client_id=" +
         encodeURIComponent(clientId) +

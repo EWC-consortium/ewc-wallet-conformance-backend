@@ -258,7 +258,7 @@ export async function buildPaymentVpRequestJWT(
   const transactionData = {
     type: "payment_data", // REQUIRED. The string that identifies the type of transaction data.
     credential_ids: [credential_ids], // REQUIRED. An array of strings, each referencing a Credential requested by the Verifier that can be used to authorize this transaction.
-    transaction_data_hashes_alg: "sha-256", //OPTIONAL. An array of strings, each representing a hash algorithm identifier.
+    transaction_data_hashes_alg: ["sha-256"], //OPTIONAL. An array of strings, each representing a hash algorithm identifier.
     payment_data: {
       payee: merchant,
       currency_amount: {

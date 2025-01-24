@@ -12,8 +12,8 @@ import {
   getPreAuthSession,
   getCodeFlowSession,
   storeCodeFlowSession,
-  storeVerificationSession,
-  getVerificationSession,
+  storeVPSession,
+  getVPSession,
 } from "../services/cacheServiceRedis.js";
 
 import {
@@ -98,14 +98,13 @@ paymentRouter.get(["/pwa-pre-auth-offer/:id"], async (req, res) => {
 // *******************
 // Auth Code Request
 // *******************
- 
 
 // *********************************************************
 // ************** PAYMENT ROUTES ***************************
 // *********************************************************
 
 paymentRouter.post("/generatePaymentRequest", async (req, res) => {
-  const uuid = req.body.sessionId ? req.query.sessionId : uuidv4();
+  const uuid = req.body.sessionId ? req.body.sessionId : uuidv4();
   const value = req.body.value ? req.body.value : null;
   const merchant = req.body.merchant ? req.body.merchant : null;
   const currency = req.body.currency ? req.body.currency : null;
@@ -123,7 +122,7 @@ paymentRouter.post("/generatePaymentRequest", async (req, res) => {
     encodeURIComponent(request_uri);
 
   console.log(`pushing to sessions ${uuid}`);
-  storeVerificationSession(uuid, {
+  storeVPSession(uuid, {
     walletSession: null,
     requests: null,
     results: null,
@@ -173,14 +172,13 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
 
   const clientId = "dss.aegean.gr";
   // check session, if it doesn't exist this should fail
-  let session = await getVerificationSession(uuid);
+  let session = await getVPSession(uuid);
   if (!session) {
     return res.send(404);
   }
 
   const hash = crypto.createHash("sha256");
   hash.update(JSON.stringify(presentation_definition_sdJwt));
-  storeVerificationSession(uuid, session);
 
   let { jwt, base64EncodedTxData } = await buildPaymentVpRequestJWT(
     clientId,
@@ -202,9 +200,9 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
     presentation_definition_sdJwt.input_descriptors[0].id
   );
   session.txData = base64EncodedTxData;
-
+  session.presentation_definition = presentation_definition_sdJwt;
   //update session with tx data
-  await storeVerificationSession(uuid, session);
+  await storeVPSession(uuid, session);
 
   console.log(jwt);
   res.type("text/plain").send(jwt);
@@ -218,7 +216,7 @@ paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
     const { sessionId, extractedClaims, keybindJwt } =
       await extractClaimsFromRequest(req, digest, true);
 
-    const session = await getVerificationSession(sessionId);
+    const session = await getVPSession(sessionId);
 
     console.log(extractedClaims);
     let sdHash = keybindJwt.payload.sd_hash;
@@ -259,8 +257,8 @@ paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
     }
 
     session.status = "success";
-    storeVerificationSession(sessionId, session);
-    return  res.status(200).json({ status: "ok" });
+    storeVPSession(sessionId, session);
+    return res.status(200).json({ status: "ok" });
   } catch (error) {
     console.error("Error processing request:", error.message);
     res.status(400).json({ error: error.message });
