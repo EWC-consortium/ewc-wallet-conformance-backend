@@ -22,7 +22,9 @@ async function decodeJwtVC(jwtString) {
  */
 export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
   const sessionId = req.params.id;
-  const requestedInputDescriptors = (await getVPSession(sessionId))
+ 
+  const sessionData = await  getVPSession(sessionId)
+  const requestedInputDescriptors = sessionData
     .presentation_definition.input_descriptors;
 
   const vpToken = req.body["vp_token"];
