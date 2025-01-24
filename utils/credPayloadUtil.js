@@ -339,7 +339,7 @@ export const getPIDSDJWTData = (decodedHeaderSubjectDID) => {
   const currentDate = new Date();
   const expTimestamp = currentDate.setFullYear(currentDate.getFullYear() + 1);
   const claims = {
-    id: decodedHeaderSubjectDID || uuidv4(),
+    // id: decodedHeaderSubjectDID || uuidv4(),
     given_name: "John",
     family_name: "Doe",
     birth_date: "1990-01-01",
@@ -352,7 +352,7 @@ export const getPIDSDJWTData = (decodedHeaderSubjectDID) => {
 
   const disclosureFrame = {
     _sd: [
-      "id",
+      // "id",
       "given_name",
       "family_name",
       "birth_date",
