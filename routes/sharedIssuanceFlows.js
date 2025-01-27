@@ -379,7 +379,11 @@ sharedRouter.post("/credential", async (req, res) => {
 
           if (isHaip) {
             console.log("HAIP issue flow.. will add x509 header");
+            console.log("client certificate pem is")
+            console.log(certificatePemX509)
             const certBase64 = pemToBase64Der(certificatePemX509);
+            
+
             const x5cHeader = [certBase64];
 
             credential = await sdjwt.issue(

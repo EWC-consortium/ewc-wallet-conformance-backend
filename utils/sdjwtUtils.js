@@ -102,7 +102,7 @@ export function extractClaims(decodedSdJwt) {
 export function pemToBase64Der(pem) {
   const pemObj = forge.pem.decode(pem)[0];
   const der = pemObj.body;
-  return Buffer.from(der).toString("base64");
+  return Buffer.from(der, 'binary').toString("base64");
 }
 
 
