@@ -335,7 +335,7 @@ sharedRouter.post("/credential", async (req, res) => {
         try {
           if (
             credType === "VerifiablePIDSDJWT" ||
-            credType === "urn:eu.europa.ec.eudi.pid.1"
+            credType === "urn:eu.europa.ec.eudi:pid:1"
           ) {
             credPayload = getPIDSDJWTData();
           } else if (credType === "VerifiableePassportCredentialSDJWT") {
