@@ -100,12 +100,6 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
     serverURL + "/presentation-definition/itbsdjwt";
   const client_metadata_uri = serverURL + "/client-metadata";
   const clientId = serverURL + "/direct_post" + "/" + stateParam;
-  // sessions.push(stateParam);
-  // verificationSessions.push({
-  //   uuid: stateParam,
-  //   status: "pending",
-  //   claims: null,
-  // });
 
   // Find the field object that has path $.vct
   const vctField =
@@ -161,8 +155,9 @@ verifierRouter.get("/presentation-definition/:type", async (req, res) => {
     epass: presentation_definition_epass,
     5: presentation_definition_alliance_and_education_Id,
     eduId: presentation_definition_alliance_and_education_Id,
-    6: presentation_definition_ferryboardingpass, // Changed from '5' to '6' to avoid duplication
+    6: presentation_definition_ferryboardingpass, 
     ferryboarding: presentation_definition_ferryboardingpass,
+    
   };
 
   // Retrieve the appropriate presentation definition based on the type

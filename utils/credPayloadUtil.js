@@ -986,3 +986,132 @@ export const createPaymentWalletAttestationPayload = (serverURL) => {
 
   return { claims, disclosureFrame };
 };
+
+
+
+export const createPhotoIDAttestationPayload = () => {
+  // Generate basic timestamps for demonstration
+  const currentTime = Math.floor(Date.now() / 1000);
+  const expirationTime = currentTime + 60 * 60 * 24 * 30; // 30 days
+
+  // Example ID for the credential subject (like a DID or unique ID)
+  const subjectId = uuidv4();
+
+  // Mock claims — this is where you embed your PhotoID schema data.
+  // The top-level "id" is analogous to your receipt's approach.
+  const claims = {
+    id: subjectId,
+
+    // Typically you'd include standard JWT/VC fields too
+    iss: "https://mock-issuer.example.com",
+    iat: currentTime,
+    exp: expirationTime,
+    vct: "eu.europa.ec.eudi.photoid.1",
+
+    iso23220: {
+      family_name_unicode: "Doe",
+      given_name_unicode: "Jane",
+      birth_date: "1990-01-01",
+      portrait: "base64-portrait-data",
+      issue_date: "2023-01-01",
+      expiry_date: "2033-01-01",
+      issuing_authority_unicode: "Wonderland Authority",
+      issuing_country: "WL",
+      sex: 2, // 0=unknown,1=male,2=female,9=not-applicable
+      nationality: "WL",
+      document_number: "ABC1234567",
+      name_at_birth: "Jane Wonderland",
+      birthplace: "Wonder City",
+      portrait_capture_date: "2023-02-01T10:00:00Z",
+      resident_address_unicode: "123 Elm Street",
+      resident_city_unicode: "Wonder City",
+      resident_postal_code: "W12345",
+      resident_country: "WL",
+      age_over_18: true,
+      age_in_years: 33,
+      age_birth_year: 1990,
+      family_name_latin1: "Doe",
+      given_name_latin1: "Jane"
+    },
+
+    photoid: {
+      person_id: "PERSON-98765",
+      birth_country: "WL",
+      birth_state: "Wonderland Province",
+      birth_city: "Wonder City",
+      administrative_number: "ADMIN-123",
+      resident_street: "123 Elm Street",
+      resident_house_number: "12",
+      travel_document_number: "TDOC-789",
+      resident_state: "Wonderland Province"
+    },
+
+    dtc: {
+      dtc_version: "1.0.0",
+      dtc_dg1: "Full-MRZ-data-placeholder",
+      dtc_dg2: "base64-encoded-facial-image",
+      dtc_sod: "base64-encoded-SOD",
+      // Example placeholders for optional data groups
+      dtc_dg3: "base64-binary-dg3",
+      dtc_dg4: "base64-binary-dg4",
+      dtc_dg16: "base64-binary-dg16",
+      dg_content_info: "base64-dtcContentInfo"
+    }
+  };
+
+  // Disclosure frame enumerating all the fields we can selectively disclose.
+  // You can remove fields you don't need to reveal.
+  const disclosureFrame = {
+    _sd: [
+           // iso23220 fields
+      "iso23220.family_name_unicode",
+      "iso23220.given_name_unicode",
+      "iso23220.birth_date",
+      "iso23220.portrait",
+      "iso23220.issue_date",
+      "iso23220.expiry_date",
+      "iso23220.issuing_authority_unicode",
+      "iso23220.issuing_country",
+      "iso23220.sex",
+      "iso23220.nationality",
+      "iso23220.document_number",
+      "iso23220.name_at_birth",
+      "iso23220.birthplace",
+      "iso23220.portrait_capture_date",
+      "iso23220.resident_address_unicode",
+      "iso23220.resident_city_unicode",
+      "iso23220.resident_postal_code",
+      "iso23220.resident_country",
+      "iso23220.age_over_18",
+      "iso23220.age_in_years",
+      "iso23220.age_birth_year",
+      "iso23220.family_name_latin1",
+      "iso23220.given_name_latin1",
+
+      // photoid fields
+      "photoid.person_id",
+      "photoid.birth_country",
+      "photoid.birth_state",
+      "photoid.birth_city",
+      "photoid.administrative_number",
+      "photoid.resident_street",
+      "photoid.resident_house_number",
+      "photoid.travel_document_number",
+      "photoid.resident_state",
+
+      // dtc fields
+      "dtc.dtc_version",
+      "dtc.dtc_dg1",
+      "dtc.dtc_dg2",
+      "dtc.dtc_sod",
+      "dtc.dtc_dg3",
+      "dtc.dtc_dg4",
+      "dtc.dtc_dg16",
+      "dtc.dg_content_info"
+    ]
+  };
+
+  return { claims, disclosureFrame };
+};
+
+

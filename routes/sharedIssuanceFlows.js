@@ -49,6 +49,7 @@ import {
   getVReceiptSDJWTData,
   getVReceiptSDJWTDataWithPayload,
   createPaymentWalletAttestationPayload,
+  createPhotoIDAttestationPayload,
 } from "../utils/credPayloadUtil.js";
 
 const sharedRouter = express.Router();
@@ -359,6 +360,8 @@ sharedRouter.post("/credential", async (req, res) => {
             }
           } else if (credType === "VerifiablePortableDocumentA2SDJWT") {
             credPayload = getGenericSDJWTData();
+          } else if (credType === "eu.europa.ec.eudi.photoid.1"){
+            credPayload = createPhotoIDAttestationPayload();
           }
 
           let cnf = { jwk: holderJWKS.jwk };

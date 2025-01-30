@@ -72,10 +72,10 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
       for (const element of submittedSdjwt) {
         try {
           const decodedSdJwt = await decodeSdJwt(element, digest);
-          if (isPaymentVP) {
+          // if (isPaymentVP) {
             //
             keybindJwt = decodedSdJwt.kbJwt;
-          }
+          // }
 
           const claims = await getClaims(
             decodedSdJwt.jwt.payload,
@@ -92,6 +92,7 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
     } else {
       try {
         const decodedSdJwt = await decodeSdJwt(submittedSdjwt, digest);
+        keybindJwt = decodedSdJwt.kbJwt;
         const claims = await getClaims(
           decodedSdJwt.jwt.payload,
           decodedSdJwt.disclosures,

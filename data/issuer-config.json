@@ -1493,7 +1493,507 @@
           "proof_signing_alg_values_supported": ["ES256"]
         }
       }
+    },
+
+    
+    "PhotoID": {
+      "scope": "PhotoID",
+      "claims": {
+        "iso23220": {
+          "display": [
+            {
+              "name": "ISO/IEC 23220-1",
+              "locale": "en-GB"
+            }
+          ],
+          "nested_claims": {
+            "family_name_unicode": {
+              "display": [
+                {
+                  "name": "Family Name",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "given_name_unicode": {
+              "display": [
+                {
+                  "name": "Given Name",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "birth_date": {
+              "display": [
+                {
+                  "name": "Birth Date",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "portrait": {
+              "display": [
+                {
+                  "name": "Portrait",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "issue_date": {
+              "display": [
+                {
+                  "name": "Issue Date",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "expiry_date": {
+              "display": [
+                {
+                  "name": "Expiry Date",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "issuing_authority_unicode": {
+              "display": [
+                {
+                  "name": "Issuing Authority",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "issuing_country": {
+              "display": [
+                {
+                  "name": "Issuing Country",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "sex": {
+              "display": [
+                {
+                  "name": "Sex (ISO/IEC 5218)",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "nationality": {
+              "display": [
+                {
+                  "name": "Nationality",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "document_number": {
+              "display": [
+                {
+                  "name": "Document Number",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "name_at_birth": {
+              "display": [
+                {
+                  "name": "Name at Birth",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "birthplace": {
+              "display": [
+                {
+                  "name": "Birthplace",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "portrait_capture_date": {
+              "display": [
+                {
+                  "name": "Portrait Capture Date",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "resident_address_unicode": {
+              "display": [
+                {
+                  "name": "Resident Address",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "resident_city_unicode": {
+              "display": [
+                {
+                  "name": "Resident City",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "resident_postal_code": {
+              "display": [
+                {
+                  "name": "Resident Postal Code",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "resident_country": {
+              "display": [
+                {
+                  "name": "Resident Country",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "age_over_18": {
+              "display": [
+                {
+                  "name": "Age Over 18",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "age_in_years": {
+              "display": [
+                {
+                  "name": "Age in Years",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "age_birth_year": {
+              "display": [
+                {
+                  "name": "Birth Year",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "family_name_latin1": {
+              "display": [
+                {
+                  "name": "Family Name (Latin-1)",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "given_name_latin1": {
+              "display": [
+                {
+                  "name": "Given Name (Latin-1)",
+                  "locale": "en-GB"
+                }
+              ]
+            }
+          }
+        },
+        "photoid": {
+          "display": [
+            {
+              "name": "Photo ID",
+              "locale": "en-GB"
+            }
+          ],
+          "nested_claims": {
+            "person_id": {
+              "display": [
+                {
+                  "name": "Person ID",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "birth_country": {
+              "display": [
+                {
+                  "name": "Birth Country",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "birth_state": {
+              "display": [
+                {
+                  "name": "Birth State",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "birth_city": {
+              "display": [
+                {
+                  "name": "Birth City",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "administrative_number": {
+              "display": [
+                {
+                  "name": "Administrative Number",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "resident_street": {
+              "display": [
+                {
+                  "name": "Street",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "resident_house_number": {
+              "display": [
+                {
+                  "name": "House Number",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "travel_document_number": {
+              "display": [
+                {
+                  "name": "Travel Document Number",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "resident_state": {
+              "display": [
+                {
+                  "name": "Resident State",
+                  "locale": "en-GB"
+                }
+              ]
+            }
+          }
+        },
+        "dtc": {
+          "display": [
+            {
+              "name": "DTC",
+              "locale": "en-GB"
+            }
+          ],
+          "nested_claims": {
+            "dtc_version": {
+              "display": [
+                {
+                  "name": "DTC Version",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg1": {
+              "display": [
+                {
+                  "name": "Data Group 1",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg2": {
+              "display": [
+                {
+                  "name": "Data Group 2",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg3": {
+              "display": [
+                {
+                  "name": "Data Group 3",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg4": {
+              "display": [
+                {
+                  "name": "Data Group 4",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg5": {
+              "display": [
+                {
+                  "name": "Data Group 5",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg6": {
+              "display": [
+                {
+                  "name": "Data Group 6",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg7": {
+              "display": [
+                {
+                  "name": "Data Group 7",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg8": {
+              "display": [
+                {
+                  "name": "Data Group 8",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg9": {
+              "display": [
+                {
+                  "name": "Data Group 9",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg10": {
+              "display": [
+                {
+                  "name": "Data Group 10",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg11": {
+              "display": [
+                {
+                  "name": "Data Group 11",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg12": {
+              "display": [
+                {
+                  "name": "Data Group 12",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg13": {
+              "display": [
+                {
+                  "name": "Data Group 13",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg14": {
+              "display": [
+                {
+                  "name": "Data Group 14",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg15": {
+              "display": [
+                {
+                  "name": "Data Group 15",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_dg16": {
+              "display": [
+                {
+                  "name": "Data Group 16",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dtc_sod": {
+              "display": [
+                {
+                  "name": "Security Object Document (SOD)",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "dg_content_info": {
+              "display": [
+                {
+                  "name": "Content Info",
+                  "locale": "en-GB"
+                }
+              ]
+            }
+          }
+        },
+        "iss": {
+          "display": [
+            {
+              "name": "Issuer (URI)",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "iat": {
+          "display": [
+            {
+              "name": "Issued At (Unix Timestamp)",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "exp": {
+          "display": [
+            {
+              "name": "Expiration Time (Unix Timestamp)",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "vct": {
+          "display": [
+            {
+              "name": "Credential Type",
+              "locale": "en-GB"
+            }
+          ]
+        }
+      },
+      "cryptographic_binding_methods_supported": ["jwk"],
+      "display": [
+        {
+          "name": "Photo ID Credential",
+          "locale": "en-GB",
+          "background_color": "#0059f8",
+          "text_color": "#FFFFFF",
+          "logo": {
+            "uri": "https://example.com/logo.png",
+            "alt_text": "Photo ID Issuer"
+          }
+        }
+      ],
+      "credential_signing_alg_values_supported": ["ES256"],
+      "format": "vc+sd-jwt",
+      "vct": "eu.europa.ec.eudi.photoid.1",
+      "proof_types_supported": {
+        "jwt": {
+          "proof_signing_alg_values_supported": ["ES256"]
+        }
+      }
     }
+    
+    
 
 
     
