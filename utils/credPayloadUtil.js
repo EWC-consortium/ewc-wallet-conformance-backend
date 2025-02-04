@@ -1115,3 +1115,16 @@ export const createPhotoIDAttestationPayload = () => {
 };
 
 
+
+
+export const createCombinedCredentialsPayload = (
+  token,
+  serverURL,
+  decodedHeaderSubjectDID
+) => {
+  const photoID = createPhotoIDAttestationPayload();
+  const studentID = getStudentIDSDJWTData(decodedHeaderSubjectDID);
+  const pid = createPIDPayload(token, serverURL, decodedHeaderSubjectDID);
+  
+  return [photoID, studentID, pid]; // Add other credentials as needed
+};

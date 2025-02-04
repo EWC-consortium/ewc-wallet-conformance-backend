@@ -114,6 +114,8 @@ paymentRouter.post("/generatePaymentRequest", async (req, res) => {
   const frequency = req.body.frequency;
 
   let client_id = "dss.aegean.gr";
+
+  // let client_id = serverURL.replace("https://","") 
   let request_uri = `${serverURL}/payment-request/${uuid}`;
   let vpRequest =
     "openid4vp://?client_id=" +
@@ -170,7 +172,7 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
     },
   };
 
-  const clientId = "dss.aegean.gr";
+  const clientId = "dss.aegean.gr" // serverURL.replace("https://","") // ; //TODO this should match the server url (without http stuff)
   // check session, if it doesn't exist this should fail
   let session = await getVPSession(uuid);
   if (!session) {
@@ -219,6 +221,8 @@ paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
     const session = await getVPSession(sessionId);
 
     console.log(extractedClaims);
+    console.log("keybindJwt -4");
+    console.log(keybindJwt);
     let sdHash = keybindJwt.payload.sd_hash;
     let transactionDataHashesArray = keybindJwt.payload.transaction_data_hashes;
     let xtDataHashAlg = keybindJwt.payload.transaction_data_hashes_alg;

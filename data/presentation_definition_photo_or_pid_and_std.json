@@ -1,0 +1,132 @@
+{
+    "id": "d49ee616-0e8d-4698-aff5-2a8a2362652d",
+    "name": "Identity Verification Request",
+    "format": {
+      "vc+sd-jwt": {
+        "alg": ["ES256"]
+      }
+    },
+    "submission_requirements": [
+      {
+        "name": "Government ID Requirement",
+        "rule": "pick",
+        "count": 1,
+        "from": "A"
+      },
+      {
+        "name": "Student ID Requirement",
+        "rule": "all",
+        "from": "B"
+      }
+    ],
+    "input_descriptors": [
+      {
+        "id": "eudi-pid-credential",
+        "group": ["A"],
+        "name": "EU Digital Identity Wallet PID",
+        "format": {
+          "vc+sd-jwt": {
+            "alg": ["ES256"]
+          }
+        },
+        "constraints": {
+          "fields": [
+            {
+              "path": ["$.given_name"]
+            },
+            {
+              "path": ["$.family_name"]
+            },
+            {
+              "path": ["$.birth_date"]
+            },
+            {
+              "path": ["$.age_over_18"]
+            },
+            {
+              "path": ["$.issuing_country"]
+            },
+            {
+              "path": ["$.vct"],
+              "filter": {
+                "type": "string",
+                "const": "urn:eu.europa.ec.eudi:pid:1"
+              }
+            }
+          ],
+          "limit_disclosure": "required"
+        }
+      },
+      {
+        "id": "photoid-credential",
+        "group": ["A"],
+        "name": "Photo ID Credential",
+        "format": {
+          "vc+sd-jwt": {
+            "alg": ["ES256"]
+          }
+        },
+        "constraints": {
+          "fields": [
+            {
+              "path": ["$.iso23220.family_name_unicode"]
+            },
+            {
+              "path": ["$.iso23220.given_name_unicode"]
+            },
+            {
+              "path": ["$.iso23220.birth_date"]
+            },
+            {
+              "path": ["$.iso23220.issuing_country"]
+            },
+            {
+              "path": ["$.vct"],
+              "filter": {
+                "type": "string",
+                "const": "eu.europa.ec.eudi.photoid.1"
+              }
+            }
+          ],
+          "limit_disclosure": "required"
+        }
+      },
+      {
+        "id": "student-id-credential",
+        "group": ["B"],
+        "name": "Verifiable Student ID",
+        "format": {
+          "vc+sd-jwt": {
+            "alg": ["ES256"]
+          }
+        },
+        "constraints": {
+          "fields": [
+            {
+              "path": ["$.schacPersonalUniqueID"]
+            },
+            {
+              "path": ["$.schacHomeOrganization"]
+            },
+            {
+              "path": ["$.familyName"]
+            },
+            {
+              "path": ["$.firstName"]
+            },
+            {
+              "path": ["$.dateOfBirth"]
+            },
+            {
+              "path": ["$.vct"],
+              "filter": {
+                "type": "string",
+                "const": "VerifiableStudentIDSDJWT"
+              }
+            }
+          ],
+          "limit_disclosure": "required"
+        }
+      }
+    ]
+  }

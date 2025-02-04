@@ -22,10 +22,10 @@ async function decodeJwtVC(jwtString) {
  */
 export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
   const sessionId = req.params.id;
- 
-  const sessionData = await  getVPSession(sessionId)
-  const requestedInputDescriptors = sessionData
-    .presentation_definition.input_descriptors;
+
+  const sessionData = await getVPSession(sessionId);
+  const requestedInputDescriptors =
+    sessionData.presentation_definition.input_descriptors;
 
   const vpToken = req.body["vp_token"];
   if (!vpToken) {
@@ -73,8 +73,11 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
         try {
           const decodedSdJwt = await decodeSdJwt(element, digest);
           // if (isPaymentVP) {
-            //
-            keybindJwt = decodedSdJwt.kbJwt;
+          //
+
+          keybindJwt = decodedSdJwt.kbJwt;
+          console.log("keybindJwt -1");
+          console.log(keybindJwt);
           // }
 
           const claims = await getClaims(
@@ -93,6 +96,8 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
       try {
         const decodedSdJwt = await decodeSdJwt(submittedSdjwt, digest);
         keybindJwt = decodedSdJwt.kbJwt;
+        console.log("keybindJwt -2");
+        console.log(keybindJwt);
         const claims = await getClaims(
           decodedSdJwt.jwt.payload,
           decodedSdJwt.disclosures,
@@ -106,6 +111,8 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
     }
   }
 
+  console.log("keybindJwt -3");
+  console.log(keybindJwt);
   return { sessionId, extractedClaims, keybindJwt };
 }
 
@@ -167,12 +174,12 @@ export async function processDescriptorEntry(
 }
 
 function compareSubmissionToDefinition(submission, definitionsArray) {
-
-
-
   let matchingSubmissions = definitionsArray.filter((definition) => {
     // 2) Compare definition_id in the submission to definition.id
-    if (submission.definition_id !== definition.id && submission.id !== definition.id) {
+    if (
+      submission.definition_id !== definition.id &&
+      submission.id !== definition.id
+    ) {
       console.warn(
         "Mismatch: submission.definition_id !== definition.id",
         submission.definition_id,

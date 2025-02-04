@@ -57,6 +57,15 @@ const presentation_definition_ferryboardingpass = JSON.parse(
     "utf-8"
   )
 );
+const presentation_definition_photoId_or_pid_and_studentID = JSON.parse(
+  fs.readFileSync(
+    "./data/presentation_definition_alliance_and_education_Id.json",
+    "utf-8"
+  )
+);
+const presentation_definition_photo_or_pid_and_std = JSON.parse(
+  fs.readFileSync("./data/presentation_definition_photo_or_pid_and_std.json", "utf-8")
+);
 
 const client_metadata = JSON.parse(
   fs.readFileSync("./data/verifier-config.json", "utf-8")
@@ -96,8 +105,10 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
   // const uuid = req.params.id ? req.params.id : uuidv4();
   //url.searchParams.get("presentation_definition");
   const response_uri = serverURL + "/direct_post" + "/" + stateParam;
+
   const presentation_definition_uri =
     serverURL + "/presentation-definition/itbsdjwt";
+
   const client_metadata_uri = serverURL + "/client-metadata";
   const clientId = serverURL + "/direct_post" + "/" + stateParam;
 
@@ -155,9 +166,10 @@ verifierRouter.get("/presentation-definition/:type", async (req, res) => {
     epass: presentation_definition_epass,
     5: presentation_definition_alliance_and_education_Id,
     eduId: presentation_definition_alliance_and_education_Id,
-    6: presentation_definition_ferryboardingpass, 
+    6: presentation_definition_ferryboardingpass,
     ferryboarding: presentation_definition_ferryboardingpass,
-    
+    7: presentation_definition_photoId_or_pid_and_studentID,
+    cff: presentation_definition_photoId_or_pid_and_studentID,
   };
 
   // Retrieve the appropriate presentation definition based on the type
@@ -189,25 +201,17 @@ verifierRouter.get("/client-metadata", async (req, res) => {
 *********************************************************** */
 verifierRouter.get("/generateVPRequestx509", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  const credType = req.query.credType ? req.query.credType : "itbsdjwt";
 
   let client_id = "dss.aegean.gr";
-  let request_uri = `${serverURL}/x509VPrequest/${uuid}`;
+  let request_uri = `${serverURL}/x509VPrequest/${uuid}?credType=${credType}`;
   let vpRequest =
     "openid4vp://?client_id=" +
     encodeURIComponent(client_id) +
     "&request_uri=" +
     encodeURIComponent(request_uri);
-  const presentation_definition_uri =
-    serverURL + "/presentation-definition/itbsdjwt";
-  // console.log(`pushing to sessions ${uuid}`);
-  // sessions.push(uuid);
-  // verificationSessions.push({
-  //   uuid: uuid,
-  //   status: "pending",
-  //   claims: null,
-  // });
-  // console.log(`verification sessions`);
-  // console.log(verificationSessions);
+  // const presentation_definition_uri =
+  //   serverURL + "/presentation-definition/itbsdjwt";
 
   // Find the field object that has path $.vct
   const vctField =
@@ -243,6 +247,9 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
   const uuid = req.params.id ? req.params.id : uuidv4();
   const response_uri = serverURL + "/direct_post" + "/" + uuid;
 
+  const credType = req.query.credType ? req.query.credType : "itbsdjwt";
+  let presentationDefition = getPresentationDefinitionFromCredType(credType);
+
   const client_metadata = {
     client_name: "UAegean EWC Verifier",
     logo_uri: "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
@@ -261,17 +268,11 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
   };
 
   const clientId = "dss.aegean.gr";
-  // sessions.push(uuid);
-  // verificationSessions.push({
-  //   uuid: uuid,
-  //   status: "pending",
-  //   claims: null,
-  // });
 
   let signedVPJWT = await buildVpRequestJWT(
     clientId,
     response_uri,
-    presentation_definition_sdJwt,
+    presentationDefition, //presentation_definition_sdJwt,
     "",
     "x509_san_dns",
     client_metadata,
@@ -429,21 +430,23 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       let matches = potentialValues.filter((vct) =>
         vctValuesReceived.includes(vct)
       );
-      if (matches.length === potentialValues.length) {
+      // if (matches.length === potentialValues.length) {
         console.log("all requested credentials presented ");
         console.log(matches);
         vpSession.status = "success";
         vpSession.claims = { ...extractedClaims };
         storeVPSession(sessionId, vpSession);
         return res.status(200).json({ status: "ok" });
-      } else {
-        return res
-          .status(400)
-          .json({ error: `not all requested credentials where submitted` });
-      }
+      // } else {
+      //   return res
+      //     .status(400)
+      //     .json({ error: `not all requested credentials where submitted` });
+      // }
     } else {
       console.warn(`Session ID ${sessionId} not found.`);
-      return res.status(400).json({ error: `Session ID ${sessionId} not found.` });
+      return res
+        .status(400)
+        .json({ error: `Session ID ${sessionId} not found.` });
       // Optionally handle the case where sessionId is not found
     }
   } catch (error) {
@@ -813,6 +816,29 @@ async function flattenCredentialsToClaims(credentials) {
     }
   });
   return claimsResult;
+}
+
+function getPresentationDefinitionFromCredType(type) {
+  let presentationDefinition;
+  if (type === "pid") {
+    presentationDefinition = presentation_definition_pid;
+  } else if (type === "epassport") {
+    presentationDefinition = presentation_definition_epass;
+  } else if (type === "educationId" || type === "educationid") {
+    presentationDefinition = presentation_definition_educational_id;
+  } else if (type === "allianceId" || type === "allianceid") {
+    presentationDefinition = presentation_definition_alliance_id;
+  } else if (type === "ferryboardingpass") {
+    presentationDefinition = presentation_definition_ferryboardingpass;
+  } else if (type === "erua-id") {
+    presentationDefinition = presentation_definition_alliance_and_education_Id;
+  } else if (type === "cff") {
+    presentationDefinition = presentation_definition_photo_or_pid_and_std;
+  } else {
+    return null;
+  }
+
+  return presentationDefinition;
 }
 
 export default verifierRouter;
