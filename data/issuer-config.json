@@ -1975,10 +1975,10 @@
         {
           "name": "Photo ID Credential",
           "locale": "en-GB",
-          "background_color": "#0059f8",
+          "background_color": "#3e426f",
           "text_color": "#FFFFFF",
           "logo": {
-            "uri": "https://example.com/logo.png",
+            "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
             "alt_text": "Photo ID Issuer"
           }
         }

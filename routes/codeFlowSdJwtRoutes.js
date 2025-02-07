@@ -571,7 +571,7 @@ codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
     response_uri,
     presentation_definition_sdJwt,
     privateKeyPem,
-    "did:jwks",
+    "did",
     client_metadata,
     `did:web:${contorller}#keys-1`,
     serverURL
@@ -662,7 +662,7 @@ codeFlowRouterSDJWT.get(
       response_uri,
       null,
       privateKeyPem,
-      "did:jwks",
+      "did",
       client_metadata,
       `did:web:${contorller}#keys-1`,
       serverURL,

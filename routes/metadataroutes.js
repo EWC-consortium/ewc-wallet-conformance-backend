@@ -28,6 +28,7 @@ metadataRouter.get(
     issuerConfig.credential_issuer = serverURL;
     issuerConfig.authorization_servers = [serverURL];
     issuerConfig.credential_endpoint = serverURL + "/credential";
+    issuerConfig.batch_credential_endpoint = serverURL + "/batch_credential_endpoint";
     issuerConfig.deferred_credential_endpoint =
       serverURL + "/credential_deferred";
 

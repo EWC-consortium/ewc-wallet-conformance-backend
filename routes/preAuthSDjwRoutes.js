@@ -47,8 +47,10 @@ router.get(["/offer-tx-code"], async (req, res) => {
       persona: null,
       accessToken: null,
       flowType: "pre-auth",
+      isHaip:true
     });
   }
+  
 
     let encodedCredentialOfferUri = encodeURIComponent(
     `${serverURL}/credential-offer-tx-code/${uuid}?type=${credentialType}`)

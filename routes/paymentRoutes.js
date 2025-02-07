@@ -227,6 +227,20 @@ paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
     let transactionDataHashesArray = keybindJwt.payload.transaction_data_hashes;
     let xtDataHashAlg = keybindJwt.payload.transaction_data_hashes_alg;
 
+    /*
+      to be sent to the merchant:
+      {
+          “payment_wallet_attestation”: “<VP Token>”,
+          “wallet_unit_attestation”: “<WUA>~<KB JWT>”,
+          “transaction_data_hashes_alg”: [“sha-256”],
+          “transaction_data”: “Base64URL({….})”
+      }
+
+
+    */
+
+
+
     //Validate the transaction_data
     //1. Validate that the original base64url encoded transaction_data string results
     // in the same hash value when hashed with the given function as the hash contained

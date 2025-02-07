@@ -57,40 +57,7 @@
           "limit_disclosure": "required"
         }
       },
-      {
-        "id": "photoid-credential",
-        "group": ["A"],
-        "name": "Photo ID Credential",
-        "format": {
-          "vc+sd-jwt": {
-            "alg": ["ES256"]
-          }
-        },
-        "constraints": {
-          "fields": [
-            {
-              "path": ["$.iso23220.family_name_unicode"]
-            },
-            {
-              "path": ["$.iso23220.given_name_unicode"]
-            },
-            {
-              "path": ["$.iso23220.birth_date"]
-            },
-            {
-              "path": ["$.iso23220.issuing_country"]
-            },
-            {
-              "path": ["$.vct"],
-              "filter": {
-                "type": "string",
-                "const": "eu.europa.ec.eudi.photoid.1"
-              }
-            }
-          ],
-          "limit_disclosure": "required"
-        }
-      },
+      
       {
         "id": "student-id-credential",
         "group": ["B"],

@@ -50,6 +50,7 @@ import {
   getVReceiptSDJWTDataWithPayload,
   createPaymentWalletAttestationPayload,
   createPhotoIDAttestationPayload,
+  getFerryBoardingPassSDJWTData,
 } from "../utils/credPayloadUtil.js";
 
 const sharedRouter = express.Router();
@@ -216,7 +217,7 @@ sharedRouter.post("/credential", async (req, res) => {
 
   let payload = {};
 
-  const sessionKey = await getSessionKeyFromAccessToken(token); //this only works for pre-auth flow.. 
+  const sessionKey = await getSessionKeyFromAccessToken(token); //this only works for pre-auth flow..
   let sessionObject;
   if (sessionKey) {
     sessionObject = await getPreAuthSession(sessionKey);
@@ -343,8 +344,8 @@ sharedRouter.post("/credential", async (req, res) => {
             credPayload = getEPassportSDJWTData();
           } else if (credType === "VerifiableStudentIDSDJWT") {
             credPayload = getStudentIDSDJWTData();
-          } else if (credType === "ferryBoardingPassCredential") {
-            credPayload = VerifiableFerryBoardingPassCredentialSDJWT();
+          } else if (credType === "ferryBoardingPassCredential" || credType === "VerifiableFerryBoardingPassCredentialSDJWT") {
+            credPayload = await getFerryBoardingPassSDJWTData();
           } else if (credType === "VerifiablePortableDocumentA1SDJWT") {
             credPayload = getGenericSDJWTData();
           }
@@ -360,7 +361,7 @@ sharedRouter.post("/credential", async (req, res) => {
             }
           } else if (credType === "VerifiablePortableDocumentA2SDJWT") {
             credPayload = getGenericSDJWTData();
-          } else if (credType === "eu.europa.ec.eudi.photoid.1"){
+          } else if (credType === "eu.europa.ec.eudi.photoid.1") {
             credPayload = createPhotoIDAttestationPayload();
           }
 
@@ -382,12 +383,13 @@ sharedRouter.post("/credential", async (req, res) => {
 
           if (isHaip) {
             console.log("HAIP issue flow.. will add x509 header");
-            console.log("client certificate pem is")
-            console.log(certificatePemX509)
+            console.log("client certificate pem is");
+            console.log(certificatePemX509);
             const certBase64 = pemToBase64Der(certificatePemX509);
-            
 
             const x5cHeader = [certBase64];
+
+            // let disclosureFrame = { _sd: credPayload.disclosureFrame._sd };
 
             credential = await sdjwt.issue(
               {

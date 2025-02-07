@@ -386,7 +386,7 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
     response_uri,
     presentation_definition_sdJwt,
     privateKeyPem,
-    "did:jwks",
+    "did",
     client_metadata,
     `did:web:${contorller}#keys-1`,
     serverURL
@@ -834,7 +834,9 @@ function getPresentationDefinitionFromCredType(type) {
     presentationDefinition = presentation_definition_alliance_and_education_Id;
   } else if (type === "cff") {
     presentationDefinition = presentation_definition_photo_or_pid_and_std;
-  } else {
+  } else if(type === "itbsdjwt"){
+    presentationDefinition =presentation_definition_sdJwt
+  }else{
     return null;
   }
 

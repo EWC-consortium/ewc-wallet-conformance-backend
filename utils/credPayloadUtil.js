@@ -1,6 +1,14 @@
 import { getCredentialSubjectForPersona } from "./personasUtils.js";
 import { v4 as uuidv4 } from "uuid";
+import fs from "fs";
+import qr from "qr-image";
+import imageDataURI from "image-data-uri";
+import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 
+const face_data = fs.readFileSync(
+  "./data/face.data",
+  "utf8"
+);
 // Helper functions to create payloads for different credential types
 
 export const createPIDPayload = (token, serverURL, decodedHeaderSubjectDID) => {
@@ -433,11 +441,23 @@ export const getAllianceIDSDJWTData = (decodedHeaderSubjectDID) => {
   return { claims, disclosureFrame };
 };
 
-export const getFerryBoardingPassSDJWTData = (decodedHeaderSubjectDID) => {
+export const getFerryBoardingPassSDJWTData = async (decodedHeaderSubjectDID) => {
+
+  let txtToEncode = encodeURIComponent("Y;6759");
+  let code = qr.image(txtToEncode, {
+    type: "png",
+    ec_level: "H",
+    size: 10,
+    margin: 10,
+  });
+  let mediaType = "jpeg";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  //data:image/jpeg;base64,
+
   const claims = {
     id: decodedHeaderSubjectDID || uuidv4(),
     identifier: "John Doe",
-    ticketQR: "data:image/png;base64,someBase64EncodedQR",
+    ticketQR: encodedQR,
     ticketNumber: "ABC123456789",
     ticketLet: "A",
     lastName: "Doe",
@@ -1012,7 +1032,7 @@ export const createPhotoIDAttestationPayload = () => {
       family_name_unicode: "Doe",
       given_name_unicode: "Jane",
       birth_date: "1990-01-01",
-      portrait: "base64-portrait-data",
+      portrait: face_data,
       issue_date: "2023-01-01",
       expiry_date: "2033-01-01",
       issuing_authority_unicode: "Wonderland Authority",
@@ -1049,8 +1069,8 @@ export const createPhotoIDAttestationPayload = () => {
     dtc: {
       dtc_version: "1.0.0",
       dtc_dg1: "Full-MRZ-data-placeholder",
-      dtc_dg2: "base64-encoded-facial-image",
-      dtc_sod: "base64-encoded-SOD",
+      dtc_dg2: face_data,
+      dtc_sod: face_data,
       // Example placeholders for optional data groups
       dtc_dg3: "base64-binary-dg3",
       dtc_dg4: "base64-binary-dg4",
@@ -1059,56 +1079,60 @@ export const createPhotoIDAttestationPayload = () => {
     }
   };
 
-  // Disclosure frame enumerating all the fields we can selectively disclose.
-  // You can remove fields you don't need to reveal.
+  
   const disclosureFrame = {
-    _sd: [
-           // iso23220 fields
-      "iso23220.family_name_unicode",
-      "iso23220.given_name_unicode",
-      "iso23220.birth_date",
-      "iso23220.portrait",
-      "iso23220.issue_date",
-      "iso23220.expiry_date",
-      "iso23220.issuing_authority_unicode",
-      "iso23220.issuing_country",
-      "iso23220.sex",
-      "iso23220.nationality",
-      "iso23220.document_number",
-      "iso23220.name_at_birth",
-      "iso23220.birthplace",
-      "iso23220.portrait_capture_date",
-      "iso23220.resident_address_unicode",
-      "iso23220.resident_city_unicode",
-      "iso23220.resident_postal_code",
-      "iso23220.resident_country",
-      "iso23220.age_over_18",
-      "iso23220.age_in_years",
-      "iso23220.age_birth_year",
-      "iso23220.family_name_latin1",
-      "iso23220.given_name_latin1",
-
-      // photoid fields
-      "photoid.person_id",
-      "photoid.birth_country",
-      "photoid.birth_state",
-      "photoid.birth_city",
-      "photoid.administrative_number",
-      "photoid.resident_street",
-      "photoid.resident_house_number",
-      "photoid.travel_document_number",
-      "photoid.resident_state",
-
-      // dtc fields
-      "dtc.dtc_version",
-      "dtc.dtc_dg1",
-      "dtc.dtc_dg2",
-      "dtc.dtc_sod",
-      "dtc.dtc_dg3",
-      "dtc.dtc_dg4",
-      "dtc.dtc_dg16",
-      "dtc.dg_content_info"
-    ]
+    iso23220: {
+      _sd: [
+        "family_name_unicode",
+        "given_name_unicode",
+        "birth_date",
+        "portrait",
+        "issue_date",
+        "expiry_date",
+        "issuing_authority_unicode",
+        "issuing_country",
+        "sex",
+        "nationality",
+        "document_number",
+        "name_at_birth",
+        "birthplace",
+        "portrait_capture_date",
+        "resident_address_unicode",
+        "resident_city_unicode",
+        "resident_postal_code",
+        "resident_country",
+        "age_over_18",
+        "age_in_years",
+        "age_birth_year",
+        "family_name_latin1",
+        "given_name_latin1"
+      ]
+    },
+    photoid: {
+      _sd: [
+        "person_id",
+        "birth_country",
+        "birth_state",
+        "birth_city",
+        "administrative_number",
+        "resident_street",
+        "resident_house_number",
+        "travel_document_number",
+        "resident_state"
+      ]
+    },
+    dtc: {
+      _sd: [
+        "dtc_version",
+        "dtc_dg1",
+        "dtc_dg2",
+        "dtc_sod",
+        "dtc_dg3",
+        "dtc_dg4",
+        "dtc_dg16",
+        "dg_content_info"
+      ]
+    }
   };
 
   return { claims, disclosureFrame };
