@@ -420,7 +420,9 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
         presentation_definition_uri,
         "redirect_uri",
         client_metadata_uri,
-        response_uri
+        response_uri,
+        "vp_token",
+        nonce,
       );
       if (credentialsRequested.indexOf("urn:eu.europa.ec.eudi:pid:1") >= 0) {
         //we should request only DID binding in this case
@@ -432,7 +434,8 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
           client_metadata_uri,
           response_uri,
           existingCodeSession.state,
-          "id_token"
+          "id_token",
+          nonce
         );
       }
 

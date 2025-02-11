@@ -99,7 +99,7 @@ export function buildVPbyValue(
       client_id_scheme +
       "&client_metadata_uri=" +
       encodeURIComponent(client_metadata_uri) +
-      "&nonce=n0S6_WzA2Mj" + //TODO add a random nonce here
+      "&nonce=" + nonce + 
       "&state=" +
       state 
       +"&scope=code"

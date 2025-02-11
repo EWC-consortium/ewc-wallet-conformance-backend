@@ -99,6 +99,7 @@ let verificationResultsHistory = new TimedArray(30000); //cache data for 30sec
 verifierRouter.get("/generateVPRequest", async (req, res) => {
   const stateParam = req.query.sessionId ? req.query.sessionId : uuidv4();
   const nonce = generateNonce(16);
+  const state = generateNonce(16);
 
   // The Verifier may send an Authorization Request as Request Object by value
   // or by reference as defined in JWT-Secured Authorization Request (JAR)
@@ -137,6 +138,8 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
     "redirect_uri",
     client_metadata_uri,
     response_uri,
+    state,
+    "vp_token",
     nonce
   );
 
