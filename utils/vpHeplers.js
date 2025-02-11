@@ -61,12 +61,14 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
       requestedInputDescriptors
     );
     let submittedSdjwt;
+    
     try {
       submittedSdjwt = JSON.parse(vpResult);
     } catch (e) {
       console.log(e);
       submittedSdjwt = vpResult;
     }
+
 
     if (Array.isArray(submittedSdjwt)) {
       for (const element of submittedSdjwt) {
@@ -76,8 +78,8 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
           //
 
           keybindJwt = decodedSdJwt.kbJwt;
-          console.log("keybindJwt -1");
-          console.log(keybindJwt);
+          // console.log("keybindJwt -1");
+          // console.log(keybindJwt);
           // }
 
           const claims = await getClaims(
@@ -96,8 +98,9 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
       try {
         const decodedSdJwt = await decodeSdJwt(submittedSdjwt, digest);
         keybindJwt = decodedSdJwt.kbJwt;
-        console.log("keybindJwt -2");
-        console.log(keybindJwt);
+        // console.log("keybindJwt -2");
+        // console.log(keybindJwt);
+
         const claims = await getClaims(
           decodedSdJwt.jwt.payload,
           decodedSdJwt.disclosures,

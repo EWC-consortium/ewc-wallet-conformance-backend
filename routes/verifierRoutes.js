@@ -64,7 +64,10 @@ const presentation_definition_photoId_or_pid_and_studentID = JSON.parse(
   )
 );
 const presentation_definition_photo_or_pid_and_std = JSON.parse(
-  fs.readFileSync("./data/presentation_definition_photo_or_pid_and_std.json", "utf-8")
+  fs.readFileSync(
+    "./data/presentation_definition_photo_or_pid_and_std.json",
+    "utf-8"
+  )
 );
 
 const client_metadata = JSON.parse(
@@ -125,6 +128,7 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
     presentation_definition: presentation_definition_sdJwt,
     // Safely extract the filter object if vctField is found
     credentialRequested: vctField?.filter,
+    nonce: nonce,
   });
 
   const vpRequest = buildVPbyValue(
@@ -132,7 +136,8 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
     presentation_definition_uri,
     "redirect_uri",
     client_metadata_uri,
-    response_uri
+    response_uri,
+    nonce
   );
 
   let code = qr.image(vpRequest, {
@@ -219,6 +224,7 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
       (field) => field.path && field.path.includes("$.vct")
     );
 
+  const generatedNonce = generateNonce(16);
   storeVPSession(uuid, {
     uuid: uuid,
     status: "pending",
@@ -226,6 +232,7 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
     presentation_definition: presentation_definition_sdJwt,
     // Safely extract the filter object if vctField is found
     credentialRequested: vctField?.filter,
+    nonce: generatedNonce,
   });
 
   let code = qr.image(vpRequest, {
@@ -268,6 +275,7 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
   };
 
   const clientId = "dss.aegean.gr";
+  const nonce = (await getVPSession(uuid)).nonce;
 
   let signedVPJWT = await buildVpRequestJWT(
     clientId,
@@ -277,7 +285,9 @@ verifierRouter.get("/x509VPrequest/:id", async (req, res) => {
     "x509_san_dns",
     client_metadata,
     null,
-    serverURL
+    serverURL,
+    "vp_token",
+    nonce
   );
 
   console.log(signedVPJWT);
@@ -304,16 +314,6 @@ verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
     "&request_uri=" +
     encodeURIComponent(request_uri);
 
-  // console.log(`pushing to sessions ${uuid}`);
-
-  // sessions.push(uuid);
-  // verificationSessions.push({
-  //   uuid: uuid,
-  //   status: "pending",
-  //   claims: null,
-  // });
-  // console.log(`verification sessions`);
-  // console.log(verificationSessions);
   const vctField =
     presentation_definition_sdJwt.input_descriptors[0].constraints.fields.find(
       (field) => field.path && field.path.includes("$.vct")
@@ -325,6 +325,7 @@ verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
     presentation_definition: presentation_definition_sdJwt,
     // Safely extract the filter object if vctField is found
     credentialRequested: vctField?.filter,
+    nonce: generateNonce(16),
   });
 
   let code = qr.image(vpRequest, {
@@ -374,6 +375,7 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
   }
   contorller = contorller.replace("https://", "");
   const clientId = `did:web:${contorller}`;
+  const nonce = getVPSession(uuid).nonce;
   // sessions.push(uuid);
   // verificationSessions.push({
   //   uuid: uuid,
@@ -389,7 +391,9 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
     "did",
     client_metadata,
     `did:web:${contorller}#keys-1`,
-    serverURL
+    serverURL,
+    "vp_token",
+    nonce
   );
 
   console.log(signedVPJWT);
@@ -403,12 +407,33 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
 verifierRouter.post("/direct_post/:id", async (req, res) => {
   try {
     // console.log("direct_post VP is below!");
-    const { sessionId, extractedClaims } = await extractClaimsFromRequest(
-      req,
-      digest
-    );
+    const { sessionId, extractedClaims, keybindJwt } =
+      await extractClaimsFromRequest(req, digest);
     const vpSession = await getVPSession(sessionId);
+    const vpToken = req.body["vp_token"];
+    
+    // The Verifier MUST validate every individual Verifiable Presentation in an Authorization
+    // Response and ensure that it is linked to the values of the client_id and the nonce parameter
+    // it had used for the respective Authorization Request.
+    let submittedNonce;
+    if (vpToken.indexOf("~") >= 0) {
+       submittedNonce = keybindJwt.payload.nonce
+    } else {
+      // handle jwt vp token presentations
+      let decodedVpToken = await jwt.decode(vpToken, { complete: true });
+      submittedNonce = decodedVpToken.payload.nonce;
+    }
+    if (vpSession.nonce != submittedNonce) {
+      console.log(
+        `error nonces do not match ${submittedNonce} ${vpSession.nonce}`
+        
+      );
+      return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
+    } else {
+      console.log("nonces match!!");
+    }
 
+    
     if (vpSession) {
       // verificationSessions[index].status = "success";
       // verificationSessions[index].claims = { ...extractedClaims };
@@ -431,12 +456,12 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         vctValuesReceived.includes(vct)
       );
       // if (matches.length === potentialValues.length) {
-        console.log("all requested credentials presented ");
-        console.log(matches);
-        vpSession.status = "success";
-        vpSession.claims = { ...extractedClaims };
-        storeVPSession(sessionId, vpSession);
-        return res.status(200).json({ status: "ok" });
+      console.log("all requested credentials presented ");
+      console.log(matches);
+      vpSession.status = "success";
+      vpSession.claims = { ...extractedClaims };
+      storeVPSession(sessionId, vpSession);
+      return res.status(200).json({ status: "ok" });
       // } else {
       //   return res
       //     .status(400)
@@ -834,9 +859,9 @@ function getPresentationDefinitionFromCredType(type) {
     presentationDefinition = presentation_definition_alliance_and_education_Id;
   } else if (type === "cff") {
     presentationDefinition = presentation_definition_photo_or_pid_and_std;
-  } else if(type === "itbsdjwt"){
-    presentationDefinition =presentation_definition_sdJwt
-  }else{
+  } else if (type === "itbsdjwt") {
+    presentationDefinition = presentation_definition_sdJwt;
+  } else {
     return null;
   }
 

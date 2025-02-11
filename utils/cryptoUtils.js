@@ -116,9 +116,10 @@ export async function buildVpRequestJWT(
   client_metadata = {},
   kid = null, // Default to an empty object,
   serverURL,
-  response_type = "vp_token"
+  response_type = "vp_token",
+  nonce
 ) {
-  const nonce = generateNonce(16);
+  if(!nonce) nonce = generateNonce(16);
   const state = generateNonce(16);
 
   if (client_id_scheme === "x509_san_dns") {

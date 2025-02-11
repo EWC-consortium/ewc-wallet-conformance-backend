@@ -53,7 +53,8 @@ export function buildVPbyValue(
   client_metadata_uri,
   redirect_uri,
   state = "af0ifjsldkj",
-  response_type = "vp_token"
+  response_type = "vp_token",
+  nonce,
 ) {
   console.log("response_type:", response_type); // Debug log
   
@@ -75,7 +76,7 @@ export function buildVPbyValue(
       client_id_scheme +
       "&client_metadata_uri=" +
       encodeURIComponent(client_metadata_uri) +
-      "&nonce=n0S6_WzA2Mj" + //TODO add a random nonce here
+      "&nonce=" + nonce +
       "&state=" +
       state +
       "&scope=openid"+
