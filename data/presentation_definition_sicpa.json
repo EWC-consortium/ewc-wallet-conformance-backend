@@ -1,0 +1,76 @@
+{
+  "id": "d49ee616-0e8d-4698-aff5-2a8a2362652d",
+  "name": "pcd-photoid-card-proof",
+  "format": {
+    "vc+sd-jwt": {
+      "alg": ["ES256", "ES384"]
+    }
+  },
+  "input_descriptors": [
+    {
+      "id": "abd4acb1-1dcb-41ad-8596-ceb1401a69c7",
+      "name": "Personal Contact Details",
+      "format": {
+        "vc+sd-jwt": {
+          "alg": ["ES256", "ES384"]
+        }
+      },
+      "constraints": {
+        "fields": [
+          {
+            "path": ["$.traveler.surname"]
+          },
+          {
+            "path": ["$.traveler.given_name"]
+          },
+          {
+            "path": ["$.traveler.phone"]
+          },
+          {
+            "path": ["$.traveler.email_address"]
+          },
+          {
+            "path": ["$.vct"],
+            "filter": {
+              "type": "string",
+              "const": "eu.europa.ec.eudi.pcd.1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "bbd4acb1-1dcb-41ad-8596-ceb1401a69c7",
+      "name": "PhotoID",
+      "format": {
+        "vc+sd-jwt": {
+          "alg": ["ES256"] 
+        }
+      },
+      "constraints": {
+        "fields": [
+          {"path": ["$.iso23220.given_name_unicode"]},
+          {"path": ["$.iso23220.family_name_unicode"]},
+          {"path": ["$.iso23220.birth_date"]},
+          {"path": ["$.iso23220.sex"]},
+          {"path": ["$.iso23220.portrait"]},
+          {"path": ["$.iso23220.issuing_country"]},
+          {"path": ["$.iso23220.expiry_date"]},
+          {"path": ["$.iso23220.resident_country"]},
+          {"path": ["$.photoid.travel_document_number"]}, 
+          {"path": ["$.photoid.person_id"]},  
+          {"path": ["$.photoid.administrative_number"]}, 
+          {"path": ["$.photoid.resident_street"]}, 
+          {"path": ["$.photoid.resident_state"]},  
+          {
+            "path": ["$.vct"],
+            "filter": {
+              "type": "string",
+              "const": "eu.europa.ec.eudi.photoid.1"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

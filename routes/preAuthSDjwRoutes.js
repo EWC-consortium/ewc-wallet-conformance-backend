@@ -113,6 +113,7 @@ router.get(["/offer-no-code"], async (req, res) => {
       persona: null,
       accessToken: null,
       flowType: "pre-auth",
+      isHaip: true
     });
   }
   let encodedCredentialOfferUri = encodeURIComponent(`${serverURL}/credential-offer-no-code/${uuid}?type=${credentialType}`)
@@ -152,6 +153,7 @@ router.post(["/offer-no-code"], async (req, res) => {
       accessToken: null,
       credentialPayload: credentialPayload,
       flowType: "pre-auth",
+      isHaip: true
     });
   }
   let encodedCredentialOfferUri = encodeURIComponent(`${serverURL}/credential-offer-no-code/${uuid}?type=${credentialType}`)

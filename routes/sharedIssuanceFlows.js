@@ -51,6 +51,7 @@ import {
   createPaymentWalletAttestationPayload,
   createPhotoIDAttestationPayload,
   getFerryBoardingPassSDJWTData,
+  createPCDAttestationPayload
 } from "../utils/credPayloadUtil.js";
 
 const sharedRouter = express.Router();
@@ -85,7 +86,7 @@ const { signer, verifier } = await createSignerVerifierX509(
 sharedRouter.post("/token_endpoint", async (req, res) => {
   // Fetch the Authorization header
   const authorizationHeader = req.headers["authorization"]; // Fetch the 'Authorization' header
-  console.log("token_endpoint authorizatiotn header-" + authorizationHeader);
+  // console.log("token_endpoint authorizatiotn header-" + authorizationHeader);
 
   const clientAttestation = req.headers["OAuth-Client-Attestation"]; //this is the WUA
   const pop = req.headers["OAuth-Client-Attestation-PoP"];
@@ -363,6 +364,9 @@ sharedRouter.post("/credential", async (req, res) => {
             credPayload = getGenericSDJWTData();
           } else if (credType === "eu.europa.ec.eudi.photoid.1") {
             credPayload = createPhotoIDAttestationPayload();
+          }
+          else if (credType === "eu.europa.ec.eudi.pcd.1") {
+            credPayload = createPCDAttestationPayload();
           }
 
           let cnf = { jwk: holderJWKS.jwk };

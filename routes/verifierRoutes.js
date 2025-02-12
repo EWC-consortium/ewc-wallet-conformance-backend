@@ -34,6 +34,15 @@ const presentation_definition_sdJwt = JSON.parse(
   fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
 );
 
+const presentation_definition_amadeus = JSON.parse(
+  fs.readFileSync("./data/presentation_definition_amadeus.json", "utf-8")
+);
+
+//
+const presentation_definition_sicpa = JSON.parse(
+  fs.readFileSync("./data/presentation_definition_sicpa.json", "utf-8")
+);
+
 const presentation_definition_jwt = JSON.parse(
   fs.readFileSync("./data/presentation_definition_jwt.json", "utf-8")
 );
@@ -220,10 +229,19 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
     encodeURIComponent(request_uri);
   // const presentation_definition_uri =
   //   serverURL + "/presentation-definition/itbsdjwt";
+  let presentation_definition;
+  if(credType === "amadeus"){
+    presentation_definition = presentation_definition_amadeus
+  }else if(credType === "sicpa"){
+    presentation_definition = presentation_definition_sicpa
+  }{
+    presentation_definition = presentation_definition_sdJwt
+  }
+
 
   // Find the field object that has path $.vct
   const vctField =
-    presentation_definition_sdJwt.input_descriptors[0].constraints.fields.find(
+  presentation_definition.input_descriptors[0].constraints.fields.find(
       (field) => field.path && field.path.includes("$.vct")
     );
 
@@ -232,7 +250,7 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
     uuid: uuid,
     status: "pending",
     claims: null,
-    presentation_definition: presentation_definition_sdJwt,
+    presentation_definition: presentation_definition,
     // Safely extract the filter object if vctField is found
     credentialRequested: vctField?.filter,
     nonce: generatedNonce,
@@ -864,7 +882,13 @@ function getPresentationDefinitionFromCredType(type) {
     presentationDefinition = presentation_definition_photo_or_pid_and_std;
   } else if (type === "itbsdjwt") {
     presentationDefinition = presentation_definition_sdJwt;
-  } else {
+  } if (type === "amadeus") {
+    presentationDefinition = presentation_definition_amadeus;
+  }   if (type === "sicpa") {
+    presentationDefinition = presentation_definition_sicpa;
+  }
+  
+  else {
     return null;
   }
 

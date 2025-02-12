@@ -1139,6 +1139,53 @@ export const createPhotoIDAttestationPayload = () => {
 };
 
 
+export const createPCDAttestationPayload = () => {
+  // Generate basic timestamps for demonstration
+  const currentTime = Math.floor(Date.now() / 1000);
+  const expirationTime = currentTime + 60 * 60 * 24 * 30; // 30 days
+
+  // Example ID for the credential subject (like a DID or unique ID)
+  const subjectId = uuidv4();
+
+  // Mock claims — this is where you embed your PhotoID schema data.
+  // The top-level "id" is analogous to your receipt's approach.
+  const claims = {
+    id: subjectId,
+    // Typically you'd include standard JWT/VC fields too
+    iss: "https://dss.aegean.gr",
+    iat: currentTime,
+    exp: expirationTime,
+    vct: "eu.europa.ec.eudi.pcd.1",
+
+    traveler: {
+      surname: "Doe",
+      given_name: "Jane",
+      phone: "+0030000000000",
+      email_address: "mock@mock.ewc.eu",
+      city_address: "Mock EU City",
+      street_address: "Mock Str",
+      country_address: "BL",
+    },
+  };
+
+  
+  const disclosureFrame = {
+    traveler: {
+      _sd: [
+        "surname",
+        "given_name",
+        "phone",
+        "email_address",
+        "city_address",
+        "country_address",
+      ]
+    },
+  };
+
+  return { claims, disclosureFrame };
+};
+
+
 
 
 export const createCombinedCredentialsPayload = (

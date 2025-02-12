@@ -1,0 +1,59 @@
+{
+  "id": "d49ee616-0e8d-4698-aff5-2a8a2362652d",
+  "name": "photoid-card-proof",
+  "format": {
+    "vc+sd-jwt": {
+      "alg": ["ES256", "ES384"]
+    }
+  },
+  "input_descriptors": [
+    {
+      "id": "abd4acb1-1dcb-41ad-8596-ceb1401a69c7",
+      "format": {
+        "vc+sd-jwt": {
+          "alg": ["ES256", "ES384"]
+        }
+      },
+      "constraints": {
+        "fields": [
+          {
+            "path": ["$.iso23220.portrait"]
+          },
+          {
+            "path": ["$.photoid.travel_document_number"]
+          },
+          {
+            "path": ["$.iso23220.expiry_date"]
+          },
+          {
+            "path": ["$.iso23220.issuing_country"]
+          },
+          {
+            "path": ["$.iso23220.family_name_latin1"]
+          },
+          {
+            "path": ["$.iso23220.given_name_latin1"]
+          },
+          {
+            "path": ["$.iso23220.sex"]
+          },
+          {
+            "path": ["$.iso23220.nationality"]
+          },
+          {
+            "path": ["$.iso23220.birth_date"]
+          },
+
+          {
+            "path": ["$.vct"],
+            "filter": {
+              "type": "string",
+              "const": "eu.europa.ec.eudi.photoid.1"
+            }
+          }
+        ],
+        "limit_disclosure": "required"
+      }
+    }
+  ]
+}
