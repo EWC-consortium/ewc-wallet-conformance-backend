@@ -218,7 +218,7 @@ verifierRouter.get("/client-metadata", async (req, res) => {
 *********************************************************** */
 verifierRouter.get("/generateVPRequestx509", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const credType = req.query.credType ? req.query.credType : "itbsdjwt";
+  const credType = req.query.credType || req.query.credentialType ? req.query.credType || req.query.credentialType  : "itbsdjwt";
 
   let client_id = "dss.aegean.gr";
   let request_uri = `${serverURL}/x509VPrequest/${uuid}?credType=${credType}`;
@@ -234,7 +234,7 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
     presentation_definition = presentation_definition_amadeus
   }else if(credType === "sicpa"){
     presentation_definition = presentation_definition_sicpa
-  }{
+  }else{
     presentation_definition = presentation_definition_sdJwt
   }
 
@@ -396,7 +396,7 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
   }
   contorller = contorller.replace("https://", "");
   const clientId = `did:web:${contorller}`;
-  const nonce = getVPSession(uuid).nonce;
+  const vpSession = await getVPSession(uuid) 
   // sessions.push(uuid);
   // verificationSessions.push({
   //   uuid: uuid,
@@ -414,7 +414,7 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
     `did:web:${contorller}#keys-1`,
     serverURL,
     "vp_token",
-    nonce
+    vpSession.nonce
   );
 
   console.log(signedVPJWT);
@@ -882,9 +882,9 @@ function getPresentationDefinitionFromCredType(type) {
     presentationDefinition = presentation_definition_photo_or_pid_and_std;
   } else if (type === "itbsdjwt") {
     presentationDefinition = presentation_definition_sdJwt;
-  } if (type === "amadeus") {
+  }else if (type === "amadeus") {
     presentationDefinition = presentation_definition_amadeus;
-  }   if (type === "sicpa") {
+  } else  if (type === "sicpa") {
     presentationDefinition = presentation_definition_sicpa;
   }
   
