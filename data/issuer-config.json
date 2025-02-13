@@ -1972,7 +1972,7 @@
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
-          "name": "Photo ID Credential",
+          "name": "PhotoID",
           "locale": "en-GB",
           "background_color": "#3e426f",
           "text_color": "#FFFFFF",

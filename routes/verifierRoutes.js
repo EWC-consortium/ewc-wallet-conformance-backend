@@ -38,6 +38,11 @@ const presentation_definition_amadeus = JSON.parse(
   fs.readFileSync("./data/presentation_definition_amadeus.json", "utf-8")
 );
 
+const presentation_definition_cff = JSON.parse(
+  fs.readFileSync("./data/presentation_definition_cff.json", "utf-8")
+);
+
+
 //
 const presentation_definition_sicpa = JSON.parse(
   fs.readFileSync("./data/presentation_definition_sicpa.json", "utf-8")
@@ -234,6 +239,8 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
     presentation_definition = presentation_definition_amadeus
   }else if(credType === "sicpa"){
     presentation_definition = presentation_definition_sicpa
+  }else if(credType === "cff"){
+    presentation_definition = presentation_definition_cff
   }else{
     presentation_definition = presentation_definition_sdJwt
   }
@@ -680,6 +687,8 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
     presentationDefinition = presentation_definition_ferryboardingpass;
   } else if (type === "erua-id") {
     presentationDefinition = presentation_definition_alliance_and_education_Id;
+  } else if (type === "cff") {
+    presentationDefinition = presentation_definition_cff;
   } else {
     return res.status(400).type("text/plain").send("Invalid type parameter");
   }
@@ -878,14 +887,14 @@ function getPresentationDefinitionFromCredType(type) {
     presentationDefinition = presentation_definition_ferryboardingpass;
   } else if (type === "erua-id") {
     presentationDefinition = presentation_definition_alliance_and_education_Id;
-  } else if (type === "cff") {
-    presentationDefinition = presentation_definition_photo_or_pid_and_std;
-  } else if (type === "itbsdjwt") {
+  }   else if (type === "itbsdjwt" ||type === "VerifiablePortableDocumentA1SDJWT" || type=="VerifiablePIDSDJWT" ) {
     presentationDefinition = presentation_definition_sdJwt;
   }else if (type === "amadeus") {
     presentationDefinition = presentation_definition_amadeus;
   } else  if (type === "sicpa") {
     presentationDefinition = presentation_definition_sicpa;
+  }else  if (type === "cff") {
+    presentationDefinition = presentation_definition_cff;
   }
   
   else {
