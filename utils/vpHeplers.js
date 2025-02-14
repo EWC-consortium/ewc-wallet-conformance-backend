@@ -61,14 +61,13 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
       requestedInputDescriptors
     );
     let submittedSdjwt;
-    
+
     try {
       submittedSdjwt = JSON.parse(vpResult);
     } catch (e) {
       console.log(e);
       submittedSdjwt = vpResult;
     }
-
 
     if (Array.isArray(submittedSdjwt)) {
       for (const element of submittedSdjwt) {
@@ -264,4 +263,80 @@ function compareSubmissionToDefinition(submission, definitionsArray) {
   });
 
   return matchingSubmissions.length > 0;
+}
+
+/**
+ * Checks if a single data object contains only allowed fields,
+ * ignoring reserved JWT keys and the "cnf" property.
+ *
+ * @param {Object} dataObj - The data object to check.
+ * @param {string[]} allowedPaths - The list of allowed paths (with "$." prefix).
+ * @param {string[]} [ignoredKeys=['iss', 'iat', 'cnf', 'id','exp']] - Keys to ignore.
+ * @returns {boolean} - True if only allowed fields (besides ignored ones) are present.
+ */
+export function hasOnlyAllowedFields(
+  dataObj,
+  allowedPaths,
+  ignoredKeys = ["iss", "iat", "cnf", "id", "exp"]
+) {
+  // Convert allowedPaths to a set of property names by stripping "$.".
+  const allowedFields = new Set(
+    allowedPaths.map((path) => path.replace(/^\$\./, ""))
+  );
+  let dataKeys = [];
+  if (Array.isArray(dataObj)) {
+    dataKeys.push(
+      ...dataObj.reduce((acc, obj) => {
+        // Accumulate the keys.
+        const flattenedKeys = flattenKeys(obj, "", ignoredKeys);
+        // Get the keys for this object, filtering out ignored keys.
+        const keys = flattenedKeys.filter((key) => !ignoredKeys.includes(key));
+        return acc.concat(keys);
+      }, [])
+    );
+    // If you need unique keys, uncomment the next line:
+    // dataKeys = Array.from(new Set(dataKeys));
+  } else {
+    dataKeys.push(
+      ...Object.keys(dataObj).filter((key) => !ignoredKeys.includes(key))
+    );
+  }
+
+  // Convert dataKeys to a set.
+  const dataKeySet = new Set(dataKeys);
+
+  // Check if both sets have the same size.
+  if (dataKeySet.size !== allowedFields.size) return false;
+
+  // Check that every key in the data is in the allowed fields.
+  for (let key of dataKeySet) {
+    if (!allowedFields.has(key)) return false;
+  }
+  return true;
+}
+
+/**
+ * Recursively flattens the keys of an object using dot notation.
+ * For example, { a: { b: 1 } } becomes ["a.b"].
+ *
+ * @param {Object} obj - The object to flatten.
+ * @param {string} [prefix=""] - The prefix used for recursion.
+ * @param {string[]} ignoredKeys - Keys to ignore (not flatten).
+ * @returns {string[]} - An array of flattened key paths.
+ */
+function flattenKeys(obj, prefix = "", ignoredKeys = []) {
+  let keys = [];
+
+  for (const [key, value] of Object.entries(obj)) {
+    if (ignoredKeys.includes(key)) continue;
+
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      // Recursively flatten nested objects.
+      keys.push(...flattenKeys(value, fullKey, ignoredKeys));
+    } else {
+      keys.push(fullKey);
+    }
+  }
+  return keys;
 }

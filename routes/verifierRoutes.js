@@ -9,7 +9,10 @@ import {
   buildVpRequestJWT,
 } from "../utils/cryptoUtils.js";
 
-import { extractClaimsFromRequest } from "../utils/vpHeplers.js";
+import {
+  extractClaimsFromRequest,
+  hasOnlyAllowedFields,
+} from "../utils/vpHeplers.js";
 
 import { buildVPbyValue } from "../utils/tokenUtils.js";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
@@ -41,7 +44,6 @@ const presentation_definition_amadeus = JSON.parse(
 const presentation_definition_cff = JSON.parse(
   fs.readFileSync("./data/presentation_definition_cff.json", "utf-8")
 );
-
 
 //
 const presentation_definition_sicpa = JSON.parse(
@@ -223,7 +225,10 @@ verifierRouter.get("/client-metadata", async (req, res) => {
 *********************************************************** */
 verifierRouter.get("/generateVPRequestx509", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const credType = req.query.credType || req.query.credentialType ? req.query.credType || req.query.credentialType  : "itbsdjwt";
+  const credType =
+    req.query.credType || req.query.credentialType
+      ? req.query.credType || req.query.credentialType
+      : "itbsdjwt";
 
   let client_id = "dss.aegean.gr";
   let request_uri = `${serverURL}/x509VPrequest/${uuid}?credType=${credType}`;
@@ -235,22 +240,38 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
   // const presentation_definition_uri =
   //   serverURL + "/presentation-definition/itbsdjwt";
   let presentation_definition;
-  if(credType === "amadeus"){
-    presentation_definition = presentation_definition_amadeus
-  }else if(credType === "sicpa"){
-    presentation_definition = presentation_definition_sicpa
-  }else if(credType === "cff"){
-    presentation_definition = presentation_definition_cff
-  }else{
-    presentation_definition = presentation_definition_sdJwt
+  if (credType === "amadeus") {
+    presentation_definition = presentation_definition_amadeus;
+  } else if (credType === "sicpa") {
+    presentation_definition = presentation_definition_sicpa;
+  } else if (credType === "cff") {
+    presentation_definition = presentation_definition_cff;
+  } else {
+    presentation_definition = presentation_definition_sdJwt;
   }
-
 
   // Find the field object that has path $.vct
   const vctField =
-  presentation_definition.input_descriptors[0].constraints.fields.find(
+    presentation_definition.input_descriptors[0].constraints.fields.find(
       (field) => field.path && field.path.includes("$.vct")
     );
+
+  const paths = presentation_definition.input_descriptors.reduce(
+    (acc, descriptor) => {
+      if (
+        descriptor.constraints &&
+        Array.isArray(descriptor.constraints.fields)
+      ) {
+        descriptor.constraints.fields.forEach((field) => {
+          if (field.path) {
+            acc.push(...field.path);
+          }
+        });
+      }
+      return acc;
+    },
+    []
+  );
 
   const generatedNonce = generateNonce(16);
   storeVPSession(uuid, {
@@ -261,6 +282,7 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
     // Safely extract the filter object if vctField is found
     credentialRequested: vctField?.filter,
     nonce: generatedNonce,
+    sdsRequested: paths,
   });
 
   let code = qr.image(vpRequest, {
@@ -403,7 +425,7 @@ verifierRouter.get("/didjwks/:id", async (req, res) => {
   }
   contorller = contorller.replace("https://", "");
   const clientId = `did:web:${contorller}`;
-  const vpSession = await getVPSession(uuid) 
+  const vpSession = await getVPSession(uuid);
   // sessions.push(uuid);
   // verificationSessions.push({
   //   uuid: uuid,
@@ -439,13 +461,13 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       await extractClaimsFromRequest(req, digest);
     const vpSession = await getVPSession(sessionId);
     const vpToken = req.body["vp_token"];
-    
+
     // The Verifier MUST validate every individual Verifiable Presentation in an Authorization
     // Response and ensure that it is linked to the values of the client_id and the nonce parameter
     // it had used for the respective Authorization Request.
     let submittedNonce;
     if (vpToken.indexOf("~") >= 0) {
-       submittedNonce = keybindJwt.payload.nonce
+      submittedNonce = keybindJwt.payload.nonce;
     } else {
       // handle jwt vp token presentations
       let decodedVpToken = await jwt.decode(vpToken, { complete: true });
@@ -454,20 +476,32 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     if (vpSession.nonce != submittedNonce) {
       console.log(
         `error nonces do not match ${submittedNonce} ${vpSession.nonce}`
-        
       );
-      return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
+      return res
+        .status(400)
+        .json({ error: "submitted nonce doesn't match the auth request one" });
     } else {
       console.log("nonces match!!");
     }
 
-    
     if (vpSession) {
       // verificationSessions[index].status = "success";
       // verificationSessions[index].claims = { ...extractedClaims };
       // console.log(`verification success`);
       // console.log(verificationSessions[index]);
       // if(vpSession.)
+
+      if (!hasOnlyAllowedFields(extractedClaims, vpSession.sdsRequested)) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "requested " +
+              JSON.stringify(vpSession.sdsRequested) +
+              "but received " +
+              JSON.stringify(extractedClaims),
+          });
+      }
 
       const credentialRequested = vpSession.credentialRequested;
       let potentialValues = credentialRequested;
@@ -887,17 +921,19 @@ function getPresentationDefinitionFromCredType(type) {
     presentationDefinition = presentation_definition_ferryboardingpass;
   } else if (type === "erua-id") {
     presentationDefinition = presentation_definition_alliance_and_education_Id;
-  }   else if (type === "itbsdjwt" ||type === "VerifiablePortableDocumentA1SDJWT" || type=="VerifiablePIDSDJWT" ) {
+  } else if (
+    type === "itbsdjwt" ||
+    type === "VerifiablePortableDocumentA1SDJWT" ||
+    type == "VerifiablePIDSDJWT"
+  ) {
     presentationDefinition = presentation_definition_sdJwt;
-  }else if (type === "amadeus") {
+  } else if (type === "amadeus") {
     presentationDefinition = presentation_definition_amadeus;
-  } else  if (type === "sicpa") {
+  } else if (type === "sicpa") {
     presentationDefinition = presentation_definition_sicpa;
-  }else  if (type === "cff") {
+  } else if (type === "cff") {
     presentationDefinition = presentation_definition_cff;
-  }
-  
-  else {
+  } else {
     return null;
   }
 
