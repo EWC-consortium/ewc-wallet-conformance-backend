@@ -240,12 +240,12 @@ sharedRouter.post("/credential", async (req, res) => {
     //Defered flow
     let transaction_id = generateNonce();
     sessionObject.transaction_id = transaction_id;
-    sessionObject.requested_credential = requestBody.vct
-      ? requestBody.vct
-      : requestedCredentials;
+    sessionObject.requestBody = requestBody;
     sessionObject.isCredentialReady = false;
+    sessionObject.attempt = 0 //attempt to fetch credential counter
+
     if (sessionObject.flowType == "code") {
-      await storeCodeFlowSession(preAuthsessionKey, sessionObject);
+      await storeCodeFlowSession(codeSessionKey, sessionObject);
     } else {
       await storePreAuthSession(preAuthsessionKey, sessionObject);
     }
@@ -310,9 +310,6 @@ sharedRouter.post("/credential", async (req, res) => {
           console.log(err);
           return res.status(400).json({ error: err.message });
         }
-     
-
-      //
     } else {
       console.log("UNSUPPORTED FORMAT:", format);
       return res.status(400).json({ error: "Unsupported format" });
@@ -325,23 +322,28 @@ sharedRouter.post("/credential", async (req, res) => {
 // *****************************************************************
 sharedRouter.post("/credential_deferred", async (req, res) => {
   const authorizationHeader = req.headers["authorization"]; // Fetch the 'Authorization' header
-  // console.log(
-  //   "credential_deferred authorizatiotn header-" + authorizationHeader
-  // );
-  const transaction_id = req.body.transaction_id;
-  const session = await getDeferredSessionTransactionId(transaction_id);
 
-  console.log(transaction_id);
-  if (!session) {
+  const transaction_id = req.body.transaction_id;
+  const sessionObject = await getDeferredSessionTransactionId(transaction_id);
+  if (!sessionObject) {
     return res.status(400).json({
       error: "invalid_transaction_id",
     });
   }else{
-    session
+    /*
+    issuance_pending: The Credential issuance is still pending. The error response SHOULD also contain the interval member, determining the minimum amount of time in seconds that the Wallet needs to wait before providing a new request to the Deferred Credential Endpoint. If interval member is not present, the Wallet MUST use 5 as the default value.
+    */
+    const crednetial = await handleVcSdJwtFormat(req.body, sessionObject, serverURL)
+    res.json(crednetial);
+
   }
 });
 
-//ITB
+
+
+// *****************************************************************
+// ITB
+// *****************************************************************
 sharedRouter.get(["/issueStatus"], async (req, res) => {
   let sessionId = req.query.sessionId;
   let existingPreAuthSession = await getPreAuthSession(sessionId);
