@@ -56,8 +56,6 @@ import {
   createPCDAttestationPayload,
 } from "../utils/credPayloadUtil.js";
 
-import {generateVcSdJwtCredential} from "../utils/credGenerationUtils.js"
-
 const sharedRouter = express.Router();
 
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
@@ -487,8 +485,8 @@ sharedRouter.post("/credential_deferred", async (req, res) => {
     return res.status(400).json({
       error: "invalid_transaction_id",
     });
-  } else {
-    session;
+  }else{
+    session
   }
 });
 
