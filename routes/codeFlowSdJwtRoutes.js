@@ -364,6 +364,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       client_id_scheme: existingCodeSession.client_id_scheme,
       isPIDIssuanceFlow: isPIDIssuanceFlow,
       flowType: "code",
+      isDeferred:existingCodeSession.isDeferred
     });
   } else {
     errors.push("ITB session expired");

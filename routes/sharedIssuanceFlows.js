@@ -26,6 +26,8 @@ import {
   getCodeFlowSession,
   storeCodeFlowSession,
   getSessionKeyAuthCode,
+  getSessionAccessToken,
+  getDeferredSessionTransactionId,
 } from "../services/cacheServiceRedis.js";
 
 import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
@@ -51,8 +53,10 @@ import {
   createPaymentWalletAttestationPayload,
   createPhotoIDAttestationPayload,
   getFerryBoardingPassSDJWTData,
-  createPCDAttestationPayload
+  createPCDAttestationPayload,
 } from "../utils/credPayloadUtil.js";
+
+import {generateVcSdJwtCredential} from "../utils/credGenerationUtils.js"
 
 const sharedRouter = express.Router();
 
@@ -141,7 +145,7 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
     } else {
       if (grantType == "authorization_code") {
         console.log("codeSessions ==> grantType == authorization_code");
-        console.log(code);
+        // console.log(code);
         let issuanceSessionId = await getSessionKeyAuthCode(code);
         if (issuanceSessionId) {
           let existingCodeSession = await getCodeFlowSession(issuanceSessionId);
@@ -156,6 +160,7 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
 
             existingCodeSession.results.status = "success";
             existingCodeSession.status = "success";
+            existingCodeSession.requests.accessToken = generatedAccessToken;
             storeCodeFlowSession(
               existingCodeSession.results.issuerState,
               existingCodeSession
@@ -218,11 +223,17 @@ sharedRouter.post("/credential", async (req, res) => {
 
   let payload = {};
 
-  const sessionKey = await getSessionKeyFromAccessToken(token); //this only works for pre-auth flow..
+  const preAuthsessionKey = await getSessionKeyFromAccessToken(token); //this only works for pre-auth flow..
   let sessionObject;
-  if (sessionKey) {
-    sessionObject = await getPreAuthSession(sessionKey);
-    if (!sessionObject) sessionObject = await getCodeFlowSession(sessionKey);
+  if (preAuthsessionKey) {
+    sessionObject = await getPreAuthSession(preAuthsessionKey);
+    if (!sessionObject)
+      sessionObject = await getCodeFlowSession(preAuthsessionKey);
+  }
+
+  const codeSessionKey = await getSessionAccessToken(token); //this only works for pre-auth flow..
+  if (codeSessionKey) {
+    sessionObject = await getCodeFlowSession(codeSessionKey);
   }
 
   if (sessionObject && sessionObject.isDeferred) {
@@ -232,10 +243,11 @@ sharedRouter.post("/credential", async (req, res) => {
     sessionObject.requested_credential = requestBody.vct
       ? requestBody.vct
       : requestedCredentials;
+    sessionObject.isCredentialReady = false;
     if (sessionObject.flowType == "code") {
-      await storeCodeFlowSession(sessionKey, sessionObject);
+      await storeCodeFlowSession(preAuthsessionKey, sessionObject);
     } else {
-      await storePreAuthSession(sessionKey, sessionObject);
+      await storePreAuthSession(preAuthsessionKey, sessionObject);
     }
 
     res.json({
@@ -345,7 +357,10 @@ sharedRouter.post("/credential", async (req, res) => {
             credPayload = getEPassportSDJWTData();
           } else if (credType === "VerifiableStudentIDSDJWT") {
             credPayload = getStudentIDSDJWTData();
-          } else if (credType === "ferryBoardingPassCredential" || credType === "VerifiableFerryBoardingPassCredentialSDJWT") {
+          } else if (
+            credType === "ferryBoardingPassCredential" ||
+            credType === "VerifiableFerryBoardingPassCredentialSDJWT"
+          ) {
             credPayload = await getFerryBoardingPassSDJWTData();
           } else if (credType === "VerifiablePortableDocumentA1SDJWT") {
             credPayload = getGenericSDJWTData();
@@ -364,8 +379,7 @@ sharedRouter.post("/credential", async (req, res) => {
             credPayload = getGenericSDJWTData();
           } else if (credType === "eu.europa.ec.eudi.photoid.1") {
             credPayload = createPhotoIDAttestationPayload();
-          }
-          else if (credType === "eu.europa.ec.eudi.pcd.1") {
+          } else if (credType === "eu.europa.ec.eudi.pcd.1") {
             credPayload = createPCDAttestationPayload();
           }
 
@@ -462,13 +476,20 @@ sharedRouter.post("/credential", async (req, res) => {
 // *****************************************************************
 sharedRouter.post("/credential_deferred", async (req, res) => {
   const authorizationHeader = req.headers["authorization"]; // Fetch the 'Authorization' header
-  console.log(
-    "credential_deferred authorizatiotn header-" + authorizationHeader
-  );
-
+  // console.log(
+  //   "credential_deferred authorizatiotn header-" + authorizationHeader
+  // );
   const transaction_id = req.body.transaction_id;
+  const session = await getDeferredSessionTransactionId(transaction_id);
 
   console.log(transaction_id);
+  if (!session) {
+    return res.status(400).json({
+      error: "invalid_transaction_id",
+    });
+  } else {
+    session;
+  }
 });
 
 //ITB
