@@ -56,6 +56,8 @@ import {
   createPCDAttestationPayload,
 } from "../utils/credPayloadUtil.js";
 
+import {handleVcSdJwtFormat} from "../utils/credGenerationUtils.js"
+
 const sharedRouter = express.Router();
 
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
@@ -300,166 +302,15 @@ sharedRouter.post("/credential", async (req, res) => {
     } else if (format === "vc+sd-jwt") {
       let vct = requestBody.vct;
       console.log("vc+sd-jwt ", vct);
+      try{
+      const crednetial = await handleVcSdJwtFormat(requestBody, sessionObject, serverURL)
 
-      // holder wallet binding
-      if (requestBody.proof && requestBody.proof.jwt) {
-        // console.log(requestBody.proof.jwt)
-        let decodedWithHeader = jwt.decode(requestBody.proof.jwt, {
-          complete: true,
-        });
-        let holderJWKS = decodedWithHeader.header;
-
-        //TODO validate the jwt that is part of the proof.jwt to ensure the
-        // holder wallet is in control of the presented key...
-
-        // console.log("Token:", token);
-        // console.log("Request Body:", requestBody);
-        let credType = vct; // VerifiablePortableDocumentA1SDJWT or VerifiablePortableDocumentA2SDJWT
-
-        // if this is a HAIP flow then we need to sign this with an X509 certificate
-        //................
-        let sdjwt = null;
-        let isHaip = sessionObject ? sessionObject.isHaip : false;
-        if (isHaip) {
-          sdjwt = new SDJwtVcInstance({
-            signer,
-            verifier,
-            signAlg: "ES256",
-            hasher: digest,
-            hashAlg: "sha-256",
-            saltGenerator: generateSalt,
-          });
-        } else {
-          const { signer, verifier } = await createSignerVerifier(
-            pemToJWK(privateKey, "private"),
-            pemToJWK(publicKeyPem, "public")
-          );
-          sdjwt = new SDJwtVcInstance({
-            signer,
-            verifier,
-            signAlg: "ES256",
-            hasher: digest,
-            hashAlg: "sha-256",
-            saltGenerator: generateSalt,
-          });
+          res.json(crednetial);
+        } catch (err) {
+          console.log(err);
+          return res.status(400).json({ error: err.message });
         }
-
-        let credPayload = {};
-        try {
-          if (
-            credType === "VerifiablePIDSDJWT" ||
-            credType === "urn:eu.europa.ec.eudi:pid:1"
-          ) {
-            credPayload = getPIDSDJWTData();
-          } else if (credType === "VerifiableePassportCredentialSDJWT") {
-            credPayload = getEPassportSDJWTData();
-          } else if (credType === "VerifiableStudentIDSDJWT") {
-            credPayload = getStudentIDSDJWTData();
-          } else if (
-            credType === "ferryBoardingPassCredential" ||
-            credType === "VerifiableFerryBoardingPassCredentialSDJWT"
-          ) {
-            credPayload = await getFerryBoardingPassSDJWTData();
-          } else if (credType === "VerifiablePortableDocumentA1SDJWT") {
-            credPayload = getGenericSDJWTData();
-          }
-          if (credType === "PaymentWalletAttestation") {
-            credPayload = createPaymentWalletAttestationPayload();
-          } else if (credType === "VerifiablevReceiptSDJWT") {
-            if (sessionObject) {
-              credPayload = getVReceiptSDJWTDataWithPayload(
-                sessionObject.credentialPayload
-              );
-            } else {
-              credPayload = getVReceiptSDJWTData();
-            }
-          } else if (credType === "VerifiablePortableDocumentA2SDJWT") {
-            credPayload = getGenericSDJWTData();
-          } else if (credType === "eu.europa.ec.eudi.photoid.1") {
-            credPayload = createPhotoIDAttestationPayload();
-          } else if (credType === "eu.europa.ec.eudi.pcd.1") {
-            credPayload = createPCDAttestationPayload();
-          }
-
-          let cnf = { jwk: holderJWKS.jwk };
-          if (!cnf.jwk) {
-            cnf = await didKeyToJwks(holderJWKS.kid);
-          }
-
-          // console.log(credType);
-          // console.log(credPayload.claims);
-          // console.log(credPayload.disclosureFrame);
-
-          let credential;
-          /*
-           {
-        header: { typ: 'dc+sd-jwt', custom: 'data' }, // You can add custom header data to the SD JWT
-      }
-          */
-
-          if (isHaip) {
-            console.log("HAIP issue flow.. will add x509 header");
-            console.log("client certificate pem is");
-            console.log(certificatePemX509);
-            const certBase64 = pemToBase64Der(certificatePemX509);
-
-            const x5cHeader = [certBase64];
-
-            // let disclosureFrame = { _sd: credPayload.disclosureFrame._sd };
-
-            credential = await sdjwt.issue(
-              {
-                iss: serverURL,
-                iat: Math.floor(Date.now() / 1000),
-                vct: credType,
-                ...credPayload.claims,
-                cnf: cnf,
-              },
-              credPayload.disclosureFrame,
-              {
-                header: { x5c: x5cHeader },
-              }
-            );
-          } else {
-            credential = await sdjwt.issue(
-              {
-                iss: serverURL,
-                iat: Math.floor(Date.now() / 1000),
-                vct: credType,
-                ...credPayload.claims,
-                cnf: cnf,
-              },
-              credPayload.disclosureFrame,
-              {
-                header: { kid: "aegean#authentication-key" },
-              }
-            );
-          }
-
-          console.log("sending credential");
-          console.log({
-            format: "vc+sd-jwt",
-            credential: credential,
-            c_nonce: generateNonce(),
-            c_nonce_expires_in: 86400,
-          });
-
-          res.json({
-            format: "vc+sd-jwt",
-            credential: credential,
-            c_nonce: generateNonce(),
-            c_nonce_expires_in: 86400,
-          });
-        } catch (error) {
-          console.log(error);
-        }
-      } else {
-        console.log(
-          "requestBody.proof && requestBody.proof.jwt not found",
-          requestBody
-        );
-        return res.status(400).json({ error: "proof not found" });
-      }
+     
 
       //
     } else {

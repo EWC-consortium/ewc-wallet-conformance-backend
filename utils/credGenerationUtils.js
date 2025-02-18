@@ -5,7 +5,13 @@ import {
   generateSalt,
   createSignerVerifierX509,
   pemToBase64Der,
-} from "./utils/sdjwtUtils.js";
+} from "../utils/sdjwtUtils.js";
+import {
+    pemToJWK,
+    generateNonce,
+    didKeyToJwks,
+  } from "../utils/cryptoUtils.js";
+import fs from "fs";
 import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 
 import {
@@ -38,7 +44,7 @@ const certificatePemX509 = fs.readFileSync(
   "utf8"
 );
 
-async function handleVcSdJwtFormat(requestBody, sessionObject, serverURL) {
+export async function handleVcSdJwtFormat(requestBody, sessionObject, serverURL) {
   const vct = requestBody.vct;
   let { signer, verifier } = await createSignerVerifierX509(
     privateKeyPemX509,

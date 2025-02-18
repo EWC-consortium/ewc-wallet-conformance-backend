@@ -146,7 +146,7 @@ export async function getSessionAccessToken(token) {
         }
       }
     }
-    console.log("No session found for auth code:", code);
+    console.log("No session found for auth code:", token);
     return null;
   } catch (err) {
     console.error("Error retrieving session key for access token:", err);
