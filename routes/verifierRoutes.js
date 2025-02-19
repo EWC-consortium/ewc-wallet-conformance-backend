@@ -357,7 +357,7 @@ verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
       (field) => field.path && field.path.includes("$.vct")
     );
 
-  const paths = getSDsFromPresentationDef(presentation_definition);
+  const paths = getSDsFromPresentationDef(presentation_definition_sdJwt);
 
   storeVPSession(uuid, {
     uuid: uuid,

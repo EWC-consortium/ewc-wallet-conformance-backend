@@ -277,7 +277,18 @@ function compareSubmissionToDefinition(submission, definitionsArray) {
 export function hasOnlyAllowedFields(
   dataObj,
   allowedPaths,
-  ignoredKeys = ["iss", "iat", "cnf", "id", "exp"]
+  ignoredKeys = [
+    "iss",
+    "iat",
+    "cnf",
+    "id",
+    "exp",
+    "aud",
+    "sub",
+    "nonce",
+    "nbf",
+    "jti",
+  ]
 ) {
   // Convert allowedPaths to a set of property names by stripping "$.".
   const allowedFields = new Set(
@@ -341,13 +352,15 @@ function flattenKeys(obj, prefix = "", ignoredKeys = []) {
   return keys;
 }
 
-
 /*
   fetch the requested disclosures from a presentationDefinintion
 */
 export function getSDsFromPresentationDef(presentation_definition) {
   return presentation_definition.input_descriptors.reduce((acc, descriptor) => {
-    if (descriptor.constraints && Array.isArray(descriptor.constraints.fields)) {
+    if (
+      descriptor.constraints &&
+      Array.isArray(descriptor.constraints.fields)
+    ) {
       descriptor.constraints.fields.forEach((field) => {
         if (field.path) {
           acc.push(...field.path);
