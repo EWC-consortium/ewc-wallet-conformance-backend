@@ -12,6 +12,7 @@ import {
 import {
   extractClaimsFromRequest,
   hasOnlyAllowedFields,
+  getSDsFromPresentationDef,
 } from "../utils/vpHeplers.js";
 
 import { buildVPbyValue } from "../utils/tokenUtils.js";
@@ -137,6 +138,7 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
     presentation_definition_sdJwt.input_descriptors[0].constraints.fields.find(
       (field) => field.path && field.path.includes("$.vct")
     );
+  const paths = getSDsFromPresentationDef(presentation_definition_sdJwt);
 
   storeVPSession(stateParam, {
     uuid: stateParam,
@@ -146,6 +148,7 @@ verifierRouter.get("/generateVPRequest", async (req, res) => {
     // Safely extract the filter object if vctField is found
     credentialRequested: vctField?.filter,
     nonce: nonce,
+    sdsRequested: paths,
   });
 
   const vpRequest = buildVPbyValue(
@@ -256,22 +259,7 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
       (field) => field.path && field.path.includes("$.vct")
     );
 
-  const paths = presentation_definition.input_descriptors.reduce(
-    (acc, descriptor) => {
-      if (
-        descriptor.constraints &&
-        Array.isArray(descriptor.constraints.fields)
-      ) {
-        descriptor.constraints.fields.forEach((field) => {
-          if (field.path) {
-            acc.push(...field.path);
-          }
-        });
-      }
-      return acc;
-    },
-    []
-  );
+  const paths = getSDsFromPresentationDef(presentation_definition);
 
   const generatedNonce = generateNonce(16);
   storeVPSession(uuid, {
@@ -368,6 +356,9 @@ verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
     presentation_definition_sdJwt.input_descriptors[0].constraints.fields.find(
       (field) => field.path && field.path.includes("$.vct")
     );
+
+  const paths = getSDsFromPresentationDef(presentation_definition);
+
   storeVPSession(uuid, {
     uuid: uuid,
     status: "pending",
@@ -376,6 +367,7 @@ verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
     // Safely extract the filter object if vctField is found
     credentialRequested: vctField?.filter,
     nonce: generateNonce(16),
+    sdsRequested: paths,
   });
 
   let code = qr.image(vpRequest, {
@@ -492,15 +484,13 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       // if(vpSession.)
 
       if (!hasOnlyAllowedFields(extractedClaims, vpSession.sdsRequested)) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "requested " +
-              JSON.stringify(vpSession.sdsRequested) +
-              "but received " +
-              JSON.stringify(extractedClaims),
-          });
+        return res.status(400).json({
+          error:
+            "requested " +
+            JSON.stringify(vpSession.sdsRequested) +
+            "but received " +
+            JSON.stringify(extractedClaims),
+        });
       }
 
       const credentialRequested = vpSession.credentialRequested;
