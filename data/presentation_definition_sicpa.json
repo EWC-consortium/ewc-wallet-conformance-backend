@@ -44,24 +44,24 @@
       "name": "PhotoID",
       "format": {
         "vc+sd-jwt": {
-          "alg": ["ES256"] 
+          "alg": ["ES256"]
         }
       },
       "constraints": {
         "fields": [
-          {"path": ["$.iso23220.given_name_unicode"]},
-          {"path": ["$.iso23220.family_name_unicode"]},
-          {"path": ["$.iso23220.birth_date"]},
-          {"path": ["$.iso23220.sex"]},
-          {"path": ["$.iso23220.portrait"]},
-          {"path": ["$.iso23220.issuing_country"]},
-          {"path": ["$.iso23220.expiry_date"]},
-          {"path": ["$.iso23220.resident_country"]},
-          {"path": ["$.photoid.travel_document_number"]}, 
-          {"path": ["$.photoid.person_id"]},  
-          {"path": ["$.photoid.administrative_number"]}, 
-          {"path": ["$.photoid.resident_street"]}, 
-          {"path": ["$.photoid.resident_state"]},  
+          { "path": ["$.iso23220.given_name_unicode"] },
+          { "path": ["$.iso23220.family_name_unicode"] },
+          { "path": ["$.iso23220.birth_date"] },
+          { "path": ["$.iso23220.sex"] },
+          { "path": ["$.iso23220.portrait"] },
+          { "path": ["$.iso23220.issuing_country"] },
+          { "path": ["$.iso23220.expiry_date"] },
+          { "path": ["$.iso23220.resident_country"] },
+          { "path": ["$.photoid.travel_document_number"] },
+          { "path": ["$.photoid.person_id"] },
+          { "path": ["$.photoid.administrative_number"] },
+          { "path": ["$.photoid.resident_street"] },
+          { "path": ["$.photoid.resident_state"] },
           {
             "path": ["$.vct"],
             "filter": {
@@ -69,7 +69,8 @@
               "const": "eu.europa.ec.eudi.photoid.1"
             }
           }
-        ]
+        ],
+        "limit_disclosure": "required"
       }
     }
   ]
