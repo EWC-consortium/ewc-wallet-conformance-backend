@@ -345,14 +345,14 @@ export const getPIDSDJWTData = (decodedHeaderSubjectDID) => {
   const expTimestamp = currentDate.setFullYear(currentDate.getFullYear() + 1);
   const claims = {
     // id: decodedHeaderSubjectDID || uuidv4(),
-    given_name: "John",
-    family_name: "Doe",
-    birth_date: "1990-01-01",
+    given_name: "Hanna",
+    family_name: "Matkalainen",
+    birth_date: "01.07.2005",
     age_over_18: true,
     issuance_date: currentTimestamp,
     expiry_date: expTimestamp, //expTimestamp.getTime(),
     issuing_authority: "UAegean Test Issuer",
-    issuing_country: "Greece",
+    issuing_country: "Finland",
   };
 
   const disclosureFrame = {
@@ -375,19 +375,19 @@ export const getPIDSDJWTData = (decodedHeaderSubjectDID) => {
 export const getStudentIDSDJWTData = (decodedHeaderSubjectDID) => {
   const claims = {
     id: decodedHeaderSubjectDID || uuidv4(),
-    identifier: "john.doe@university.edu",
+    identifier: "hanna@aegean.gr",
     schacPersonalUniqueCode: [
       "urn:schac:personalUniqueCode:int:esi:university.edu:12345",
     ],
     schacPersonalUniqueID: "urn:schac:personalUniqueID:us:12345",
     schacHomeOrganization: "university.edu",
-    familyName: "Doe",
-    firstName: "John",
-    displayName: "John Doe",
-    dateOfBirth: "1990-01-01",
-    commonName: "Johnathan Doe",
-    mail: "john.doe@university.edu",
-    eduPersonPrincipalName: "john.doe@university.edu",
+    familyName: "Matkalainen",
+    firstName: "Hanna",
+    displayName: "Hanna Matkalainen",
+    dateOfBirth: "01.07.2005",
+    commonName: "Hanna Matkalainen",
+    mail: "hanna@aegean.gr",
+    eduPersonPrincipalName: "hanna@aegean.gr",
     eduPersonPrimaryAffiliation: "student",
     eduPersonAffiliation: ["member", "student"],
     eduPersonScopedAffiliation: ["student@university.edu"],
@@ -1139,14 +1139,14 @@ export const createPhotoIDAttestationPayload = () => {
     iso23220: {
       family_name_unicode: "Doe",
       given_name_unicode: "Jane",
-      birth_date: "1990-01-01",
+      birth_date: "01.07.2005",
       portrait: face_data,
       issue_date: "2023-01-01",
-      expiry_date: "2033-01-01",
+      expiry_date: "21.10.2027",
       issuing_authority_unicode: "Wonderland Authority",
-      issuing_country: "WL",
-      sex: 2, // 0=unknown,1=male,2=female,9=not-applicable
-      nationality: "WL",
+      issuing_country: "FIN",
+      sex: 'F', // 0=unknown,1=male,2=female,9=not-applicable
+      nationality: "FIN",
       document_number: "ABC1234567",
       name_at_birth: "Jane Wonderland",
       birthplace: "Wonder City",
@@ -1158,8 +1158,8 @@ export const createPhotoIDAttestationPayload = () => {
       age_over_18: true,
       age_in_years: 33,
       age_birth_year: 1990,
-      family_name_latin1: "Doe",
-      given_name_latin1: "Jane",
+      family_name_latin1: "Matkalainen",
+      given_name_latin1: "Hanna",
     },
 
     photoid: {
@@ -1170,7 +1170,7 @@ export const createPhotoIDAttestationPayload = () => {
       administrative_number: "ADMIN-123",
       resident_street: "123 Elm Street",
       resident_house_number: "12",
-      travel_document_number: "TDOC-789",
+      travel_document_number: "XP8271602",
       resident_state: "Wonderland Province",
     },
 
@@ -1264,13 +1264,13 @@ export const createPCDAttestationPayload = () => {
     vct: "eu.europa.ec.eudi.pcd.1",
 
     traveler: {
-      surname: "Doe",
-      given_name: "Jane",
-      phone: "+0030000000000",
-      email_address: "mock@mock.ewc.eu",
-      city_address: "Mock EU City",
-      street_address: "Mock Str",
-      country_address: "BL",
+      surname: "Matkalainen",
+      given_name: "Hanna",
+      phone: "+358 457 123 4567",
+      email_address: "hanna@suomil.com",
+      city_address: "Rovaniemi",
+      street_address: "Tähtikuja 1",
+      country_address: "Finland",
     },
   };
 

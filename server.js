@@ -26,9 +26,9 @@ const app = express();
 const port = 3000;
 
 // Middleware to parse URL-encoded bodies
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ limit: '10mb',extended: true }));
 // Middleware for post bodies
-app.use(bodyParser.json());
+app.use(bodyParser.json({limit: '10mb'}));
 //Middleware to log all requests to the server for debugging
 app.use((req, res, next) => {
   console.log(`---> 
