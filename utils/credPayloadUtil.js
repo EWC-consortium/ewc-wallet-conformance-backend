@@ -1283,6 +1283,7 @@ export const createPCDAttestationPayload = () => {
         "email_address",
         "city_address",
         "country_address",
+        "street_address"
       ],
     },
   };
