@@ -1995,47 +1995,62 @@
     "PCD": {
       "scope": "PCD",
       "claims": {
-        "traveler": {
+        "surname": {
           "display": [
             {
-              "name": "Traveler Information",
+              "name": "Family Name",
               "locale": "en-GB"
             }
-          ],
-          "nested_claims": {
-            "surname": {
-              "display": [
-                {
-                  "name": "Surname",
-                  "locale": "en-GB"
-                }
-              ]
-            },
-            "given_name": {
-              "display": [
-                {
-                  "name": "Given Name",
-                  "locale": "en-GB"
-                }
-              ]
-            },
-            "mobile_phone": {
-              "display": [
-                {
-                  "name": "Mobile Phone",
-                  "locale": "en-GB"
-                }
-              ]
-            },
-            "email_address": {
-              "display": [
-                {
-                  "name": "Email Address",
-                  "locale": "en-GB"
-                }
-              ]
+          ]
+        },
+        "given_name": {
+          "display": [
+            {
+              "name": "Given Name",
+              "locale": "en-GB"
             }
-          }
+          ]
+        },
+        "phone": {
+          "display": [
+            {
+              "name": "Phone Number",
+              "locale": "en-GB",
+              "description": "Including country code if applicable"
+            }
+          ]
+        },
+        "email_address": {
+          "display": [
+            {
+              "name": "Email Address",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "city_address": {
+          "display": [
+            {
+              "name": "City Address",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "street_address": {
+          "display": [
+            {
+              "name": "Street Address",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "country_address": {
+          "display": [
+            {
+              "name": "Country Address",
+              "locale": "en-GB"
+            }
+          ]
         }
       },
       "cryptographic_binding_methods_supported": ["jwk"],

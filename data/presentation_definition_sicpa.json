@@ -18,16 +18,16 @@
       "constraints": {
         "fields": [
           {
-            "path": ["$.traveler.surname"]
+            "path": ["$.surname"]
           },
           {
-            "path": ["$.traveler.given_name"]
+            "path": ["$.given_name"]
           },
           {
-            "path": ["$.traveler.phone"]
+            "path": ["$.phone"]
           },
           {
-            "path": ["$.traveler.email_address"]
+            "path": ["$.email_address"]
           },
           {
             "path": ["$.vct"],

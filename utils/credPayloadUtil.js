@@ -1145,7 +1145,7 @@ export const createPhotoIDAttestationPayload = () => {
       expiry_date: "21.10.2027",
       issuing_authority_unicode: "Wonderland Authority",
       issuing_country: "FIN",
-      sex: 'F', // 0=unknown,1=male,2=female,9=not-applicable
+      sex: "F", // 0=unknown,1=male,2=female,9=not-applicable
       nationality: "FIN",
       document_number: "ABC1234567",
       name_at_birth: "Jane Wonderland",
@@ -1263,29 +1263,25 @@ export const createPCDAttestationPayload = () => {
     exp: expirationTime,
     vct: "eu.europa.ec.eudi.pcd.1",
 
-    traveler: {
-      surname: "Matkalainen",
-      given_name: "Hanna",
-      phone: "+358 457 123 4567",
-      email_address: "hanna@suomil.com",
-      city_address: "Rovaniemi",
-      street_address: "Tähtikuja 1",
-      country_address: "Finland",
-    },
+    surname: "Matkalainen",
+    given_name: "Hanna",
+    phone: "+358 457 123 4567",
+    email_address: "hanna@suomil.com",
+    city_address: "Rovaniemi",
+    street_address: "Tähtikuja 1",
+    country_address: "Finland",
   };
 
   const disclosureFrame = {
-    traveler: {
-      _sd: [
-        "surname",
-        "given_name",
-        "phone",
-        "email_address",
-        "city_address",
-        "country_address",
-        "street_address"
-      ],
-    },
+    _sd: [
+      "surname",
+      "given_name",
+      "phone",
+      "email_address",
+      "city_address",
+      "country_address",
+      "street_address",
+    ],
   };
 
   return { claims, disclosureFrame };

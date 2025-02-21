@@ -56,7 +56,7 @@ import {
   createPCDAttestationPayload,
 } from "../utils/credPayloadUtil.js";
 
-import {handleVcSdJwtFormat} from "../utils/credGenerationUtils.js"
+import { handleVcSdJwtFormat } from "../utils/credGenerationUtils.js";
 
 const sharedRouter = express.Router();
 
@@ -242,7 +242,7 @@ sharedRouter.post("/credential", async (req, res) => {
     sessionObject.transaction_id = transaction_id;
     sessionObject.requestBody = requestBody;
     sessionObject.isCredentialReady = false;
-    sessionObject.attempt = 0 //attempt to fetch credential counter
+    sessionObject.attempt = 0; //attempt to fetch credential counter
 
     if (sessionObject.flowType == "code") {
       await storeCodeFlowSession(codeSessionKey, sessionObject);
@@ -302,14 +302,18 @@ sharedRouter.post("/credential", async (req, res) => {
     } else if (format === "vc+sd-jwt") {
       let vct = requestBody.vct;
       console.log("vc+sd-jwt ", vct);
-      try{
-      const crednetial = await handleVcSdJwtFormat(requestBody, sessionObject, serverURL)
+      try {
+        const crednetial = await handleVcSdJwtFormat(
+          requestBody,
+          sessionObject,
+          serverURL
+        );
 
-          res.json(crednetial);
-        } catch (err) {
-          console.log(err);
-          return res.status(400).json({ error: err.message });
-        }
+        res.json(crednetial);
+      } catch (err) {
+        console.log(err);
+        return res.status(400).json({ error: err.message });
+      }
     } else {
       console.log("UNSUPPORTED FORMAT:", format);
       return res.status(400).json({ error: "Unsupported format" });
@@ -329,17 +333,18 @@ sharedRouter.post("/credential_deferred", async (req, res) => {
     return res.status(400).json({
       error: "invalid_transaction_id",
     });
-  }else{
+  } else {
     /*
     issuance_pending: The Credential issuance is still pending. The error response SHOULD also contain the interval member, determining the minimum amount of time in seconds that the Wallet needs to wait before providing a new request to the Deferred Credential Endpoint. If interval member is not present, the Wallet MUST use 5 as the default value.
     */
-    const crednetial = await handleVcSdJwtFormat(req.body, sessionObject, serverURL)
+    const crednetial = await handleVcSdJwtFormat(
+      req.body,
+      sessionObject,
+      serverURL
+    );
     res.json(crednetial);
-
   }
 });
-
-
 
 // *****************************************************************
 // ITB
