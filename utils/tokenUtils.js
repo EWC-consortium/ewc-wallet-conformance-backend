@@ -2,6 +2,7 @@ import fs from "fs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { error } from "console";
+import {generateNonce} from "../utils/cryptoUtils.js"
 
 export function buildAccessToken(issuerURL, privateKey) {
   const payload = {
@@ -56,6 +57,7 @@ export function buildVPbyValue(
   response_type = "vp_token",
   nonce,
 ) {
+  if(!nonce) nonce = generateNonce(16);
   console.log("response_type:", response_type); // Debug log
   
   if (client_id_scheme == "redirect_uri") {
