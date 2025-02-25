@@ -56,7 +56,7 @@ import {
   createPCDAttestationPayload,
 } from "../utils/credPayloadUtil.js";
 
-import { handleVcSdJwtFormat } from "../utils/credGenerationUtils.js";
+import { handleVcSdJwtFormat, handleVcSdJwtFormatDeferred } from "../utils/credGenerationUtils.js";
 
 const sharedRouter = express.Router();
 
@@ -328,7 +328,8 @@ sharedRouter.post("/credential_deferred", async (req, res) => {
   const authorizationHeader = req.headers["authorization"]; // Fetch the 'Authorization' header
 
   const transaction_id = req.body.transaction_id;
-  const sessionObject = await getDeferredSessionTransactionId(transaction_id);
+  const sessionId = await getDeferredSessionTransactionId(transaction_id);
+  const sessionObject = await getCodeFlowSession(sessionId)
   if (!sessionObject) {
     return res.status(400).json({
       error: "invalid_transaction_id",
@@ -337,12 +338,14 @@ sharedRouter.post("/credential_deferred", async (req, res) => {
     /*
     issuance_pending: The Credential issuance is still pending. The error response SHOULD also contain the interval member, determining the minimum amount of time in seconds that the Wallet needs to wait before providing a new request to the Deferred Credential Endpoint. If interval member is not present, the Wallet MUST use 5 as the default value.
     */
-    const crednetial = await handleVcSdJwtFormat(
-      req.body,
+    const credential = await handleVcSdJwtFormatDeferred(
       sessionObject,
       serverURL
     );
-    res.json(crednetial);
+    return res.status(200).json({
+      format: "vc+sd-jwt",
+      credential, // Omit c_nonce here
+    });
   }
 });
 

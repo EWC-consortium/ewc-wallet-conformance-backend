@@ -83,7 +83,7 @@ export async function handleVcSdJwtFormat(
     issuerName = match[1];
   }
   //TODO fix this
-  issuerName="https://dss.aegean.gr"
+  issuerName = "https://dss.aegean.gr";
 
   // Determine credential payload based on type
   switch (credType) {
@@ -128,7 +128,7 @@ export async function handleVcSdJwtFormat(
   // Handle holder binding
   let cnf = { jwk: holderJWKS.jwk };
   if (!cnf.jwk) {
-    cnf = {jwk: await didKeyToJwks(holderJWKS.kid)};
+    cnf = { jwk: await didKeyToJwks(holderJWKS.kid) };
   }
 
   // Prepare issuance headers
@@ -168,4 +168,132 @@ export async function handleVcSdJwtFormat(
     c_nonce: generateNonce(),
     c_nonce_expires_in: 86400,
   };
+}
+
+export async function handleVcSdJwtFormatDeferred(sessionObject, serverURL) {
+  const requestBody = sessionObject.requestBody;
+  const vct = requestBody.vct;
+  let { signer, verifier } = await createSignerVerifierX509(
+    privateKeyPemX509,
+    certificatePemX509
+  );
+  console.log("vc+sd-jwt ", vct);
+
+  if (!requestBody.proof || !requestBody.proof.jwt) {
+    const error = new Error("proof not found");
+    error.status = 400;
+    throw error;
+  }
+
+  const decodedWithHeader = jwt.decode(requestBody.proof.jwt, {
+    complete: true,
+  });
+  const holderJWKS = decodedWithHeader.header;
+
+  const isHaip = sessionObject ? sessionObject.isHaip : false;
+  if (!isHaip) {
+    ({ signer, verifier } = await createSignerVerifier(
+      pemToJWK(privateKey, "private"),
+      pemToJWK(publicKeyPem, "public")
+    ));
+  }
+
+  const sdjwt = new SDJwtVcInstance({
+    signer,
+    verifier,
+    signAlg: "ES256",
+    hasher: digest,
+    hashAlg: "sha-256",
+    saltGenerator: generateSalt,
+  });
+
+  const credType = vct;
+  let credPayload = {};
+
+  let issuerName = serverURL;
+  const match = serverURL.match(/^(?:https?:\/\/)?([^/]+)/);
+  if (match) {
+    issuerName = match[1];
+  }
+  //TODO fix this
+  issuerName = "https://dss.aegean.gr";
+
+  // Determine credential payload based on type
+  switch (credType) {
+    case "VerifiablePIDSDJWT":
+    case "urn:eu.europa.ec.eudi:pid:1":
+      credPayload = getPIDSDJWTData();
+      break;
+    case "VerifiableePassportCredentialSDJWT":
+      credPayload = getEPassportSDJWTData();
+      break;
+    case "VerifiableStudentIDSDJWT":
+      credPayload = getStudentIDSDJWTData();
+      break;
+    case "ferryBoardingPassCredential":
+    case "VerifiableFerryBoardingPassCredentialSDJWT":
+      credPayload = await getFerryBoardingPassSDJWTData();
+      break;
+    case "VerifiablePortableDocumentA1SDJWT":
+      credPayload = getGenericSDJWTData();
+      break;
+    case "PaymentWalletAttestation":
+      credPayload = createPaymentWalletAttestationPayload(issuerName);
+      break;
+    case "VerifiablevReceiptSDJWT":
+      credPayload = sessionObject
+        ? getVReceiptSDJWTDataWithPayload(sessionObject.credentialPayload)
+        : getVReceiptSDJWTData();
+      break;
+    case "VerifiablePortableDocumentA2SDJWT":
+      credPayload = getGenericSDJWTData();
+      break;
+    case "eu.europa.ec.eudi.photoid.1":
+      credPayload = createPhotoIDAttestationPayload(issuerName);
+      break;
+    case "eu.europa.ec.eudi.pcd.1":
+      credPayload = createPCDAttestationPayload(issuerName);
+      break;
+    default:
+      throw new Error(`Unsupported credential type: ${credType}`);
+  }
+
+  // Handle holder binding
+  let cnf = { jwk: holderJWKS.jwk };
+  if (!cnf.jwk) {
+    cnf = { jwk: await didKeyToJwks(holderJWKS.kid) };
+  }
+
+  // Prepare issuance headers
+  const headerOptions = isHaip
+    ? {
+        header: {
+          x5c: [pemToBase64Der(certificatePemX509)],
+        },
+      }
+    : {
+        header: {
+          kid: "aegean#authentication-key",
+        },
+      };
+
+  const now = new Date();
+  const expiryDate = new Date(now);
+  expiryDate.setMonth(now.getMonth() + 6);
+  // Issue credential
+  const credential = await sdjwt.issue(
+    {
+      iss: serverURL,
+      iat: Math.floor(Date.now() / 1000),
+      nbf: Math.floor(Date.now() / 1000),
+      exp: Math.floor(expiryDate.getTime() / 1000),
+      vct: credType,
+      ...credPayload.claims,
+      cnf,
+    },
+    credPayload.disclosureFrame,
+    headerOptions
+  );
+
+  return credential;
 }

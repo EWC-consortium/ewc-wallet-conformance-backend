@@ -31,6 +31,29 @@
       "id": "3006c738-576f-4e03-9212-1b16041a85c6",
       "name": "Payment Transaction",
       "purpose": "This is the payment for the ferry ticket."
+    },
+    {
+      "id": "bbd4acb1-1dcb-41ad-8596-ceb1401a69c7",
+      "format": {
+        "vc+sd-jwt": {
+          "alg": ["ES256", "ES384"]
+        }
+      },
+      "constraints": {
+        "fields": [
+          {
+            "path": ["$.schacHomeOrganization"]
+          },
+          {
+            "path": ["$.vct"],
+            "filter": {
+              "type": "string",
+              "const": "VerifiableStudentIDSDJWT"
+            }
+          }
+        ],
+        "limit_disclosure": "required"
+      }
     }
   ]
 }

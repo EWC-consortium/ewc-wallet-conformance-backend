@@ -36,7 +36,8 @@
               "const": "eu.europa.ec.eudi.pcd.1"
             }
           }
-        ]
+        ],
+        "limit_disclosure": "required"
       }
     },
     {

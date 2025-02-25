@@ -1080,22 +1080,22 @@ export const createPaymentWalletAttestationPayload = (serverURL) => {
   // Credential Subject data for claims
   const credentialSubject = {
     id: "PSP-account-identifier", // Replace with actual account identifier
-    // fundingSource: {
-    //   type: "Credit Card", // Example funding source type
-    //   panEndsIn: "1234", // Example PAN ends in
-    //   iin: "400000", // Example IIN
-    //   aliasId: "alias-12345", // Example alias ID
-    //   scheme: "Visa", // Example card scheme
-    //   icon: "https://cdn4.iconfinder.com/data/icons/flat-brand-logo-2/512/visa-512.png", // Example card icon URL
-    // },
-    accounts: ["123"], //
-    account_holder_id: "luke skywalker", //
+    fundingSource: {
+      type: "card", // Example funding source type
+      panLastFour: "1234", // Example PAN ends in
+      iin: "400000", // Example IIN
+      aliasId: "alias-12345", // Example alias ID
+      scheme: "Visa", // Example card scheme
+      current:"EUR",
+      icon: "https://cdn4.iconfinder.com/data/icons/flat-brand-logo-2/512/visa-512.png", // Example card icon URL
+    },
+    // accounts: ["123"], //
+    // account_holder_id: "luke skywalker", //
   };
   // Claims for the payload
   const claims = {
     aud: `${serverURL}/.well-known/oauth-authorization-server`,
     sub: "PSP-account-identifier", // Ensure consistency with 'id' in credentialSubject
-    exp: expirationTime,
     // scope: "PaymentWalletAttestation",
     ...credentialSubject,
   };

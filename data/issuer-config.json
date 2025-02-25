@@ -1413,7 +1413,47 @@
                 }
               ]
             },
-            "panEndsIn": {
+            "panLastFour": {
+              "display": [
+                {
+                  "name": "PAN Last Four ",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "parLastFour": {
+              "display": [
+                {
+                  "name": "PAR Last Four",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "ibanLastFour": {
+              "display": [
+                {
+                  "name": "IBAN Ends In",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "bic": {
+              "display": [
+                {
+                  "name": "Bank Identifier Code (BIC)",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "sortCode": {
+              "display": [
+                {
+                  "name": "National bank sort",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            "currency": {
               "display": [
                 {
                   "name": "PAN Ends In",
@@ -1421,6 +1461,7 @@
                 }
               ]
             },
+
             "iin": {
               "display": [
                 {
@@ -1454,23 +1495,8 @@
               ]
             }
           }
-        },
-        "accounts": {
-          "display": [
-            {
-              "name": "account",
-              "locale": "en-GB"
-            }
-          ]
-        },
-        "account_holder_id": {
-          "display": [
-            {
-              "name": "account_holder_id",
-              "locale": "en-GB"
-            }
-          ]
         }
+ 
       },
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [

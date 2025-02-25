@@ -29,11 +29,18 @@ const paymentRouter = express.Router();
 
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 
-const presentation_definition_sdJwt = JSON.parse(
+const presentation_definition_pwa = JSON.parse(
   //fs.readFileSync("./data/presentation_definition_pid+pwa.json", "utf-8")
   // fs.readFileSync("./data/presentation_definition_pid|photoID+PWA.json", "utf-8")
   // fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
   fs.readFileSync("./data/presentation_definition_pwa.json", "utf-8")
+);
+
+const presentation_definition_pwa_stdId = JSON.parse(
+  //fs.readFileSync("./data/presentation_definition_pid+pwa.json", "utf-8")
+  // fs.readFileSync("./data/presentation_definition_pid|photoID+PWA.json", "utf-8")
+  // fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
+  fs.readFileSync("./data/presentation_definition_pwa_studentid.json", "utf-8")
 );
 
 // *******************
@@ -179,13 +186,15 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
     return res.send(404);
   }
 
+  const presentation_definition = presentation_definition_pwa //presentation_definition_pwa_stdId 
+
   const hash = crypto.createHash("sha256");
-  hash.update(JSON.stringify(presentation_definition_sdJwt));
+  hash.update(JSON.stringify(presentation_definition));
 
   let { jwt, base64EncodedTxData } = await buildPaymentVpRequestJWT(
     clientId,
     response_uri,
-    presentation_definition_sdJwt,
+    presentation_definition,
     "",
     "x509_san_dns",
     client_metadata,
@@ -199,10 +208,10 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
     session.startDate,
     session.expiryDate,
     session.frequency,
-    presentation_definition_sdJwt.input_descriptors[0].id
+    presentation_definition.input_descriptors[0].id
   );
   session.txData = base64EncodedTxData;
-  session.presentation_definition = presentation_definition_sdJwt;
+  session.presentation_definition = presentation_definition;
   //update session with tx data
   await storeVPSession(uuid, session);
 
