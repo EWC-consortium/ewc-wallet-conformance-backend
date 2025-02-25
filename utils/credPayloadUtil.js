@@ -1117,7 +1117,7 @@ export const createPaymentWalletAttestationPayload = (serverURL) => {
   return { claims, disclosureFrame };
 };
 
-export const createPhotoIDAttestationPayload = () => {
+export const createPhotoIDAttestationPayload = (serverURL) => {
   // Generate basic timestamps for demonstration
   const currentTime = Math.floor(Date.now() / 1000);
   const expirationTime = currentTime + 60 * 60 * 24 * 30; // 30 days
@@ -1131,7 +1131,7 @@ export const createPhotoIDAttestationPayload = () => {
     id: subjectId,
 
     // Typically you'd include standard JWT/VC fields too
-    iss: "https://mock-issuer.example.com",
+    iss: serverURL,
     iat: currentTime,
     exp: expirationTime,
     vct: "eu.europa.ec.eudi.photoid.1",
@@ -1145,10 +1145,10 @@ export const createPhotoIDAttestationPayload = () => {
       expiry_date: "21.10.2027",
       issuing_authority_unicode: "Wonderland Authority",
       issuing_country: "FIN",
-      sex: "F", // 0=unknown,1=male,2=female,9=not-applicable
+      sex: "2", // 0=unknown,1=male,2=female,9=not-applicable
       nationality: "FIN",
       document_number: "ABC1234567",
-      name_at_birth: "Jane Wonderland",
+      name_at_birth: "Hanna Matkalainen",
       birthplace: "Wonder City",
       portrait_capture_date: "2023-02-01T10:00:00Z",
       resident_address_unicode: "123 Elm Street",
@@ -1245,7 +1245,7 @@ export const createPhotoIDAttestationPayload = () => {
   return { claims, disclosureFrame };
 };
 
-export const createPCDAttestationPayload = () => {
+export const createPCDAttestationPayload = (serverURL) => {
   // Generate basic timestamps for demonstration
   const currentTime = Math.floor(Date.now() / 1000);
   const expirationTime = currentTime + 60 * 60 * 24 * 30; // 30 days
@@ -1258,7 +1258,7 @@ export const createPCDAttestationPayload = () => {
   const claims = {
     id: subjectId,
     // Typically you'd include standard JWT/VC fields too
-    iss: "https://dss.aegean.gr",
+    iss: serverURL,
     iat: currentTime,
     exp: expirationTime,
     vct: "eu.europa.ec.eudi.pcd.1",

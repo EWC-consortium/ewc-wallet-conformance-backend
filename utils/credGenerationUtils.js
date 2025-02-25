@@ -6,32 +6,22 @@ import {
   createSignerVerifierX509,
   pemToBase64Der,
 } from "../utils/sdjwtUtils.js";
-import {
-    pemToJWK,
-    generateNonce,
-    didKeyToJwks,
-  } from "../utils/cryptoUtils.js";
+import { pemToJWK, generateNonce, didKeyToJwks } from "../utils/cryptoUtils.js";
 import fs from "fs";
 import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 
 import {
-    createPIDPayload,
-    createStudentIDPayload,
-    getPIDSDJWTData,
-    getStudentIDSDJWTData,
-    getGenericSDJWTData,
-    getEPassportSDJWTData,
-    createEPassportPayload,
-    getVReceiptSDJWTData,
-    getVReceiptSDJWTDataWithPayload,
-    createPaymentWalletAttestationPayload,
-    createPhotoIDAttestationPayload,
-    getFerryBoardingPassSDJWTData,
-    createPCDAttestationPayload,
-  } from "../utils/credPayloadUtil.js";
-
-
-
+  getPIDSDJWTData,
+  getStudentIDSDJWTData,
+  getGenericSDJWTData,
+  getEPassportSDJWTData,
+  getVReceiptSDJWTData,
+  getVReceiptSDJWTDataWithPayload,
+  createPaymentWalletAttestationPayload,
+  createPhotoIDAttestationPayload,
+  getFerryBoardingPassSDJWTData,
+  createPCDAttestationPayload,
+} from "../utils/credPayloadUtil.js";
 
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
@@ -44,7 +34,11 @@ const certificatePemX509 = fs.readFileSync(
   "utf8"
 );
 
-export async function handleVcSdJwtFormat(requestBody, sessionObject, serverURL) {
+export async function handleVcSdJwtFormat(
+  requestBody,
+  sessionObject,
+  serverURL
+) {
   const vct = requestBody.vct;
   let { signer, verifier } = await createSignerVerifierX509(
     privateKeyPemX509,
@@ -83,6 +77,14 @@ export async function handleVcSdJwtFormat(requestBody, sessionObject, serverURL)
   const credType = vct;
   let credPayload = {};
 
+  let issuerName = serverURL;
+  const match = serverURL.match(/^(?:https?:\/\/)?([^/]+)/);
+  if (match) {
+    issuerName = match[1];
+  }
+  //TODO fix this
+  issuerName="https://dss.aegean.gr"
+
   // Determine credential payload based on type
   switch (credType) {
     case "VerifiablePIDSDJWT":
@@ -103,7 +105,7 @@ export async function handleVcSdJwtFormat(requestBody, sessionObject, serverURL)
       credPayload = getGenericSDJWTData();
       break;
     case "PaymentWalletAttestation":
-      credPayload = createPaymentWalletAttestationPayload();
+      credPayload = createPaymentWalletAttestationPayload(issuerName);
       break;
     case "VerifiablevReceiptSDJWT":
       credPayload = sessionObject
@@ -114,10 +116,10 @@ export async function handleVcSdJwtFormat(requestBody, sessionObject, serverURL)
       credPayload = getGenericSDJWTData();
       break;
     case "eu.europa.ec.eudi.photoid.1":
-      credPayload = createPhotoIDAttestationPayload();
+      credPayload = createPhotoIDAttestationPayload(issuerName);
       break;
     case "eu.europa.ec.eudi.pcd.1":
-      credPayload = createPCDAttestationPayload();
+      credPayload = createPCDAttestationPayload(issuerName);
       break;
     default:
       throw new Error(`Unsupported credential type: ${credType}`);
@@ -126,7 +128,7 @@ export async function handleVcSdJwtFormat(requestBody, sessionObject, serverURL)
   // Handle holder binding
   let cnf = { jwk: holderJWKS.jwk };
   if (!cnf.jwk) {
-    cnf = await didKeyToJwks(holderJWKS.kid);
+    cnf = {jwk: await didKeyToJwks(holderJWKS.kid)};
   }
 
   // Prepare issuance headers
@@ -142,11 +144,16 @@ export async function handleVcSdJwtFormat(requestBody, sessionObject, serverURL)
         },
       };
 
+  const now = new Date();
+  const expiryDate = new Date(now);
+  expiryDate.setMonth(now.getMonth() + 6);
   // Issue credential
   const credential = await sdjwt.issue(
     {
       iss: serverURL,
       iat: Math.floor(Date.now() / 1000),
+      nbf: Math.floor(Date.now() / 1000),
+      exp: Math.floor(expiryDate.getTime() / 1000),
       vct: credType,
       ...credPayload.claims,
       cnf,

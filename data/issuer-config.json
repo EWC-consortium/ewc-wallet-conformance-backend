@@ -7,7 +7,7 @@
   "batch_credential_endpoint": "https://server.example.com/batch",
   "display": [
     {
-      "name": "UAegean Test Issuer",
+      "name": "EWC Issuer",
       "location": "Greece",
       "locale": "en-GB",
       "description": "For queries about how we manage your data please contact the Data Protection Officer."
@@ -185,7 +185,7 @@
           "background_color": "#12107c",
           "text_color": "#FFFFFF",
           "logo": {
-            "uri": "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+            "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
             "alt_text": "UAegean"
           }
         }
@@ -350,7 +350,7 @@
           "background_color": "#12107c",
           "text_color": "#FFFFFF",
           "logo": {
-            "uri": "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+           "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
             "alt_text": "UAegean"
           }
         }
@@ -492,7 +492,7 @@
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
-          "name": "StudentID",
+          "name": "Univ. of the Aegean Student ID",
           "locale": "en-GB",
           "background_color": "#12107c",
           "text_color": "#FFFFFF",
@@ -631,12 +631,12 @@
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
-          "name": "Ferry Boarding Pass",
+          "name": "Fast Ferries Boarding Pass",
           "locale": "en-GB",
           "background_color": "#12107c",
           "text_color": "#FFFFFF",
           "logo": {
-            "uri": "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+            "uri": "https://scontent.fath3-4.fna.fbcdn.net/v/t39.30808-6/326549585_723962505745158_5492858349024673102_n.png?_nc_cat=108&ccb=1-7&_nc_sid=6ee11a&_nc_ohc=xpmYsvY5bRIQ7kNvgGXJCcS&_nc_oc=Adikr4WlAGS0q_xQDKrb0AmWCA-tQ0Y8ch67bx7AehuxxWjaL3aBGXNzXHv3SSS2kZU1IQOuRm34bGjHLKt3PeL2&_nc_zt=23&_nc_ht=scontent.fath3-4.fna&_nc_gid=Al9kVPd_7DCiCWHteA-IXia&oh=00_AYBuIuik3k7En8JnGfsqqTxhKH4-VuV2_hnv2CpV3wCfjg&oe=67C24A95",
             "alt_text": "UAegean"
           }
         }
@@ -1279,7 +1279,7 @@
           "background_color": "#12107c",
           "text_color": "#FFFFFF",
           "logo": {
-            "uri": "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+            "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
             "alt_text": "vReceipt Logo"
           }
         }
@@ -1365,13 +1365,13 @@
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
-          "name": "EWC-PID",
+          "name": "EWC PID",
           "locale": "en-GB",
           "background_color": "#0059f8",
           "text_color": "#FFFFFF",
           "logo": {
-            "uri": "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
-            "alt_text": "vReceipt Logo"
+            "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
+            "alt_text": "PID Logo"
           }
         }
       ],
@@ -1480,7 +1480,7 @@
           "background_color": "#0059f8",
           "text_color": "#FFFFFF",
           "logo": {
-            "uri": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSiZWQE7gYniJ0ky6ar14CBJdZ8N9IxePtTkw&s",
+            "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
             "alt_text": "UAegean"
           }
         }
@@ -1972,7 +1972,7 @@
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
-          "name": "PhotoID",
+          "name": "Photo ID",
           "locale": "en-GB",
           "background_color": "#3e426f",
           "text_color": "#FFFFFF",
@@ -2056,7 +2056,7 @@
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
-          "name": "Perconal Contact Details",
+          "name": "Personal Contact Details",
           "locale": "en-GB",
           "background_color": "#3e426f",
           "text_color": "#FFFFFF",

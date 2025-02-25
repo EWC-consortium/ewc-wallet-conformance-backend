@@ -245,7 +245,7 @@ verifierRouter.get("/generateVPRequestx509", async (req, res) => {
   let presentation_definition;
   if (credType === "amadeus") {
     presentation_definition = presentation_definition_amadeus;
-  } else if (credType === "sicpa2") {
+  } else if (credType === "beni") {
     presentation_definition = presentation_definition_sicpa;
   } else if (credType === "cff") {
     presentation_definition = presentation_definition_cff;
@@ -919,7 +919,7 @@ function getPresentationDefinitionFromCredType(type) {
     presentationDefinition = presentation_definition_sdJwt;
   } else if (type === "amadeus") {
     presentationDefinition = presentation_definition_amadeus;
-  } else if (type === "sicpa2") {
+  } else if (type === "beni") {
     presentationDefinition = presentation_definition_sicpa;
   } else if (type === "cff") {
     presentationDefinition = presentation_definition_cff;
