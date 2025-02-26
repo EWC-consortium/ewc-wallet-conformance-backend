@@ -183,7 +183,8 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
   // check session, if it doesn't exist this should fail
   let session = await getVPSession(uuid);
   if (!session) {
-    return res.send(404);
+    session = await getCodeFlowSession(uuid)
+    if(!session) return res.send(404);
   }
 
   const presentation_definition = presentation_definition_pwa //presentation_definition_pwa_stdId 

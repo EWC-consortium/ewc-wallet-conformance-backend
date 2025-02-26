@@ -9,10 +9,11 @@ import boardingPassRouter from "./routes/boardingPassRoutes.js";
 import pidRouter from "./routes/pidroutes.js";
 import paymentRouter from "./routes/paymentRoutes.js";
 import passportRouter from "./routes/passportRoutes.js";
-import didWebRouter from "./routes/didweb.js"
+import didWebRouter from "./routes/didweb.js";
 import educationalRouter from "./routes/educationalRoutes.js";
 import sharedRouter from "./routes/sharedIssuanceFlows.js";
-import batchRouter from "./routes/batchRequestRoutes.js"
+import batchRouter from "./routes/batchRequestRoutes.js";
+import receiptRouter from "./routes/receiptsRoutes.js";
 import bodyParser from "body-parser"; // Body parser middleware
 
 import * as OpenApiValidator from "express-openapi-validator";
@@ -26,16 +27,15 @@ const app = express();
 const port = 3000;
 
 // Middleware to parse URL-encoded bodies
-app.use(express.urlencoded({ limit: '10mb',extended: true }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 // Middleware for post bodies
-app.use(bodyParser.json({limit: '10mb'}));
+app.use(bodyParser.json({ limit: "10mb" }));
 //Middleware to log all requests to the server for debugging
 app.use((req, res, next) => {
   console.log(`---> 
   ${req.method} ${req.url}`);
   next(); // Pass control to the next middleware function
 });
-
 
 // const apiSpecPath = path.join(process.cwd(), "openapi.yml");
 // app.use(
@@ -56,9 +56,10 @@ app.use("/", passportRouter);
 app.use("/", educationalRouter);
 app.use("/", boardingPassRouter);
 app.use("/", didWebRouter);
-app.use("/",paymentRouter);
-app.use("/",sharedRouter);
-app.use("/",batchRouter);
+app.use("/", paymentRouter);
+app.use("/", sharedRouter);
+app.use("/", batchRouter);
+app.use("/", receiptRouter);
 
 // Error handler for validation errors
 app.use((err, req, res, next) => {

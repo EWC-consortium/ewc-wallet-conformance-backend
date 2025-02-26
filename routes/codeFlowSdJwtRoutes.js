@@ -364,7 +364,12 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       client_id_scheme: existingCodeSession.client_id_scheme,
       isPIDIssuanceFlow: isPIDIssuanceFlow,
       flowType: "code",
-      isDeferred:existingCodeSession.isDeferred
+      isDeferred:existingCodeSession.isDeferred,
+      credentialPayload: existingCodeSession.credentialPayload,
+      merchant: existingCodeSession.merchant,
+      currency: existingCodeSession.currency,
+      value: existingCodeSession.value,
+      isRecurring: existingCodeSession.isRecurring
     });
   } else {
     errors.push("ITB session expired");
@@ -488,6 +493,17 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       }
       contorller = contorller.replace("https://", "");
       const clientId = `did:web:${contorller}`;
+      let vpRequest =
+        "openid4vp://?client_id=" +
+        encodeURIComponent(clientId) +
+        "&request_uri=" +
+        encodeURIComponent(request_uri);
+
+      return res.redirect(302, vpRequest);
+    }else if (client_id_scheme == "payment") {
+      console.log("client_id_scheme payment");
+      let request_uri = `${serverURL}/payment-request/${issuerState}`;
+      const clientId = "dss.aegean.gr";
       let vpRequest =
         "openid4vp://?client_id=" +
         encodeURIComponent(clientId) +
