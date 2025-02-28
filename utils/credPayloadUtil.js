@@ -1137,8 +1137,8 @@ export const createPhotoIDAttestationPayload = (serverURL) => {
     vct: "eu.europa.ec.eudi.photoid.1",
 
     iso23220: {
-      family_name_unicode: "Doe",
-      given_name_unicode: "Jane",
+      family_name_unicode: "Matkalainen",
+      given_name_unicode: "Hanna",
       birth_date: "2005-01-02",
       portrait: face_data,
       issue_date: "2023-01-01",

@@ -8,7 +8,7 @@
   "display": [
     {
       "name": "EWC Issuer",
-      "location": "Greece",
+      "location": "",
       "locale": "en-GB",
       "description": "For queries about how we manage your data please contact the Data Protection Officer."
     }
@@ -492,7 +492,7 @@
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
-          "name": "Univ. of the Aegean Student ID",
+          "name": "Student ID",
           "locale": "en-GB",
           "background_color": "#12107c",
           "text_color": "#FFFFFF",
@@ -633,10 +633,10 @@
         {
           "name": "Fast Ferries Boarding Pass",
           "locale": "en-GB",
-          "background_color": "#12107c",
-          "text_color": "#FFFFFF",
+          "background_color": "#FFFFFF",
+          "text_color": "#000000",
           "logo": {
-            "uri": "https://scontent.fath3-4.fna.fbcdn.net/v/t39.30808-6/326549585_723962505745158_5492858349024673102_n.png?_nc_cat=108&ccb=1-7&_nc_sid=6ee11a&_nc_ohc=xpmYsvY5bRIQ7kNvgGXJCcS&_nc_oc=Adikr4WlAGS0q_xQDKrb0AmWCA-tQ0Y8ch67bx7AehuxxWjaL3aBGXNzXHv3SSS2kZU1IQOuRm34bGjHLKt3PeL2&_nc_zt=23&_nc_ht=scontent.fath3-4.fna&_nc_gid=Al9kVPd_7DCiCWHteA-IXia&oh=00_AYBuIuik3k7En8JnGfsqqTxhKH4-VuV2_hnv2CpV3wCfjg&oe=67C24A95",
+            "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPsAAACrCAMAAACXIhpjAAAAh1BMVEX////tHCT0cXbxVFrwRkzzYmj1f4P81NbvOD/6xsj+8fH95OXuJi32jZHtICj+9/f3m5/uJCzuLzb+9vb5tbj96er8293vMTnzaW/5r7L+7/D7zM7wPUT3oKP1hYnwQUjxS1L3mJv0eX34qq3yWV/6u772jJD1gof0dHn5ubv6wsTxSVDzY2mKM97kAAAFPklEQVR4nO2Ya3uiPBCGgydQEBTPoqLW2tr2//++JclMSGJ3t1j23X2v67m/CGMyzGQOCQgBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4O8wDFqj1BoX7WlsxLGx72/tPXzf+mo2YtjY93Frz05GWuOgNY2NuDR2XfRoatn5FpcoOGuFo4Q0dr+nsQnr7jQIG7tuErR5xngsY/17IIWr2Xc1NmF2az5nzWFvy4gFh33flsY/xSL9maXLgcb8MRwPLMZiPnDglONq32WOunjgzt5bd4eJmryxRadCim76bi6uzvS4Fd+vZGlSJ2hBRkdUtSTmBCEO8dQVLMhHXsxN7bY0de4M7oiuO1v2ir4rWhtRNJql9j95ZeH+3Xl+2nw5shX73iPKhJzl+NHts2tYEHuWHkljhwWssJcn2zvH5rGnLtiKbeKJlpyVc/Hk/NGpY8YMGrsuNr4J6kmSCd+S79r281DzNBgNwzDUjl6qq4Ja5TK9VziWcnWVFKGk2Gd6ZXvVjW6NaUabbVSJaNuNqW3uhNipi72aHW5CsdBBL7uaKFk0993LPMlKpXyVotHB8p3i5NZwlithYYnWnyiU5dRxo0MxlnWhHe2zMtle9urqyLvlngomqh9ztsMil7a56+G9pSpKopgG+XJiPYA2rvW4Yk9nGGPjrxVKb3QXqIuSYlwt5Uy7/EbK8mqhsogW5sTBOBpF5Gp6t+iNeSXz8i6TpzJ7lnkwLYTlOwWFKJ1uOLcUXmhExPqOU9XvX5S0oweNrBhnOoI9ViZX/koLQ83oRGeQXD81yzi7EjcLm7HlVnmqZXItF5UdN2H77vaaQJ8jdCbuLIUFD6jPWDOZjpS8eaToU4yDVRTRmm6489SiCT20OinrXjPVs/Otya5E3h/ttf86J9Ix3Tri2bvOL8t3r6k/qXF+JtbtY+09yH1nGFJS17wL8e6JqnQp1cWB+iQzuLPmgWI3O3jw6oor1RfZzK2GsvvkaU4mKt5+Yg0lb6m2vN2RYjzt6WxYdQ9bmpr2chK9LMRNj1pQn4xoC47r7CI2ojlmy3bfAs6uZuV7915Eqz+2ZnLs/LC7PXFGr08D0qAS50ITO7VSnVZnr0+O6qbyuflfg3V0HenJ06z+Lfqqc5XWQtOObZULH91SPwl11pi6pBjHtKKygEL2Qncx2X8ouku3T8q18wx8f8B1U0ZOzlT5WNIBxt9E2USd5t6OXUErY5lpr0ndEy88qvZdu3zhZJoIvlpzn6zX0/8s9PaA73xoXdlbxTANVrwLm153Wo40H0pyUBZ4OzZndnDfe3QpnJSGxfPMxJhyf25eAoaW70sepfvkRc3eFqHwW11XNGfGx+erJQyTIDHlw757BxZ9fjxQWAxL3jD9t2H3o9hHHWPy/cYtRiavSQU6LvPZh8hHRu2WOvUjBxwOU2odhcPcTiF98kkyd4eaqrqlt7hnM3jEGe9/O8pKe3a6pDqWM3Uf2PAx7cn4PuFq33gvLdaGSrnSf8B1U51W6OJ1v782FbCt7iTFtV/TGessH+vbusWezBA7jypufZtTdtYXsjBe1dVevNCDKtFAj6Lffrz4sGd3rPKkF8ZHmnx736r+DpQrfl/9Eh/kelWdcTH6/fh/jG2XSuiBuSbsZ3XizMte9w9z7LVISZ8JHvhkYTWgw6cv8f8Teo98CjZflqqzfDb9hfZ/md31P/0KDgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYfgAAnkj8AfqfaQAAAABJRU5ErkJggg==",
             "alt_text": "UAegean"
           }
         }
@@ -1276,10 +1276,10 @@
         {
           "name": "vReceipt",
           "locale": "en-GB",
-          "background_color": "#12107c",
-          "text_color": "#FFFFFF",
+          "background_color": "#FFFFFF",
+          "text_color": "#000000",
           "logo": {
-            "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
+            "uri": "data:image/png;base64,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",
             "alt_text": "vReceipt Logo"
           }
         }
@@ -1365,10 +1365,10 @@
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
-          "name": "EWC PID",
+          "name": "Person Identification Data",
           "locale": "en-GB",
-          "background_color": "#0059f8",
-          "text_color": "#FFFFFF",
+          "background_color": "#FFFFFF",
+          "text_color": "#000000",
           "logo": {
             "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
             "alt_text": "PID Logo"
@@ -2084,8 +2084,8 @@
         {
           "name": "Personal Contact Details",
           "locale": "en-GB",
-          "background_color": "#3e426f",
-          "text_color": "#FFFFFF",
+          "background_color": "#FFFFFF",
+          "text_color": "#000000",
           "logo": {
             "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
             "alt_text": "Perconal Contact Details Issuer"
