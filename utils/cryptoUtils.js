@@ -123,9 +123,9 @@ export async function buildVpRequestJWT(
   const state = generateNonce(16);
 
   if (client_id_scheme === "x509_san_dns") {
-    privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
+    privateKey = fs.readFileSync("./x509EC/ec_private_pkcs8_new.key", "utf8");
     const certificate = fs.readFileSync(
-      "./x509/client_certificate.crt",
+      "./x509EC/client_certificate.crt",
       "utf8"
     );
     // Convert certificate to Base64 without headers
@@ -168,14 +168,14 @@ export async function buildVpRequestJWT(
     //   kid: `aegean#authentication-key`, // Ensure this kid is resolvable from the did.json endpoint
     // };
     const header = {
-      alg: "RS256",
+      alg: "ES256",
       typ: "JWT",
       x5c: [certBase64],
     };
 
     const jwt = await new jose.SignJWT(jwtPayload)
       .setProtectedHeader(header)
-      .sign(await jose.importPKCS8(privateKey, "RS256"));
+      .sign(await jose.importPKCS8(privateKey, "ES256"));
 
     return jwt;
   } else if (client_id_scheme.indexOf("did") >= 0) {
