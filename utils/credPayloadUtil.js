@@ -1082,11 +1082,11 @@ export const createPaymentWalletAttestationPayload = (serverURL) => {
     id: "PSP-account-identifier", // Replace with actual account identifier
     fundingSource: {
       type: "card", // Example funding source type
-      panLastFour: "1234", // Example PAN ends in
+      parLastFour: "1234", // Example PAN ends in
       iin: "400000", // Example IIN
       aliasId: "alias-12345", // Example alias ID
       scheme: "Visa", // Example card scheme
-      current:"EUR",
+      currency:"EUR",
       icon: "https://cdn4.iconfinder.com/data/icons/flat-brand-logo-2/512/visa-512.png", // Example card icon URL
     },
     // accounts: ["123"], //
