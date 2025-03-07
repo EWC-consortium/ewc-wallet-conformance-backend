@@ -1014,6 +1014,8 @@
             }
           ]
         },
+
+        
         "Party.partyIdentification_.iD": {
           "display": [
             {
@@ -1030,6 +1032,17 @@
             }
           ]
         },
+        
+        "Party.partyTaxScheme_.companyID": {
+          "display": [
+            {
+              "name": "Company ID",
+              "locale": "en-GB"
+            }
+          ]
+        },
+
+
         "Party.postalAddress_.streetName": {
           "display": [
             {

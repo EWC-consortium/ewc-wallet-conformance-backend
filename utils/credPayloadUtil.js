@@ -643,6 +643,7 @@ export const getVReceiptSDJWTData = (decodedHeaderSubjectDID) => {
     "Party.postalAddress_.cityName": "Another City",
     "Party.postalAddress_.postcode": "AC54321",
     "Party.postalAddress_.countryIdentifier": "GB",
+    "Party.partyTaxScheme_.companyID":"companyID",
 
     // Commodity Classification
     "CommodityClassification.itemClassificationCode": "ICC12345",
@@ -774,6 +775,7 @@ export const getVReceiptSDJWTData = (decodedHeaderSubjectDID) => {
       "Party.postalAddress_.cityName",
       "Party.postalAddress_.postcode",
       "Party.postalAddress_.countryIdentifier",
+      "Party.partyTaxScheme_.companyID",
 
       // Commodity Classification
       "CommodityClassification.itemClassificationCode",
@@ -1027,6 +1029,7 @@ export const getVReceiptSDJWTDataWithPayload = (
       "Party.postalAddress_.cityName",
       "Party.postalAddress_.postcode",
       "Party.postalAddress_.countryIdentifier",
+      "Party.partyTaxScheme_.companyID",
 
       // Commodity Classification
       "CommodityClassification.itemClassificationCode",
