@@ -144,6 +144,47 @@ export async function validatePoP(
   return true;
 }
 
+export async function validateWUA(
+  oauthClientAttestation,
+  clientId = "dss.aegean.gr"
+) {
+  const decodedWUA = await await decodeSdJwt(oauthClientAttestation, digest);
+  // The alg used to sign the attestation must be ES256
+  if (!decodedWUA.jwt.header.alg === "ES256") return false;
+  const kid = decodedWUA.jwt.header.kid;
+  const iss = decodedWUA.jwt.payload.iss;
+  // The kid must identify a JWK which must be resolvable as a JWK Set [5] by appending ./well-known/jwt-issuer to the value of the iss claim
+  const parsed = new URL(iss);
+  const issuerURL = `${parsed.origin}/.well-known/jwt-vc-issuer${parsed.pathname}`;
+  const response = await fetch(issuerURL);
+  if (!response.ok) {
+    console.log("could not fetch " + issuerURL);
+    return false;
+  }
+
+  let jwksUriJson;
+
+  const data = await response.json();
+  if (data.jwks_uri) {
+    const responseJwks = await fetch(data.jwks_uri);
+    if (!responseJwks.ok) {
+      console.log("could not fetch " + data.jwks_uri);
+      return false;
+    }
+    const dataJwks = await responseJwks.json();
+    jwksUriJson = dataJwks;
+  } else {
+    jwksUriJson = data;
+  }
+
+  const matchingKey = jwksUriJson.keys.find((value) => value.kid === kid);
+  if(!matchingKey){
+    return false
+  }
+
+  return true;
+}
+
 /**
  * Process a single descriptor map entry, recursively handling path_nested.
  * @param {Object} vpToken - The current "traversal" object (initially the top-level VP token payload).
