@@ -250,7 +250,7 @@ paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
     const tokenTimestamp = keybindJwt.payload.iat;  
     const fiveMinutesInSeconds = 5 * 60;  
     if (Math.abs(currentTimestamp - tokenTimestamp) > fiveMinutesInSeconds) {
-      res.status(422).json({ error: 'Keyebinding JWT has expired' });
+      return res.status(422).json({ error: 'Keyebinding JWT has expired' });
     }
 
     //STEP 2. Validate the transaction_data
@@ -259,7 +259,7 @@ paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
     const txData = session.txData; // base64EncodedTxData
     const hash = crypto.createHash("sha256").update(txData).digest("hex");
     if( !transactionDataHashesArray.includes(hash)){
-      res.status(422).json({ error: 'TxData Hashes Do not Match' });
+      return res.status(422).json({ error: 'TxData Hashes Do not Match' });
     }
 
     // STEP 3. Validate the suitability of the PWA
@@ -270,7 +270,7 @@ paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
     console.log("PWA issued by " + pwaPayload.iss)
 
     if (!session) {
-      res.status(404).json({ error: 'Session Not Found' });
+      return res.status(404).json({ error: 'Session Not Found' });
     }
      // - Ensure that the PWA is valid for the funding source (card or account) in question (including non-revoked).
      // this is a check that the bank will exectue... 
@@ -279,12 +279,12 @@ paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
     // See EWC RFC 004 [10] for further details.
     const popValidationResults = await validatePoP(oauthClientAttestation, oauthClientAttestationPoP)
     if( !popValidationResults){
-      res.status(422).json({ error: 'PoP Validation failed' });
+      return  res.status(422).json({ error: 'PoP Validation failed' });
     }
 
     const wuaValidationResults = await validateWUA(oauthClientAttestation, oauthClientAttestationPoP)
     if( !wuaValidationResults){
-      res.status(422).json({ error: 'PoP Validation failed' });
+      return res.status(422).json({ error: 'PoP Validation failed' });
     }
 
 

@@ -3,6 +3,8 @@ import jwt from "jsonwebtoken";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
 import { digest } from "@sd-jwt/crypto-nodejs";
 import { getVPSession } from "../services/cacheServiceRedis.js";
+import zlib from 'zlib';
+import base64url from 'base64url';
 
 /**
  * Placeholder decoding/parsing functions.
@@ -151,9 +153,19 @@ export async function validateWUA(
   const decodedWUA = await await decodeSdJwt(oauthClientAttestation, digest);
   // The alg used to sign the attestation must be ES256
   if (!decodedWUA.jwt.header.alg === "ES256") return false;
+
+  //attested_security_context
+  const securityContext = decodedWUA.jwt.payload.attested_security_context;
+  if (securityContext !== "https://eudiwalletconsortium.org/") {
+    console.log(
+      "attested security context was not https://eudiwalletconsortium.org/"
+    );
+    return false;
+  }
+
+  // The kid must identify a JWK which must be resolvable as a JWK Set [5] by appending ./well-known/jwt-issuer to the value of the iss claim
   const kid = decodedWUA.jwt.header.kid;
   const iss = decodedWUA.jwt.payload.iss;
-  // The kid must identify a JWK which must be resolvable as a JWK Set [5] by appending ./well-known/jwt-issuer to the value of the iss claim
   const parsed = new URL(iss);
   const issuerURL = `${parsed.origin}/.well-known/jwt-vc-issuer${parsed.pathname}`;
   const response = await fetch(issuerURL);
@@ -178,11 +190,61 @@ export async function validateWUA(
   }
 
   const matchingKey = jwksUriJson.keys.find((value) => value.kid === kid);
-  if(!matchingKey){
-    return false
+  if (!matchingKey) {
+    return false;
   }
 
-  return true;
+  //TODO
+  //The attestation should include a status claim which contains a reference to a status list as defined in [4]
+  // and which allows the attestation provider to check the state of revocation of the wallet instance
+
+  /*
+    The JWT must include a status_list claim that is a JSON object containing:
+    bits: an integer that must be one of the allowed values (1, 2, 4, or 8).
+    lst: a base64url‑encoded string representing the compressed (using DEFLATE with the ZLIB format) bit array for the status list.
+     You then decode the lst value and decompress it to obtain the raw bit array. (At this point you can, if needed, check that the number of bits matches your expected number of referenced tokens.)
+  */
+  const statusListURI = decodedWUA.jwt.payload.status.status_list.uri;
+  let options = {
+    method: "GET",
+    headers: { Accept: "application/statuslist+jwt" },
+  };
+  const statusJwtResponse = await fetch(statusListURI, options);
+  if (!statusJwtResponse.ok) {
+    console.log("could not fetch " + statusListURI);
+    return false;
+  }
+  const statusJwt = await statusJwtResponse.text();
+  const decodedStatus = jwt.decode(statusJwt, {
+    complete: true,
+  });
+  const statusListClaim = decodedStatus.payload.status_list;
+  if (
+    !statusListClaim ||
+    typeof statusListClaim.bits !== "number" ||
+    !statusListClaim.lst
+  ) {
+    console.log("Missing or invalid status_list claim");
+    return false;
+  }
+  // Check that the "bits" value is one of the allowed sizes (1,2,4,8)
+  if (![1, 2, 4, 8].includes(statusListClaim.bits)) {
+    console.log("Invalid bits value in status_list");
+    return false;
+  }
+
+  const compressed = base64url.toBuffer(statusListClaim.lst);
+  let decompressed;
+  try {
+    decompressed = zlib.inflateSync(compressed);
+  } catch (err) {
+    console.log('Failed to decompress status list: ' + err.message);
+    return false;
+  }
+  // now that we have the actuall byte array (the decompressed buffer) 
+  // we can check the status of the specific wallet (the index contained in the WUA)
+  const tokenIndex = decodedWUA.jwt.payload.status.status_list.idx
+  return checkTokenStatus(decompressed, tokenIndex)
 }
 
 /**
@@ -436,4 +498,30 @@ export function getSDsFromPresentationDef(presentation_definition) {
     }
     return acc;
   }, []);
+}
+
+
+/*
+ bufferToBits function loops over each byte in the Buffer and extracts the bits
+ using a bitwise right-shift and bitwise AND. Since the spec says bits are counted
+  from the least significant bit (LSB) to the most significant bit
+*/
+function bufferToBits(buffer) {
+  const bits = [];
+  for (let i = 0; i < buffer.length; i++) {
+    const byte = buffer[i];
+    for (let bit = 0; bit < 8; bit++) {
+      bits.push((byte >> bit) & 1);
+    }
+  }
+  return bits;
+}
+
+export function checkTokenStatus(decompressedBuffer, tokenIndex) {
+  const bits = bufferToBits(decompressedBuffer);
+  if (tokenIndex < 0 || tokenIndex >= bits.length) {
+    throw new Error('Token index out of range');
+  }
+  // In this example, 0 = valid, 1 = revoked.
+  return bits[tokenIndex] === 0 //? "valid" : "revoked";
 }
