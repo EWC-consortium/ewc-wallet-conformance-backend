@@ -326,6 +326,7 @@ export async function buildPaymentVpRequestJWT(
 
     return { jwt, base64EncodedTxData };
   } else if (client_id_scheme.indexOf("did") >= 0) {
+    //TODO NOT COMPLETED SHOULD RETURN txDATA HASH
     const signingKey = {
       kty: "EC",
       x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",

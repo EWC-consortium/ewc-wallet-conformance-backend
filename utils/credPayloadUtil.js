@@ -826,118 +826,6 @@ export const getVReceiptSDJWTDataWithPayload = (
   payload,
   decodedHeaderSubjectDID
 ) => {
-  if (!payload) {
-    payload = {
-      "MonetaryTotal.lineExtensionAmount": 150.0,
-      "MonetaryTotal.taxInclusiveAmount": 180.0,
-      "MonetaryTotal.payableAmount": 180.0,
-
-      "TaxTotal.taxSubtotal_": [
-        {
-          "TaxSubtotal.taxableAmount": 150.0,
-          "TaxSubtotal.taxSubtotalTaxAmount": 30.0,
-          "TaxSubtotal.percent": 20,
-          "TaxSubtotal.taxCategory_": {
-            "TaxCategory.taxScheme_": {
-              "TaxScheme.taxSchemeName": "VAT",
-            },
-          },
-        },
-      ],
-      "TaxTotal.taxAmount": 30.0,
-
-      "Address.streetName": "123 High Street",
-      "Address.cityName": "London",
-      "Address.postcode": "W1A 1AA",
-      "Address.countryIdentifier": "GB",
-
-      "ItemProperty.itemPropertyName": "Color",
-      "ItemProperty.value": "Red",
-
-      "PaymentMeans.cardAccount_": {
-        "CardAccount.networkID": "VISA",
-        "CardAccount.accountNumberID": "**** **** **** 6789",
-      },
-      "PaymentMeans.paymentMeansCode": "CreditCard",
-
-      PurchaseReceipt: {
-        iD: "PR-2023-456",
-        issueDate: "2023-10-05",
-        documentCurrencyCode: "GBP",
-        note: "Thank you for your business!",
-
-        delivery_: {
-          "Delivery.actualDeliveryDate": "2023-10-06",
-          "Delivery.deliveryAddress": {
-            streetName: "456 Delivery Lane",
-            cityName: "Manchester",
-            postcode: "M1 1AB",
-            countryIdentifier: "GB",
-          },
-          "Delivery.actualDeliveryTime": "14:30:00Z",
-        },
-
-        "purchaseReceiptLine-1": [
-          {
-            iD: "PRL-001",
-            quantity: 2,
-            item_: {
-              commodityClassification_: {
-                "CommodityClassification.itemClassificationCode": "HSCode123",
-              },
-              itemInstance_: {
-                additionalItemProperty: {
-                  itemPropertyName: "Size",
-                  value: "Medium",
-                },
-              },
-            },
-            allowanceCharge_: {
-              amount: 10.0,
-              allowanceChargeReason: "Promotional Discount",
-            },
-            taxInclusiveLineExtentionAmount: 80.0,
-          },
-        ],
-      },
-
-      SupplierParty: {
-        supplierPartyID: "SUP-789",
-        party_: {
-          "PartyIdentification.iD": "COMP-123",
-          "PartyName.name": "Tech Supplies Ltd",
-          postalAddress_: {
-            streetName: "789 Business Rd",
-            cityName: "Birmingham",
-            postcode: "B2 4QA",
-            countryIdentifier: "GB",
-          },
-        },
-      },
-
-      CustomerParty: {
-        party_: {
-          "partyIdentification_.iD": "CUST-123",
-          "partyName_.name": "John Doe",
-          postalAddress_: {
-            streetName: "321 Consumer St",
-            cityName: "Leeds",
-            postcode: "LS1 4DW",
-            countryIdentifier: "GB",
-          },
-        },
-      },
-
-      Payment: {
-        authorizationID: "AUTH-789",
-        paidAmount: 180.0,
-        transactionID: "TX-2023-987",
-      },
-
-      "DocumentReference.iD": "INV-2023-789",
-    };
-  }
-
   const claims = {
     id: decodedHeaderSubjectDID || uuidv4(),
     ...payload,
@@ -1085,7 +973,8 @@ export const createPaymentWalletAttestationPayload = (serverURL) => {
     id: "PSP-account-identifier", // Replace with actual account identifier
     fundingSource: {
       type: "card", // Example funding source type
-      parLastFour: "1234", // Example PAN ends in
+      parLastFour: "1234",
+      panLastFour: "5678", // Example PAN ends in
       iin: "400000", // Example IIN
       aliasId: "alias-12345", // Example alias ID
       scheme: "Visa", // Example card scheme
