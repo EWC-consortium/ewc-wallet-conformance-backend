@@ -118,6 +118,32 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
   return { sessionId, extractedClaims, keybindJwt };
 }
 
+export async function validatePoP(
+  oauthClientAttestation,
+  oauthClientAttestationPoP,
+  clientId = "dss.aegean.gr"
+) {
+  const decodedWUA = await await decodeSdJwt(oauthClientAttestation, digest);
+  const decodedPoP = await jwt.decode(oauthClientAttestationPoP, {
+    complete: true,
+  });
+
+  const wuaSub = decodedWUA.jwt.payload.sub;
+  const popIss = decodedPoP.payload.iss;
+
+  //The value of iss must exactly match the sub claim of the the WUA JWT from section 3.1
+  // The value of aud must be the identifier of the relying party
+  if (wuaSub !== popIss || decodedPoP.payload.aud !== clientId) return false;
+  //The value of exp must be set so that the WUA PoP JWT's maximum lifetime is no longer than 24 hours
+  const nowInSeconds = Math.floor(Date.now() / 1000);
+  const lifetimeInSeconds = decodedPoP.payload.exp - nowInSeconds;
+  // Check if lifetime exceeds 24 hours (86400 seconds)
+  if (lifetimeInSeconds > 86400) {
+    return false;
+  }
+  return true;
+}
+
 /**
  * Process a single descriptor map entry, recursively handling path_nested.
  * @param {Object} vpToken - The current "traversal" object (initially the top-level VP token payload).

@@ -2,7 +2,7 @@ import express from "express";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
-import { extractClaimsFromRequest } from "../utils/vpHeplers.js";
+import { extractClaimsFromRequest, validatePoP } from "../utils/vpHeplers.js";
 import { digest } from "@sd-jwt/crypto-nodejs";
 import crypto from "crypto";
 import { extractClaims } from "../utils/sdjwtUtils.js";
@@ -223,8 +223,16 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
 paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
   try {
     console.log("payment_direct_post VP is below!");
-    const transaction_data_hashes = req.body.transaction_data_hashes;
-    const transaction_data_hashes_alg = req.body.transaction_data_hashes_alg;
+    // const transaction_data_hashes = req.body.transaction_data_hashes;
+    // const transaction_data_hashes_alg = req.body.transaction_data_hashes_alg;
+
+    // FETCH headers
+    // OAuth-Client-Attestation: <wallet-unit-attestation-jwt>
+    // OAuth-Client-Attestation-PoP: <wallet-unit-attestation-pop-jwt></wallet-unit-attestation-pop-jwt>
+    const oauthClientAttestation = req.get("OAuth-Client-Attestation");
+    const oauthClientAttestationPoP = req.get("OAuth-Client-Attestation-PoP");
+     
+
     const { sessionId, extractedClaims, keybindJwt } =
       await extractClaimsFromRequest(req, digest, true);
 
@@ -237,22 +245,9 @@ paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
     let transactionDataHashesArray = keybindJwt.payload.transaction_data_hashes;
     let xtDataHashAlg = keybindJwt.payload.transaction_data_hashes_alg;
 
-    /*
-      to be sent to the merchant:
-      {
-          “payment_wallet_attestation”: “<VP Token>”,
-          “wallet_unit_attestation”: “<WUA>~<KB JWT>”,
-          “transaction_data_hashes_alg”: [“sha-256”],
-          “transaction_data”: “Base64URL({….})”
-      }
-
-
-    */
-
+ 
     //STEP 1. Validate the VP Token as described in OpenID4VP [4] for the IETF SD-JWT VC credential format.
-    // TODO
-    // - validating the key binding JWT, as a PWA is always bound to a key
-    
+    // - validating the key binding JWT, as a PWA is always bound to a key ==>  the VP token validation is covered in : extractClaimsFromRequest
     // - checking that the timestamp (iat) in the key binding JWT is close (e.g. ±5 minutes) to receiving the input from the user (two-party model) or intermediary (three-party model), respectively
     const currentTimestamp = Math.floor(Date.now() / 1000);  
     const tokenTimestamp = keybindJwt.payload.iat;  
@@ -271,15 +266,39 @@ paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
     }
 
     // STEP 3. Validate the suitability of the PWA
+    // The PWA is submitted inside the vpToken and is validated as part 
+    // of the extractClaimsFromRequest call
+
     // - Ensure that the PWA was issued by a suitable entity, most likely the issuer should be the same entity as verifier.
-    // - Ensure that the PWA is valid for the funding source (card or account) in question (including non-revoked).
+    const pwaPayload = extractedClaims.find(item => item.vct === "PaymentWalletAttestation");
+    console.log("PWA issued by " + pwaPayload.iss)
 
     if (!session) {
       return res.sendStatus(404); //session not found
     }
+     // - Ensure that the PWA is valid for the funding source (card or account) in question (including non-revoked).
+     // this is a check that the bank will exectue... 
 
     // STEP 4. In addition to the above, the verifier may want to validate the user’s Wallet Unit Attestation.
     // This part is outside the scope of this specification. Please see EWC RFC 004 [10] for further details.
+    const popValidationResults = await validatePoP(oauthClientAttestation, oauthClientAttestationPoP)
+    if( !popValidationResults){
+      res.status(422).json({ error: 'PoP Validation failed' });
+    }
+
+
+
+    // STEP 5. send to bank to process 
+   /*
+      to be sent to the bank:
+      {
+          “payment_wallet_attestation”: “<VP Token>”,
+          “wallet_unit_attestation”: “<WUA>~<KB JWT>”,
+          “transaction_data_hashes_alg”: [“sha-256”],
+          “transaction_data”: “Base64URL({….})”
+      }
+    */
+
 
     session.status = "success";
     storeVPSession(sessionId, session);
