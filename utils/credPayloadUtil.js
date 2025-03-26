@@ -554,139 +554,55 @@ export const getVReceiptSDJWTData = (decodedHeaderSubjectDID) => {
     id: decodedHeaderSubjectDID || uuidv4(),
 
     // Monetary Total
-    "MonetaryTotal.lineExtensionAmount": 150.75,
-    "MonetaryTotal.taxInclusiveAmount": 180.9,
-    "MonetaryTotal.payableAmount": 180.9,
+    "monetary_total.line_extension_amount": 150.75,
+    "monetary_total.tax_inclusive_amount": 180.9,
+    "monetary_total.payable_amount": 180.9,
 
     // Tax Total
-    "TaxTotal.taxSubtotal_": {
-      taxableAmount: 150.75,
-      taxSubtotalTaxAmount: 30.15,
-      taxCategory_: "VAT",
-      percent: 20,
-    },
-    "TaxTotal.taxAmount": 30.15,
+    "tax_total.tax_subtotal.tax_amount": 30.15,
+    "tax_total.tax_subtotal.tax_category.tax_scheme.name": "Standard VAT",
+    "tax_total.tax_subtotal.percent": 20,
+    "tax_total.tax_amount": 30.15,
 
     // Address
-    "Address.streetName": "123 Main Street",
-    "Address.cityName": "Sample City",
-    "Address.postcode": "SC12345",
-    "Address.countryIdentifier": "GB",
-
-    // Tax Category
-    "TaxCategory.taxScheme_": "VAT Scheme",
-
-    // Item Property
-    "ItemProperty.itemPropertyName": "Color",
-    "ItemProperty.value": "Red",
-
-    // Tax Scheme
-    "TaxScheme.taxSchemeName": "Standard VAT",
-
-    // Allowance Charge
-    "AllowanceCharge.amount": 10.0,
-    "AllowanceCharge.allowanceChargeReason": "Discount Applied",
-
-    // Party Name
-    "PartyName.name": "Sample Seller Ltd.",
+    "address.street_name": "123 Main Street",
+    "address.city_name": "Sample City",
+    "address.postcode": "SC12345",
+    "address.country_identifier": "GB",
 
     // Payment Means
-    "PaymentMeans.cardAccount_": {
-      networkID: "VISA",
-      accountNumberID: "411111******1111",
-    },
-    "PaymentMeans.paymentMeansCode": "PM01",
+    "payment_means.payment_means_code": "PM01",
+    "payment_means.card_account.network_id": "VISA",
+    "payment_means.card_account.account_number_id": "411111******1111",
 
-    // Party Identification
-    "PartyIdentification.iD": "PID123456789",
+    // Item Property
+    "item_property.item_property_name": "Color",
+    "item_property.value": "Red",
 
     // Purchase Receipt
-    "PurchaseReceipt.paymentMeans_": "Credit Card",
-    "PurchaseReceipt.note": "Thank you for your purchase!",
-    "PurchaseReceipt.delivery_": "Standard Shipping",
-    "PurchaseReceipt.taxIncludedIndicator": true,
-    "PurchaseReceipt.taxTotal_": 30.15,
-    "PurchaseReceipt.accountingCustomerParty_": "Customer Account",
-    "PurchaseReceipt.documentCurrencyCode": "GBP",
-    "PurchaseReceipt.payment_": "Paid",
-    "PurchaseReceipt.sellerSupplierParty": "Sample Seller Ltd.",
-    "PurchaseReceipt.legalMonetaryTotal": 180.9,
-    "PurchaseReceipt.salesDocumentReference": "SDR123456",
-    "PurchaseReceipt.iD": "PR123456789",
-    "PurchaseReceipt.issueDate": "2024-04-27",
-    "PurchaseReceipt.purchaseReceiptLine-1": "Line1",
-
-    // Tax Subtotal
-    "TaxSubtotal.taxableAmount": 150.75,
-    "TaxSubtotal.taxSubtotalTaxAmount": 30.15,
-    "TaxSubtotal.taxCategory_": "VAT",
-    "TaxSubtotal.percent": 20,
-
-    // Item
-    "Item.commodityClassification_": "CC123",
-    "Item.itemInstance_": "Instance1",
-    "Item.additionalItemProperty": "Property1",
-
-    // Payment
-    "Payment.authorizationID": "AUTH123456789",
-    "Payment.paidAmount": 180.9,
-    "Payment.transactionID": "TXN123456789",
-
-    // Supplier Party
-    "SupplierParty.party_": "SupplierParty1",
-    "SupplierParty.supplierPartyID": "SPID123456",
-
-    // Party
-    "Party.partyIdentification_.iD": "PID987654321",
-    "Party.partyName_.name": "Sample Buyer Ltd.",
-    "Party.postalAddress_.streetName": "456 Another St.",
-    "Party.postalAddress_.cityName": "Another City",
-    "Party.postalAddress_.postcode": "AC54321",
-    "Party.postalAddress_.countryIdentifier": "GB",
-    "Party.partyTaxScheme_.companyID":"companyID",
-
-    // Commodity Classification
-    "CommodityClassification.itemClassificationCode": "ICC12345",
-
-    // Card Account
-    "CardAccount.networkID": "MASTERCARD",
-    "CardAccount.accountNumberID": "550000******0004",
-
-    // Customer Party
-    "CustomerParty.party_.partyIdentification_.iD": "CPID123456789",
-    "CustomerParty.party_.partyName_.name": "Customer Name Ltd.",
-    "CustomerParty.party_.postalAddress_.streetName": "789 Customer Ave.",
-    "CustomerParty.party_.postalAddress_.cityName": "Customer City",
-    "CustomerParty.party_.postalAddress_.postcode": "CC67890",
-    "CustomerParty.party_.postalAddress_.countryIdentifier": "GB",
-
-    // Purchase Receipt Line
-    "PurchaseReceiptLine.item_.commodityClassification_.itemClassificationCode":
-      "ICC67890",
-    "PurchaseReceiptLine.item_.itemInstance_.additionalItemProperty.itemPropertyName":
-      "Size",
-    "PurchaseReceiptLine.item_.itemInstance_.additionalItemProperty.value":
-      "Medium",
-    "PurchaseReceiptLine.quantity": 2,
-    "PurchaseReceiptLine.allowanceCharge_.amount": 5.0,
-    "PurchaseReceiptLine.allowanceCharge_.allowanceChargeReason": "Promotion",
-    "PurchaseReceiptLine.taxInclusiveLineExtentionAmount": 80.45,
-    "PurchaseReceiptLine.iD": "PRL123456789",
+    "purchase_receipt.id": "PR123456789",
+    "purchase_receipt.issue_date": "2024-04-27",
+    "purchase_receipt.document_currency_code": "GBP",
+    "purchase_receipt.legal_monetary_total": 180.9,
+    "purchase_receipt.seller_supplier_party.supplier_party_id": "SPID123456",
+    "purchase_receipt.tax_included_indicator": true,
+    "purchase_receipt.payment.paid_amount": 180.9,
+    "purchase_receipt.payment.authorization_id": "AUTH123456789",
+    "purchase_receipt.payment.transaction_id": "TXN123456789",
+    "purchase_receipt.purchase_receipt_line.id": "PRL123456789",
+    "purchase_receipt.purchase_receipt_line.quantity": 2,
+    "purchase_receipt.purchase_receipt_line.tax_inclusive_line_extension_amount": 80.45,
+    "purchase_receipt.purchase_receipt_line.item.commodity_classification.item_classification_code": "ICC67890",
 
     // Delivery
-    "Delivery.actualDeliveryDate": "2024-04-28",
-    "Delivery.deliveryAddress.streetName": "321 Delivery Rd.",
-    "Delivery.deliveryAddress.cityName": "Delivery City",
-    "Delivery.deliveryAddress.postcode": "DC12345",
-    "Delivery.deliveryAddress.countryIdentifier": "GB",
-    "Delivery.actualDeliveryTime": "14:30",
+    "delivery.actual_delivery_date": "2024-04-28",
+    "delivery.actual_delivery_time": "14:30",
 
-    // Document Reference
-    "DocumentReference.iD": "DR123456789",
+    // Party Name
+    "party_name.name": "Sample Seller Ltd.",
 
-    // Item Instance
-    "ItemInstance.additionalItemProperty.itemPropertyName": "Warranty",
-    "ItemInstance.additionalItemProperty.value": "2 Years",
+    // Party Identification
+    "party_identification.id": "PID123456789",
   };
 
   const disclosureFrame = {
@@ -694,128 +610,55 @@ export const getVReceiptSDJWTData = (decodedHeaderSubjectDID) => {
       "id",
 
       // Monetary Total
-      "MonetaryTotal.lineExtensionAmount",
-      "MonetaryTotal.taxInclusiveAmount",
-      "MonetaryTotal.payableAmount",
+      "monetary_total.line_extension_amount",
+      "monetary_total.tax_inclusive_amount",
+      "monetary_total.payable_amount",
 
       // Tax Total
-      "TaxTotal.taxSubtotal_",
-      "TaxTotal.taxAmount",
+      "tax_total.tax_subtotal.tax_amount",
+      "tax_total.tax_subtotal.tax_category.tax_scheme.name",
+      "tax_total.tax_subtotal.percent",
+      "tax_total.tax_amount",
 
       // Address
-      "Address.streetName",
-      "Address.cityName",
-      "Address.postcode",
-      "Address.countryIdentifier",
-
-      // Tax Category
-      "TaxCategory.taxScheme_",
-
-      // Item Property
-      "ItemProperty.itemPropertyName",
-      "ItemProperty.value",
-
-      // Tax Scheme
-      "TaxScheme.taxSchemeName",
-
-      // Allowance Charge
-      "AllowanceCharge.amount",
-      "AllowanceCharge.allowanceChargeReason",
-
-      // Party Name
-      "PartyName.name",
+      "address.street_name",
+      "address.city_name",
+      "address.postcode",
+      "address.country_identifier",
 
       // Payment Means
-      "PaymentMeans.cardAccount_",
-      "PaymentMeans.paymentMeansCode",
+      "payment_means.payment_means_code",
+      "payment_means.card_account.network_id",
+      "payment_means.card_account.account_number_id",
 
-      // Party Identification
-      "PartyIdentification.iD",
+      // Item Property
+      "item_property.item_property_name",
+      "item_property.value",
 
       // Purchase Receipt
-      "PurchaseReceipt.paymentMeans_",
-      "PurchaseReceipt.note",
-      "PurchaseReceipt.delivery_",
-      "PurchaseReceipt.taxIncludedIndicator",
-      "PurchaseReceipt.taxTotal_",
-      "PurchaseReceipt.accountingCustomerParty_",
-      "PurchaseReceipt.documentCurrencyCode",
-      "PurchaseReceipt.payment_",
-      "PurchaseReceipt.sellerSupplierParty",
-      "PurchaseReceipt.legalMonetaryTotal",
-      "PurchaseReceipt.salesDocumentReference",
-      "PurchaseReceipt.iD",
-      "PurchaseReceipt.issueDate",
-      "PurchaseReceipt.purchaseReceiptLine-1",
-
-      // Tax Subtotal
-      "TaxSubtotal.taxableAmount",
-      "TaxSubtotal.taxSubtotalTaxAmount",
-      "TaxSubtotal.taxCategory_",
-      "TaxSubtotal.percent",
-
-      // Item
-      "Item.commodityClassification_",
-      "Item.itemInstance_",
-      "Item.additionalItemProperty",
-
-      // Payment
-      "Payment.authorizationID",
-      "Payment.paidAmount",
-      "Payment.transactionID",
-
-      // Supplier Party
-      "SupplierParty.party_",
-      "SupplierParty.supplierPartyID",
-
-      // Party
-      "Party.partyIdentification_.iD",
-      "Party.partyName_.name",
-      "Party.postalAddress_.streetName",
-      "Party.postalAddress_.cityName",
-      "Party.postalAddress_.postcode",
-      "Party.postalAddress_.countryIdentifier",
-      "Party.partyTaxScheme_.companyID",
-
-      // Commodity Classification
-      "CommodityClassification.itemClassificationCode",
-
-      // Card Account
-      "CardAccount.networkID",
-      "CardAccount.accountNumberID",
-
-      // Customer Party
-      "CustomerParty.party_.partyIdentification_.iD",
-      "CustomerParty.party_.partyName_.name",
-      "CustomerParty.party_.postalAddress_.streetName",
-      "CustomerParty.party_.postalAddress_.cityName",
-      "CustomerParty.party_.postalAddress_.postcode",
-      "CustomerParty.party_.postalAddress_.countryIdentifier",
-
-      // Purchase Receipt Line
-      "PurchaseReceiptLine.item_.commodityClassification_.itemClassificationCode",
-      "PurchaseReceiptLine.item_.itemInstance_.additionalItemProperty.itemPropertyName",
-      "PurchaseReceiptLine.item_.itemInstance_.additionalItemProperty.value",
-      "PurchaseReceiptLine.quantity",
-      "PurchaseReceiptLine.allowanceCharge_.amount",
-      "PurchaseReceiptLine.allowanceCharge_.allowanceChargeReason",
-      "PurchaseReceiptLine.taxInclusiveLineExtentionAmount",
-      "PurchaseReceiptLine.iD",
+      "purchase_receipt.id",
+      "purchase_receipt.issue_date",
+      "purchase_receipt.document_currency_code",
+      "purchase_receipt.legal_monetary_total",
+      "purchase_receipt.seller_supplier_party.supplier_party_id",
+      "purchase_receipt.tax_included_indicator",
+      "purchase_receipt.payment.paid_amount",
+      "purchase_receipt.payment.authorization_id",
+      "purchase_receipt.payment.transaction_id",
+      "purchase_receipt.purchase_receipt_line.id",
+      "purchase_receipt.purchase_receipt_line.quantity",
+      "purchase_receipt.purchase_receipt_line.tax_inclusive_line_extension_amount",
+      "purchase_receipt.purchase_receipt_line.item.commodity_classification.item_classification_code",
 
       // Delivery
-      "Delivery.actualDeliveryDate",
-      "Delivery.deliveryAddress.streetName",
-      "Delivery.deliveryAddress.cityName",
-      "Delivery.deliveryAddress.postcode",
-      "Delivery.deliveryAddress.countryIdentifier",
-      "Delivery.actualDeliveryTime",
+      "delivery.actual_delivery_date",
+      "delivery.actual_delivery_time",
 
-      // Document Reference
-      "DocumentReference.iD",
+      // Party Name
+      "party_name.name",
 
-      // Item Instance
-      "ItemInstance.additionalItemProperty.itemPropertyName",
-      "ItemInstance.additionalItemProperty.value",
+      // Party Identification
+      "party_identification.id",
     ],
   };
 
@@ -827,137 +670,64 @@ export const getVReceiptSDJWTDataWithPayload = (
   decodedHeaderSubjectDID
 ) => {
   const claims = {
-    id: decodedHeaderSubjectDID || uuidv4(),
-    ...payload,
+    id: decodedHeaderSubjectDID || uuidv4(), // Top-level ID (not nested under purchase_receipt)
+    ...payload, // Spread payload, assuming it matches metadata naming
   };
 
   const disclosureFrame = {
     _sd: [
-      "id",
+      "id", // Top-level ID
 
       // Monetary Total
-      "MonetaryTotal.lineExtensionAmount",
-      "MonetaryTotal.taxInclusiveAmount",
-      "MonetaryTotal.payableAmount",
+      "monetary_total.line_extension_amount",
+      "monetary_total.tax_inclusive_amount",
+      "monetary_total.payable_amount",
 
       // Tax Total
-      "TaxTotal.taxSubtotal_",
-      "TaxTotal.taxAmount",
+      "tax_total.tax_subtotal.tax_amount",
+      "tax_total.tax_subtotal.tax_category.tax_scheme.name",
+      "tax_total.tax_subtotal.percent",
+      "tax_total.tax_amount",
 
       // Address
-      "Address.streetName",
-      "Address.cityName",
-      "Address.postcode",
-      "Address.countryIdentifier",
-
-      // Tax Category
-      "TaxCategory.taxScheme_",
-
-      // Item Property
-      "ItemProperty.itemPropertyName",
-      "ItemProperty.value",
-
-      // Tax Scheme
-      "TaxScheme.taxSchemeName",
-
-      // Allowance Charge
-      "AllowanceCharge.amount",
-      "AllowanceCharge.allowanceChargeReason",
-
-      // Party Name
-      "PartyName.name",
+      "address.street_name",
+      "address.city_name",
+      "address.postcode",
+      "address.country_identifier",
 
       // Payment Means
-      "PaymentMeans.cardAccount_",
-      "PaymentMeans.paymentMeansCode",
+      "payment_means.payment_means_code",
+      "payment_means.card_account.network_id",
+      "payment_means.card_account.account_number_id",
 
-      // Party Identification
-      "PartyIdentification.iD",
+      // Item Property
+      "item_property.item_property_name",
+      "item_property.value",
 
       // Purchase Receipt
-      "PurchaseReceipt.paymentMeans_",
-      "PurchaseReceipt.note",
-      "PurchaseReceipt.delivery_",
-      "PurchaseReceipt.taxIncludedIndicator",
-      "PurchaseReceipt.taxTotal_",
-      "PurchaseReceipt.accountingCustomerParty_",
-      "PurchaseReceipt.documentCurrencyCode",
-      "PurchaseReceipt.payment_",
-      "PurchaseReceipt.sellerSupplierParty",
-      "PurchaseReceipt.legalMonetaryTotal",
-      "PurchaseReceipt.salesDocumentReference",
-      "PurchaseReceipt.iD",
-      "PurchaseReceipt.issueDate",
-      "PurchaseReceipt.purchaseReceiptLine-1",
-
-      // Tax Subtotal
-      "TaxSubtotal.taxableAmount",
-      "TaxSubtotal.taxSubtotalTaxAmount",
-      "TaxSubtotal.taxCategory_",
-      "TaxSubtotal.percent",
-
-      // Item
-      "Item.commodityClassification_",
-      "Item.itemInstance_",
-      "Item.additionalItemProperty",
-
-      // Payment
-      "Payment.authorizationID",
-      "Payment.paidAmount",
-      "Payment.transactionID",
-
-      // Supplier Party
-      "SupplierParty.party_",
-      "SupplierParty.supplierPartyID",
-
-      // Party
-      "Party.partyIdentification_.iD",
-      "Party.partyName_.name",
-      "Party.postalAddress_.streetName",
-      "Party.postalAddress_.cityName",
-      "Party.postalAddress_.postcode",
-      "Party.postalAddress_.countryIdentifier",
-      "Party.partyTaxScheme_.companyID",
-
-      // Commodity Classification
-      "CommodityClassification.itemClassificationCode",
-
-      // Card Account
-      "CardAccount.networkID",
-      "CardAccount.accountNumberID",
-
-      // Customer Party
-      "CustomerParty.party_.partyIdentification_.iD",
-      "CustomerParty.party_.partyName_.name",
-      "CustomerParty.party_.postalAddress_.streetName",
-      "CustomerParty.party_.postalAddress_.cityName",
-      "CustomerParty.party_.postalAddress_.postcode",
-      "CustomerParty.party_.postalAddress_.countryIdentifier",
-
-      // Purchase Receipt Line
-      "PurchaseReceiptLine.item_.commodityClassification_.itemClassificationCode",
-      "PurchaseReceiptLine.item_.itemInstance_.additionalItemProperty.itemPropertyName",
-      "PurchaseReceiptLine.item_.itemInstance_.additionalItemProperty.value",
-      "PurchaseReceiptLine.quantity",
-      "PurchaseReceiptLine.allowanceCharge_.amount",
-      "PurchaseReceiptLine.allowanceCharge_.allowanceChargeReason",
-      "PurchaseReceiptLine.taxInclusiveLineExtentionAmount",
-      "PurchaseReceiptLine.iD",
+      "purchase_receipt.id",
+      "purchase_receipt.issue_date",
+      "purchase_receipt.document_currency_code",
+      "purchase_receipt.legal_monetary_total",
+      "purchase_receipt.seller_supplier_party.supplier_party_id",
+      "purchase_receipt.tax_included_indicator",
+      "purchase_receipt.payment.paid_amount",
+      "purchase_receipt.payment.authorization_id",
+      "purchase_receipt.payment.transaction_id",
+      "purchase_receipt.purchase_receipt_line.id",
+      "purchase_receipt.purchase_receipt_line.quantity",
+      "purchase_receipt.purchase_receipt_line.tax_inclusive_line_extension_amount",
+      "purchase_receipt.purchase_receipt_line.item.commodity_classification.item_classification_code",
 
       // Delivery
-      "Delivery.actualDeliveryDate",
-      "Delivery.deliveryAddress.streetName",
-      "Delivery.deliveryAddress.cityName",
-      "Delivery.deliveryAddress.postcode",
-      "Delivery.deliveryAddress.countryIdentifier",
-      "Delivery.actualDeliveryTime",
+      "delivery.actual_delivery_date",
+      "delivery.actual_delivery_time",
 
-      // Document Reference
-      "DocumentReference.iD",
+      // Party Name
+      "party_name.name",
 
-      // Item Instance
-      "ItemInstance.additionalItemProperty.itemPropertyName",
-      "ItemInstance.additionalItemProperty.value",
+      // Party Identification
+      "party_identification.id",
     ],
   };
 

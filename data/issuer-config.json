@@ -350,7 +350,7 @@
           "background_color": "#12107c",
           "text_color": "#FFFFFF",
           "logo": {
-           "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
+            "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
             "alt_text": "UAegean"
           }
         }
@@ -655,83 +655,105 @@
       "scope": "vReceipt",
       "claims": {
         "monetary_total.line_extension_amount": {
-          "display": [{"name": "Line Total", "locale": "en-GB"}]
+          "display": [{ "name": "Line Total", "locale": "en-GB" }]
         },
         "monetary_total.payable_amount": {
-          "display": [{"name": "Total Payable", "locale": "en-GB"}]
+          "display": [{ "name": "Total Payable", "locale": "en-GB" }]
         },
         "monetary_total.tax_inclusive_amount": {
-          "display": [{"name": "Tax Inclusive Total", "locale": "en-GB"}]
+          "display": [{ "name": "Tax Inclusive Total", "locale": "en-GB" }]
         },
-  
         "tax_total.tax_subtotal.tax_amount": {
-          "display": [{"name": "Tax Subtotal Amount", "locale": "en-GB"}]
+          "display": [{ "name": "Tax Subtotal Amount", "locale": "en-GB" }]
         },
         "tax_total.tax_subtotal.tax_category.tax_scheme.name": {
-          "display": [{"name": "Tax Scheme", "locale": "en-GB"}]
+          "display": [{ "name": "Tax Scheme", "locale": "en-GB" }]
         },
         "tax_total.tax_subtotal.percent": {
-          "display": [{"name": "Tax Percentage", "locale": "en-GB"}]
+          "display": [{ "name": "Tax Percentage", "locale": "en-GB" }]
         },
-  
+        "tax_total.tax_amount": {
+          "display": [{ "name": "Total Tax Amount", "locale": "en-GB" }]
+        },
         "address.street_name": {
-          "display": [{"name": "Street Name", "locale": "en-GB"}]
+          "display": [{ "name": "Street Name", "locale": "en-GB" }]
         },
         "address.city_name": {
-          "display": [{"name": "City", "locale": "en-GB"}]
+          "display": [{ "name": "City", "locale": "en-GB" }]
         },
         "address.postcode": {
-          "display": [{"name": "Postal Code", "locale": "en-GB"}]
+          "display": [{ "name": "Postal Code", "locale": "en-GB" }]
         },
         "address.country_identifier": {
-          "display": [{"name": "Country Code", "locale": "en-GB"}]
+          "display": [{ "name": "Country Code", "locale": "en-GB" }]
         },
-  
         "payment_means.payment_means_code": {
-          "display": [{"name": "Payment Method", "locale": "en-GB"}]
+          "display": [{ "name": "Payment Method", "locale": "en-GB" }]
         },
         "payment_means.card_account.network_id": {
-          "display": [{"name": "Card Network", "locale": "en-GB"}]
+          "display": [{ "name": "Card Network", "locale": "en-GB" }]
         },
         "payment_means.card_account.account_number_id": {
-          "display": [{"name": "Card Number", "locale": "en-GB"}]
+          "display": [{ "name": "Card Number", "locale": "en-GB" }]
         },
-  
         "item_property.item_property_name": {
-          "display": [{"name": "Item Property", "locale": "en-GB"}]
+          "display": [{ "name": "Item Property", "locale": "en-GB" }]
         },
         "item_property.value": {
-          "display": [{"name": "Item Value", "locale": "en-GB"}]
+          "display": [{ "name": "Item Value", "locale": "en-GB" }]
         },
-  
         "purchase_receipt.id": {
-          "display": [{"name": "Receipt ID", "locale": "en-GB"}]
+          "display": [{ "name": "Receipt ID", "locale": "en-GB" }]
         },
         "purchase_receipt.issue_date": {
-          "display": [{"name": "Issue Date", "locale": "en-GB"}]
+          "display": [{ "name": "Issue Date", "locale": "en-GB" }]
         },
         "purchase_receipt.document_currency_code": {
-          "display": [{"name": "Currency", "locale": "en-GB"}]
+          "display": [{ "name": "Currency", "locale": "en-GB" }]
         },
         "purchase_receipt.legal_monetary_total": {
-          "display": [{"name": "Legal Monetary Total", "locale": "en-GB"}]
+          "display": [{ "name": "Legal Monetary Total", "locale": "en-GB" }]
         },
-  
+        "purchase_receipt.seller_supplier_party.supplier_party_id": {
+          "display": [{ "name": "Seller ID", "locale": "en-GB" }]
+        },
+        "purchase_receipt.tax_included_indicator": {
+          "display": [{ "name": "Tax Included", "locale": "en-GB" }]
+        },
+        "purchase_receipt.payment.paid_amount": {
+          "display": [{ "name": "Paid Amount", "locale": "en-GB" }]
+        },
+        "purchase_receipt.payment.authorization_id": {
+          "display": [{ "name": "Authorization ID", "locale": "en-GB" }]
+        },
+        "purchase_receipt.payment.transaction_id": {
+          "display": [{ "name": "Transaction ID", "locale": "en-GB" }]
+        },
+        "purchase_receipt.purchase_receipt_line.id": {
+          "display": [{ "name": "Line ID", "locale": "en-GB" }]
+        },
+        "purchase_receipt.purchase_receipt_line.quantity": {
+          "display": [{ "name": "Quantity", "locale": "en-GB" }]
+        },
+        "purchase_receipt.purchase_receipt_line.tax_inclusive_line_extension_amount": {
+          "display": [
+            { "name": "Line Tax Inclusive Amount", "locale": "en-GB" }
+          ]
+        },
+        "purchase_receipt.purchase_receipt_line.item.commodity_classification.item_classification_code": {
+          "display": [{ "name": "Item Classification Code", "locale": "en-GB" }]
+        },
         "delivery.actual_delivery_date": {
-          "display": [{"name": "Delivery Date", "locale": "en-GB"}]
+          "display": [{ "name": "Delivery Date", "locale": "en-GB" }]
         },
         "delivery.actual_delivery_time": {
-          "display": [{"name": "Delivery Time", "locale": "en-GB"}]
+          "display": [{ "name": "Delivery Time", "locale": "en-GB" }]
         },
-  
         "party_name.name": {
-          "display": [{"name": "Business Name", "locale": "en-GB"}]
+          "display": [{ "name": "Business Name", "locale": "en-GB" }]
         },
         "party_identification.id": {
-          "display": [{"name": "Business ID", "locale": "en-GB"}]
-        },
-        "partyTaxScheme_.id": {
-          "display": [{"name": "Business ID", "locale": "en-GB"}]
+          "display": [{ "name": "Business ID", "locale": "en-GB" }]
         }
       },
       "cryptographic_binding_methods_supported": ["jwk"],
@@ -959,7 +981,6 @@
             }
           }
         }
- 
       },
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
