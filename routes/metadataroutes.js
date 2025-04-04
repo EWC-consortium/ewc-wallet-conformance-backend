@@ -68,4 +68,37 @@ metadataRouter.get(["/", "/jwks"], (req, res) => {
 });
 
 
+/*
+*If the iss value contains a path component, any terminating / MUST 
+be removed before inserting /.well-known/ and the well-known URI suffix between the host component and the path component.
+*/
+metadataRouter.get(
+  ["/.well-known/jwt-vc-issuer", "/.well-known/jwt-vc-issuer/rfc-issuer", "/jwt-vc-issuer/rfc-issuer"  ],
+  
+  /*
+  issuer:  REQUIRED. The Issuer identifier, which MUST be identical to the iss value in the JWT. 
+  jwks_uri: OPTIONAL. URL string referencing the Issuer's JSON Web Key (JWK) Set [RFC7517] 
+document which contains the Issuer's public keys. The value of this field MUST point to a valid JWK Set document.
+  jwks : OPTIONAL. Issuer's JSON Web Key Set [RFC7517] document value, 
+which contains the Issuer's public keys. The value of this field MUST be a JSON object containing a valid JWK Set.
+  */
+  
+  async (req, res) => {
+    const metadata ={
+      issuer: serverURL,
+      jwks : {
+        keys: [
+          { ...jwks, kid: `aegean#authentication-key`, use: "sig" },
+          { ...jwks, kid: `aegean#agreement-key`, use: "keyAgreement" }, //key to encrypt the sd-jwt response])
+        ]
+      }
+
+    }
+
+    res.type("application/json").send(metadata);
+  }
+);
+
+
+
 export default metadataRouter;

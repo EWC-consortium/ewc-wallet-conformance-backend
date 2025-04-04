@@ -669,6 +669,8 @@ export const getVReceiptSDJWTDataWithPayload = (
   payload,
   decodedHeaderSubjectDID
 ) => {
+
+  console.log("payload", payload);
   const claims = {
     id: decodedHeaderSubjectDID || uuidv4(), // Top-level ID (not nested under purchase_receipt)
     ...payload, // Spread payload, assuming it matches metadata naming
