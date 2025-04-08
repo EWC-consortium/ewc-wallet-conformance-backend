@@ -21,6 +21,7 @@ import {
   createPhotoIDAttestationPayload,
   getFerryBoardingPassSDJWTData,
   createPCDAttestationPayload,
+  getLoyaltyCardSDJWTDataWithPayload
 } from "../utils/credPayloadUtil.js";
 
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
@@ -34,7 +35,8 @@ const certificatePemX509 = fs.readFileSync(
   "utf8"
 );
 
-export async function handleVcSdJwtFormat(
+export async function 
+handleVcSdJwtFormat(
   requestBody,
   sessionObject,
   serverURL
@@ -121,6 +123,9 @@ export async function handleVcSdJwtFormat(
     case "eu.europa.ec.eudi.pcd.1":
       credPayload = createPCDAttestationPayload(issuerName);
       break;
+    case "LoyaltyCard":
+        credPayload = getLoyaltyCardSDJWTDataWithPayload(sessionObject.credentialPayload);
+        break;  
     default:
       throw new Error(`Unsupported credential type: ${credType}`);
   }

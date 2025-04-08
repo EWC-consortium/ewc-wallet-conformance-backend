@@ -1584,6 +1584,185 @@
           "proof_signing_alg_values_supported": ["ES256"]
         }
       }
+    },
+
+    "LoyaltyCard": {
+      "scope": "LoyaltyCard",
+      "claims": {
+        "customer.first_name": {
+          "display": [
+            {
+              "name": "First Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.last_name": {
+          "display": [
+            {
+              "name": "Last Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.nationality": {
+          "display": [
+            {
+              "name": "Nationality",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.address": {
+          "display": [
+            {
+              "name": "Address",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.city": {
+          "display": [
+            {
+              "name": "City",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.zip_code": {
+          "display": [
+            {
+              "name": "ZIP Code",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.phone": {
+          "display": [
+            {
+              "name": "Phone Number",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.mobile": {
+          "display": [
+            {
+              "name": "Mobile Number",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.birth_date": {
+          "display": [
+            {
+              "name": "Date of Birth",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.email": {
+          "display": [
+            {
+              "name": "Email Address",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "loyalty_card.id": {
+          "display": [
+            {
+              "name": "Loyalty Card ID",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "loyalty_card.issue_date": {
+          "display": [
+            {
+              "name": "Issue Date",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "organization.name": {
+          "display": [
+            {
+              "name": "Organization Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "organization.id": {
+          "display": [
+            {
+              "name": "Organization ID",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "organization.country": {
+          "display": [
+            {
+              "name": "Organization Country",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "credential.type": {
+          "display": [
+            {
+              "name": "Credential Type",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "credential.issuer": {
+          "display": [
+            {
+              "name": "Issuer",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "credential.issuance_date": {
+          "display": [
+            {
+              "name": "Issuance Date",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "credential.expiry_date": {
+          "display": [
+            {
+              "name": "Expiry Date",
+              "locale": "en-GB"
+            }
+          ]
+        }
+      },
+      "cryptographic_binding_methods_supported": ["jwk"],
+      "display": [
+        {
+          "name": "Fast Friends Card",
+          "locale": "en-GB",
+          "background_color": "#FFFFFF",
+          "text_color": "#000000",
+          "logo": {
+            "uri": "data:image/png;base64,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",
+            "alt_text": "Fast Friends Card Logo"
+          }
+        }
+      ],
+      "credential_signing_alg_values_supported": ["ES256"],
+      "format": "vc+sd-jwt",
+      "vct": "LoyaltyCard",
+      "proof_types_supported": {
+        "jwt": {
+          "proof_signing_alg_values_supported": ["ES256"]
+        }
+      }
     }
   }
 }

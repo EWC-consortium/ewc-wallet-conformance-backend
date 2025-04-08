@@ -962,3 +962,78 @@ export const createCombinedCredentialsPayload = (
 
   return [photoID, studentID, pid]; // Add other credentials as needed
 };
+
+
+export const getLoyaltyCardSDJWTDataWithPayload = (
+  payload,
+  decodedHeaderSubjectDID
+) => {
+  console.log("payload", payload);
+  
+  
+
+  const validPayload = {
+    "customer.first_name": payload["customer.first_name"],
+    "customer.last_name": payload["customer.last_name"], 
+    "customer.nationality": payload["customer.nationality"],
+    "customer.address": payload["customer.address"],
+    "customer.city": payload["customer.city"],
+    "customer.zip_code": payload["customer.zip_code"],
+    "customer.phone": payload["customer.phone"],
+    "customer.mobile": payload["customer.mobile"],
+    "customer.birth_date": payload["customer.birth_date"],
+    "customer.email": payload["customer.email"],
+    "loyalty_card.id": payload["loyalty_card.id"],
+    "loyalty_card.issue_date": payload["loyalty_card.issue_date"],
+    "loyalty_card.type": payload["loyalty_card.type"],   
+    "organization.name": payload["organization.name"],
+    "organization.id": payload["organization.id"],
+    "organization.country": payload["organization.country"], 
+    "credential.type": payload["credential.type"],
+    "credential.issuer": payload["credential.issuer"],
+    "credential.issuance_date": payload["credential.issuance_date"],
+    "credential.expiry_date": payload["credential.expiry_date"],
+  }
+
+  const claims = {
+    id: decodedHeaderSubjectDID || uuidv4(), // Top-level ID
+    ...validPayload,
+  };
+  const disclosureFrame = {
+    _sd: [
+      "id",
+
+      // Customer Information
+      "customer.first_name",
+      "customer.last_name",
+      "customer.nationality",
+      "customer.address",
+      "customer.city",
+      "customer.zip_code",
+      "customer.phone",
+      "customer.mobile",
+      "customer.birth_date",
+      "customer.email",
+
+      // Loyalty Card Information
+      "loyalty_card.id",
+      "loyalty_card.issue_date",
+      "loyalty_card.type",
+
+      
+
+      // Organization Information
+      "organization.name",
+      "organization.id",
+      "organization.country",
+
+      // Credential Metadata
+      "credential.type",
+      "credential.issuer",
+      "credential.issuance_date",
+      "credential.expiry_date"
+    ]
+  };
+
+  return { claims, disclosureFrame };
+};
