@@ -75,34 +75,6 @@ codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
   });
 });
 
-// auth code-flow request
-// with dynamic cred request and client_id_scheme == redirect_uri
-codeFlowRouterSDJWT.get(["/credential-offer-code-sd-jwt/:id"], (req, res) => {
-  const credentialType = req.query.credentialType
-    ? req.query.credentialType
-    : "VerifiablePortableDocumentA2SDJWT";
-
-  console.log(req.query);
-  console.log(req.query.client_id_scheme);
-  const client_id_scheme = req.query.scheme ? req.query.scheme : "redirect_uri";
-
-  /*
-    To support multiple client_id_schemas, this param  client_id_scheme 
-    will be passed into the session of the issuer and fetched in the 
-    authorize endpoint to decide what schema to use
-  */
-  // const issuer_state = `${req.params.id}|${client_id_scheme}`; // using "|" as a delimiter
-
-  res.json({
-    credential_issuer: serverURL,
-    credential_configuration_ids: [credentialType],
-    grants: {
-      authorization_code: {
-        issuer_state: req.params.id, //issuer_state,
-      },
-    },
-  });
-});
 
 codeFlowRouterSDJWT.get(["/offer-code-defered"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
@@ -147,6 +119,39 @@ codeFlowRouterSDJWT.get(["/offer-code-defered"], async (req, res) => {
     sessionId: uuid,
   });
 });
+
+// auth code-flow request
+// with dynamic cred request and client_id_scheme == redirect_uri
+codeFlowRouterSDJWT.get(["/credential-offer-code-sd-jwt/:id"], (req, res) => {
+  const credentialType = req.query.credentialType
+    ? req.query.credentialType
+    : "VerifiablePortableDocumentA2SDJWT";
+
+  console.log(req.query);
+  console.log(req.query.client_id_scheme);
+  const client_id_scheme = req.query.scheme ? req.query.scheme : "redirect_uri";
+
+  /*
+    To support multiple client_id_schemas, this param  client_id_scheme 
+    will be passed into the session of the issuer and fetched in the 
+    authorize endpoint to decide what schema to use
+  */
+  // const issuer_state = `${req.params.id}|${client_id_scheme}`; // using "|" as a delimiter
+
+  res.json({
+    credential_issuer: serverURL, // URL of the Credential Issuer. Used to fetch Issuer Metadata.
+    credential_configuration_ids: [credentialType], // Array of strings identifying offered configurations from the Issuer's metadata (credential_configurations_supported map key).
+    grants: {
+      authorization_code: { // Object indicating supported Grant Types (authorization_code, urn:ietf:params:oauth:grant-type:pre-authorized_code). Contains grant-specific parameters (see below). If absent, Wallet determines from AS metadata.
+        issuer_state: req.params.id, //issuer_state,
+      },
+    },
+  });
+});
+
+
+
+
 
 /***************************************************************
  *               Push Authoriozation Request Endpoints

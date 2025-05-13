@@ -120,14 +120,27 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
 
   let generatedAccessToken = buildAccessToken(serverURL, privateKey);
 
-  //TODO CHECK IF THE  AUTHORIZATION REQUEST WAS done via a authorization_details or scope parameter
+  // Default for auth code flow, might be overridden by pre-auth flow if body parameter is present
   let authorization_details = getAuthCodeAuthorizationDetail().get(code);
 
   if (!(code || preAuthorizedCode)) {
-    return res.sendStatus(400); // if authorization code or preAuthorizedCode is not submitted return BAD Request
+    // RFC6749 Section 5.2: invalid_request
+    // OID4VCI 6.6.3: Could also be more specific if context allowed, but generic invalid_request is safe.
+    return res.status(400).json({ 
+      error: "invalid_request", 
+      error_description: "The request is missing the 'code' or 'pre-authorized_code' parameter." 
+    });
   } else {
     if (grantType == "urn:ietf:params:oauth:grant-type:pre-authorized_code") {
       console.log("pre-auth code flow");
+      // For Pre-Authorized Code Flow, authorization_details can be in the request body
+      // as per the specification's non-normative example.
+      if (req.body.authorization_details) {
+        // TODO: Consider parsing or validating req.body.authorization_details if it's a JSON string
+        // For now, assuming it's correctly structured if provided.
+        authorization_details = req.body.authorization_details;
+      }
+
       let existingPreAuthSession = await getPreAuthSession(preAuthorizedCode);
       //if (index >= 0) {
       if (existingPreAuthSession) {
@@ -205,9 +218,32 @@ sharedRouter.post("/credential", async (req, res) => {
   const token = authHeader && authHeader.split(" ")[1]; // Split "Bearer" and the token
   const requestBody = req.body;
   const format = requestBody.format;
-  const requestedCredentials = requestBody.credential_definition
-    ? requestBody.credential_definition.type
-    : null;
+  
+  // Update according to spec section 8.2 - Credential identifiers
+  const credentialIdentifier = requestBody.credential_identifier;
+  const credentialConfigurationId = requestBody.credential_configuration_id;
+  let requestedCredentialType = null;
+  
+  // Check that one and only one of the credential identifiers is present
+  if ((credentialIdentifier && credentialConfigurationId) || 
+      (!credentialIdentifier && !credentialConfigurationId)) {
+    console.log("Invalid credential request: Must provide exactly one of credential_identifier or credential_configuration_id");
+    return res.status(400).json({ 
+      error: "invalid_credential_request",
+      error_description: "Must provide exactly one of credential_identifier or credential_configuration_id" 
+    });
+  }
+  
+ if (credentialIdentifier) {
+    // In a real implementation, you'd resolve the credential_identifier to a credential type
+    // For now, we'll assume the identifier directly maps to a type for simplicity
+    requestedCredentialType = [credentialIdentifier];
+  } else if (credentialConfigurationId) {
+    // In a real implementation, you'd look up the credential_configuration_id in
+    // credential_configurations_supported from issuer metadata
+    // For now, we'll assume the configuration ID directly maps to a type for simplicity
+    requestedCredentialType = [credentialConfigurationId];
+  }
 
   if (!requestBody.proof || !requestBody.proof.jwt) {
     /*
@@ -218,7 +254,10 @@ sharedRouter.post("/credential", async (req, res) => {
        This issuer atm only supports jwt proof types
       */
     console.log("NO keybinding info found!!!");
-    return res.status(400).json({ error: "No proof information found" });
+    return res.status(400).json({ 
+      error: "invalid_proof",
+      error_description: "No proof information found" 
+    });
   }
 
   let payload = {};
@@ -237,7 +276,7 @@ sharedRouter.post("/credential", async (req, res) => {
   }
 
   if (sessionObject && sessionObject.isDeferred) {
-    //Defered flow
+    //Deferred flow
     let transaction_id = generateNonce();
     sessionObject.transaction_id = transaction_id;
     sessionObject.requestBody = requestBody;
@@ -250,35 +289,36 @@ sharedRouter.post("/credential", async (req, res) => {
       await storePreAuthSession(preAuthsessionKey, sessionObject);
     }
 
-    res.json({
+    // Update to use 202 status code for deferred issuance as specified in section 8.3
+    res.status(202).json({
       transaction_id: transaction_id,
       c_nonce: generateNonce(),
       c_nonce_expires_in: 86400,
     });
   } else {
-    //On time flow
+    // Immediate issuance flow
     if (format === "jwt_vc_json") {
-      console.log("jwt ", requestedCredentials);
-      if (requestedCredentials && requestedCredentials[0] === "PID") {
+      console.log("jwt ", requestedCredentialType);
+      if (requestedCredentialType && requestedCredentialType[0] === "PID") {
         payload = createPIDPayload(token, serverURL, "");
       } else if (
-        requestedCredentials &&
-        requestedCredentials[0] === "ePassportCredential"
+        requestedCredentialType &&
+        requestedCredentialType[0] === "ePassportCredential"
       ) {
         payload = createEPassportPayload(serverURL, "");
       } else if (
-        requestedCredentials &&
-        requestedCredentials[0] === "StudentID"
+        requestedCredentialType &&
+        requestedCredentialType[0] === "StudentID"
       ) {
         payload = createStudentIDPayload(serverURL, "");
       } else if (
-        requestedCredentials &&
-        requestedCredentials[0] === "ferryBoardingPassCredential"
+        requestedCredentialType &&
+        requestedCredentialType[0] === "ferryBoardingPassCredential"
       ) {
         payload = createEPassportPayload(serverURL, "");
       } else if (
-        requestedCredentials &&
-        requestedCredentials[0] === "PaymentWalletAttestationAccount"
+        requestedCredentialType &&
+        requestedCredentialType[0] === "PaymentWalletAttestationAccount"
       ) {
         payload = createPIDPayload(token, serverURL, "");
       }
@@ -293,9 +333,13 @@ sharedRouter.post("/credential", async (req, res) => {
         header: additionalHeaders,
       });
 
+      // Update response to match the specification format in section 8.3
       res.json({
-        format: "jwt_vc_json",
-        credential: idtoken,
+        credentials: [
+          {
+            credential: idtoken
+          }
+        ],
         c_nonce: generateNonce(),
         c_nonce_expires_in: 86400,
       });
@@ -303,20 +347,36 @@ sharedRouter.post("/credential", async (req, res) => {
       let vct = requestBody.vct;
       console.log("vc+sd-jwt ", vct);
       try {
-        const crednetial = await handleVcSdJwtFormat(
+        const credential = await handleVcSdJwtFormat(
           requestBody,
           sessionObject,
           serverURL
         );
 
-        res.json(crednetial);
+        // We're assuming handleVcSdJwtFormat returns a raw credential
+        // Wrap it in the proper format according to the specification
+        res.json({
+          credentials: [
+            {
+              credential
+            }
+          ],
+          c_nonce: generateNonce(),
+          c_nonce_expires_in: 86400,
+        });
       } catch (err) {
         console.log(err);
-        return res.status(400).json({ error: err.message });
+        return res.status(400).json({ 
+          error: "credential_request_denied", 
+          error_description: err.message 
+        });
       }
     } else {
       console.log("UNSUPPORTED FORMAT:", format);
-      return res.status(400).json({ error: "Unsupported format" });
+      return res.status(400).json({ 
+        error: "unsupported_credential_format",
+        error_description: `Format '${format}' is not supported`
+      });
     }
   }
 });

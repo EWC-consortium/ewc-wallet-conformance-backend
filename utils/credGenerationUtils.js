@@ -42,11 +42,24 @@ handleVcSdJwtFormat(
   serverURL
 ) {
   const vct = requestBody.vct;
-  let { signer, verifier } = await createSignerVerifierX509(
-    privateKeyPemX509,
-    certificatePemX509
-  );
+
+  let signer, verifier;
+
+  if (process.env.ISSUER_SIGNATURE_TYPE === "x509") {
+    ({ signer, verifier } = await createSignerVerifierX509(
+      privateKeyPemX509,
+      certificatePemX509
+    ));
+  } else {
+    ({ signer, verifier } = await createSignerVerifier(
+      pemToJWK(privateKey, "private"),
+      pemToJWK(publicKeyPem, "public")
+    ));
+  }
+  
   console.log("vc+sd-jwt ", vct);
+
+  
 
   if (!requestBody.proof || !requestBody.proof.jwt) {
     const error = new Error("proof not found");
@@ -137,7 +150,7 @@ handleVcSdJwtFormat(
   }
 
   // Prepare issuance headers
-  const headerOptions = isHaip
+  const headerOptions = isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509"
     ? {
         header: {
           x5c: [pemToBase64Der(certificatePemX509)],
@@ -166,6 +179,8 @@ handleVcSdJwtFormat(
     credPayload.disclosureFrame,
     headerOptions
   );
+
+  console.log("Credential issued: ", credential);
 
   return {
     format: "vc+sd-jwt",
