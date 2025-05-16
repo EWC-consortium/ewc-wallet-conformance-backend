@@ -852,58 +852,53 @@ export const createPhotoIDAttestationPayload = (serverURL) => {
   };
 
   const disclosureFrame = {
-    iso23220: {
-      _sd: [
-        "family_name_unicode",
-        "given_name_unicode",
-        "birth_date",
-        "portrait",
-        "issue_date",
-        "expiry_date",
-        "issuing_authority_unicode",
-        "issuing_country",
-        "sex",
-        "nationality",
-        "document_number",
-        "name_at_birth",
-        "birthplace",
-        "portrait_capture_date",
-        "resident_address_unicode",
-        "resident_city_unicode",
-        "resident_postal_code",
-        "resident_country",
-        "age_over_18",
-        "age_in_years",
-        "age_birth_year",
-        "family_name_latin1",
-        "given_name_latin1",
-      ],
-    },
-    photoid: {
-      _sd: [
-        "person_id",
-        "birth_country",
-        "birth_state",
-        "birth_city",
-        "administrative_number",
-        "resident_street",
-        "resident_house_number",
-        "travel_document_number",
-        "resident_state",
-      ],
-    },
-    dtc: {
-      _sd: [
-        "dtc_version",
-        "dtc_dg1",
-        "dtc_dg2",
-        "dtc_sod",
-        "dtc_dg3",
-        "dtc_dg4",
-        "dtc_dg16",
-        "dg_content_info",
-      ],
-    },
+    _sd: [
+      // ISO23220 Information - Only disclosable fields
+      "iso23220.family_name_unicode",
+      "iso23220.given_name_unicode",
+      "iso23220.birth_date",
+      "iso23220.portrait",
+      "iso23220.issue_date",
+      "iso23220.expiry_date",
+      "iso23220.issuing_authority_unicode",
+      "iso23220.issuing_country",
+      "iso23220.sex",
+      "iso23220.nationality",
+      "iso23220.document_number",
+      "iso23220.name_at_birth",
+      "iso23220.birthplace",
+      "iso23220.portrait_capture_date",
+      "iso23220.resident_address_unicode",
+      "iso23220.resident_city_unicode",
+      "iso23220.resident_postal_code",
+      "iso23220.resident_country",
+      "iso23220.age_over_18",
+      "iso23220.age_in_years",
+      "iso23220.age_birth_year",
+      "iso23220.family_name_latin1",
+      "iso23220.given_name_latin1",
+
+      // PhotoID Information
+      "photoid.person_id",
+      "photoid.birth_country",
+      "photoid.birth_state",
+      "photoid.birth_city",
+      "photoid.administrative_number",
+      "photoid.resident_street",
+      "photoid.resident_house_number",
+      "photoid.travel_document_number",
+      "photoid.resident_state",
+
+      // DTC Information
+      "dtc.dtc_version",
+      "dtc.dtc_dg1",
+      "dtc.dtc_dg2",
+      "dtc.dtc_sod",
+      "dtc.dtc_dg3",
+      "dtc.dtc_dg4",
+      "dtc.dtc_dg16",
+      "dtc.dg_content_info"
+    ]
   };
 
   return { claims, disclosureFrame };
@@ -971,31 +966,34 @@ export const getLoyaltyCardSDJWTDataWithPayload = (
   console.log("payload", payload);
 
   const validPayload = {
-    "customer.first_name": payload.customer?.first_name,
-    "customer.last_name": payload.customer?.last_name,
-    "customer.nationality": payload.customer?.nationality,
-    "customer.address": payload.customer?.address,
-    "customer.city": payload.customer?.city,
-    "customer.zip_code": payload.customer?.zip_code,
-    "customer.phone": payload.customer?.phone,
-    "customer.mobile": payload.customer?.mobile,
-    "customer.birth_date": payload.customer?.birth_date,
-    "customer.email": payload.customer?.email,
-    "loyalty_card.id": payload.loyalty_card?.id,
-    "loyalty_card.issue_date": payload.loyalty_card?.issue_date,
-    "loyalty_card.status": payload.loyalty_card?.status,
-    "loyalty_card.type": payload.loyalty_card?.type,
-    "portfolio.available_points": payload.portfolio?.available_points,
-    "portfolio.available_miles": payload.portfolio?.available_miles,
-    "portfolio.available_wallet": payload.portfolio?.available_wallet,
-    "portfolio.last_updated": payload.portfolio?.last_updated,
-    "organization.name": payload.organization?.name,
-    "organization.id": payload.organization?.id,
-    "organization.country": payload.organization?.country,
-    "credential.type": payload.credential?.type,
-    "credential.issuer": payload.credential?.issuer,
-    "credential.issuance_date": payload.credential?.issuance_date,
-    "credential.expiry_date": payload.credential?.expiry_date,
+    customer: {
+      first_name: payload.customer?.first_name,
+      last_name: payload.customer?.last_name,
+      nationality: payload.customer?.nationality,
+      address: payload.customer?.address,
+      city: payload.customer?.city,
+      zip_code: payload.customer?.zip_code,
+      phone: payload.customer?.phone,
+      mobile: payload.customer?.mobile,
+      birth_date: payload.customer?.birth_date,
+      email: payload.customer?.email
+    },
+    loyalty_card: {
+      id: payload.loyalty_card?.id,
+      issue_date: payload.loyalty_card?.issue_date,
+      type: payload.loyalty_card?.type
+    },
+    organization: {
+      name: payload.organization?.name,
+      id: payload.organization?.id,
+      country: payload.organization?.country
+    },
+    credential: {
+      type: payload.credential?.type,
+      issuer: payload.credential?.issuer,
+      issuance_date: payload.credential?.issuance_date,
+      expiry_date: payload.credential?.expiry_date
+    }
   };
 
   const claims = {
