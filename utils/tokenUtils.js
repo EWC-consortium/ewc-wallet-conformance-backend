@@ -50,51 +50,43 @@ export function buildIdToken(issuerURL, privateKey) {
 export function buildVPbyValue(
   client_id,
   presentation_definition_uri,
-  client_id_scheme = "redirect_uri",
+  client_id_scheme,
   client_metadata_uri,
-  redirect_uri,
-  state = "af0ifjsldkj",
+  response_uri,
+  state,
   response_type = "vp_token",
   nonce,
   response_mode = "direct_post",
-  dcql_query = null,
-  transaction_data = null
+  dcql_query = null
 ) {
-  if(!nonce) nonce = generateNonce(16);
-  
-  if (client_id_scheme == "redirect_uri") {
-    redirect_uri = client_id;
+  // Validate response_mode
+  const allowedResponseModes = ["direct_post", "direct_post.jwt"];
+  if (!allowedResponseModes.includes(response_mode)) {
+    throw new Error(`Invalid response_mode. Must be one of: ${allowedResponseModes.join(", ")}`);
   }
 
-  let params = new URLSearchParams();
-  params.append("client_id", client_id);
-  params.append("response_type", response_type);
-  params.append("response_mode", response_mode);
-  params.append("response_uri", redirect_uri);
-  params.append("client_id_scheme", client_id_scheme);
-  params.append("client_metadata_uri", client_metadata_uri);
-  params.append("nonce", nonce);
-  params.append("state", state);
+  let vpRequest = "openid4vp://?";
+  vpRequest += `client_id=${encodeURIComponent(client_id)}`;
+  vpRequest += `&client_id_scheme=${encodeURIComponent(client_id_scheme)}`;
+  vpRequest += `&response_type=${encodeURIComponent(response_type)}`;
+  vpRequest += `&response_mode=${encodeURIComponent(response_mode)}`;
+  vpRequest += `&response_uri=${encodeURIComponent(response_uri)}`;
+  vpRequest += `&nonce=${encodeURIComponent(nonce)}`;
+  vpRequest += `&state=${encodeURIComponent(state)}`;
 
-  // Add presentation_definition_uri if provided and no dcql_query
-  if (presentation_definition_uri && !dcql_query) {
-    params.append("presentation_definition_uri", presentation_definition_uri);
+  if (presentation_definition_uri) {
+    vpRequest += `&presentation_definition_uri=${encodeURIComponent(presentation_definition_uri)}`;
   }
 
-  // Add dcql_query if provided
+  if (client_metadata_uri) {
+    vpRequest += `&client_metadata_uri=${encodeURIComponent(client_metadata_uri)}`;
+  }
+
   if (dcql_query) {
-    params.append("dcql_query", JSON.stringify(dcql_query));
+    vpRequest += `&dcql_query=${encodeURIComponent(JSON.stringify(dcql_query))}`;
   }
 
-  // Add transaction_data if provided
-  if (transaction_data && Array.isArray(transaction_data)) {
-    // transaction_data must be an array of base64url-encoded strings
-    transaction_data.forEach((data, index) => {
-      params.append(`transaction_data[${index}]`, data);
-    });
-  }
-
-  return `openid4vp://?${params.toString()}`;
+  return vpRequest;
 }
 
 

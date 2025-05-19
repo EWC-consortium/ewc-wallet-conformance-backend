@@ -27,6 +27,8 @@ import TimedArray from "../utils/timedArray.js";
 import { getVPSession, storeVPSession } from "../services/cacheServiceRedis.js";
 import redirectUriRouter from "./redirectUriRoutes.js";
 import x509Router from "./x509Routes.js";
+import didRouter from "./didRoutes.js";
+import didJwkRouter from "./didJwkRoutes.js";
 
 const verifierRouter = express.Router();
 
@@ -131,118 +133,23 @@ verifierRouter.use("/redirect-uri", redirectUriRouter);
 *********************************************************** */
 // Use the x509 specific router
 verifierRouter.use("/x509", x509Router);
- 
 
 /*  *******************************************************
-  using : CLIENT_ID_SCHEME did
+  using : CLIENT_ID_SCHEME did:web
   request by referance and JAR
 *********************************************************** */
-verifierRouter.get("/generateVPRequestDidjwks", async (req, res) => {
-  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const presentation_definition_uri =
-    serverURL + "/presentation-definition/itbsdjwt";
-  let contorller = serverURL;
-  if (proxyPath) {
-    contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
-  }
-  contorller = contorller.replace("https://", "");
-  const client_id = `did:web:${contorller}`;
-  let request_uri = `${serverURL}/didjwks/${uuid}`;
-  let vpRequest =
-    "openid4vp://?client_id=" +
-    encodeURIComponent(client_id) +
-    "&request_uri=" +
-    encodeURIComponent(request_uri);
+// Use the did specific router for did:web
+verifierRouter.use("/did", didRouter);
 
-  const vctField =
-    presentation_definition_sdJwt.input_descriptors[0].constraints.fields.find(
-      (field) => field.path && field.path.includes("$.vct")
-    );
+/*  *******************************************************
+  using : CLIENT_ID_SCHEME did:jwk
+  request by referance and JAR
+*********************************************************** */
+// Use the did:jwk specific router
+verifierRouter.use("/did-jwk", didJwkRouter);
 
-  const paths = getSDsFromPresentationDef(presentation_definition_sdJwt);
 
-  storeVPSession(uuid, {
-    uuid: uuid,
-    status: "pending",
-    claims: null,
-    presentation_definition: presentation_definition_sdJwt,
-    // Safely extract the filter object if vctField is found
-    credentialRequested: vctField?.filter,
-    nonce: generateNonce(16),
-    sdsRequested: paths,
-  });
 
-  let code = qr.image(vpRequest, {
-    type: "png",
-    ec_level: "M",
-    size: 20,
-    margin: 10,
-  });
-  let mediaType = "PNG";
-  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
-  res.json({
-    qr: encodedQR,
-    deepLink: vpRequest,
-    sessionId: uuid,
-  });
-});
-
-verifierRouter.get("/didjwks/:id", async (req, res) => {
-  const uuid = req.params.id ? req.params.id : uuidv4();
-  const response_uri = serverURL + "/direct_post" + "/" + uuid;
-
-  const client_metadata = {
-    client_name: "UAegean EWC Verifier",
-    logo_uri: "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
-    location: "Greece",
-    cover_uri: "string",
-    description: "EWC pilot case verification",
-    vp_formats: {
-      "vc+sd-jwt": {
-        "sd-jwt_alg_values": ["ES256", "ES384"],
-        "kb-jwt_alg_values": ["ES256", "ES384"],
-      },
-      ldp_vp: {
-        proof_type: ["Ed25519Signature2018"],
-      },
-    },
-  };
-
-  let privateKeyPem = fs.readFileSync(
-    "./didjwks/did_private_pkcs8.key",
-    "utf8"
-  );
-
-  let contorller = serverURL;
-  if (proxyPath) {
-    contorller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
-  }
-  contorller = contorller.replace("https://", "");
-  const clientId = `did:web:${contorller}`;
-  const vpSession = await getVPSession(uuid);
-  // sessions.push(uuid);
-  // verificationSessions.push({
-  //   uuid: uuid,
-  //   status: "pending",
-  //   claims: null,
-  // });
-
-  let signedVPJWT = await buildVpRequestJWT(
-    clientId,
-    response_uri,
-    presentation_definition_sdJwt,
-    privateKeyPem,
-    "did",
-    client_metadata,
-    `did:web:${contorller}#keys-1`,
-    serverURL,
-    "vp_token",
-    vpSession.nonce
-  );
-
-  console.log(signedVPJWT);
-  res.type("text/plain").send(signedVPJWT);
-});
 
 /* ********************************************
          Authorization RESPONSES
@@ -259,6 +166,14 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     }
 
     // Handle direct_post.jwt response mode
+    // The response is a signed JWT containing the VP token
+    // The JWT signature provides an additional layer of security
+    // Format: {
+    //   "iss": "wallet_identifier", 
+    //   "aud": "verifier_id",
+    //   "iat": timestamp,
+    //   "vp_token": "verifiable_presentation_jwt_or_sd_jwt"
+    // }
     if (req.headers['content-type'] === 'application/jwt') {
       const jwtResponse = req.body;
       try {

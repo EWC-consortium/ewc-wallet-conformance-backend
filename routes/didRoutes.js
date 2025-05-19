@@ -3,13 +3,12 @@ import { v4 as uuidv4 } from "uuid";
 import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
-import { generateNonce } from "../utils/cryptoUtils.js";
-import { buildVpRequestJWT } from "../utils/cryptoUtils.js";
+import { generateNonce, buildVpRequestJWT, didKeyToJwks } from "../utils/cryptoUtils.js";
 import { storeVPSession } from "../services/cacheServiceRedis.js";
 import { getSDsFromPresentationDef } from "../utils/vpHeplers.js";
+import fs from "fs";
 
-const x509Router = express.Router();
-
+const didRouter = express.Router();
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 
 // Load presentation definitions
@@ -22,16 +21,24 @@ const clientMetadata = JSON.parse(
   fs.readFileSync("./data/verifier-config.json", "utf-8")
 );
 
+// Load DID private key
+const privateKey = fs.readFileSync("./didjwks/did_private_pkcs8.key", "utf8");
+
 // Standard VP Request with presentation_definition
-x509Router.get("/generateVPRequest", async (req, res) => {
+didRouter.get("/generateVPRequest", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const responseMode = req.query.response_mode || "direct_post";
   const nonce = generateNonce(16);
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "dss.aegean.gr"; // This should match the DNS SAN in the certificate
+  let controller = serverURL;
+  if (process.env.PROXY_PATH) {
+    controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
+  }
+  controller = controller.replace("https://", "");
+  const client_id = `did:web:${controller}`;
+  const kid = `did:web:${controller}#keys-1`;
 
-  // Store session data
   storeVPSession(uuid, {
     uuid: uuid,
     status: "pending",
@@ -39,30 +46,27 @@ x509Router.get("/generateVPRequest", async (req, res) => {
     presentation_definition: presentation_definition_sdJwt,
     nonce: nonce,
     sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt),
-    response_mode: responseMode // Store response mode in session
+    response_mode: responseMode
   });
 
-  // Build and sign the VP request JWT
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
     presentation_definition_sdJwt,
-    null, // privateKey will be loaded in buildVpRequestJWT
-    "x509_san_dns",
+    privateKey,
+    "did", // this references the key format not the DID method
     clientMetadata,
-    null,
+    kid,
     serverURL,
     "vp_token",
     nonce,
-    null, // dcql_query
-    null, // transaction_data
-    responseMode // Pass response_mode parameter
+    null,
+    null,
+    responseMode
   );
 
-  // Create the openid4vp:// URL
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(`${serverURL}/x509VPrequest/${uuid}`)}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(`${serverURL}/didVPrequest/${uuid}`)}`;
 
-  // Generate QR code
   let code = qr.image(vpRequest, {
     type: "png",
     ec_level: "M",
@@ -80,12 +84,18 @@ x509Router.get("/generateVPRequest", async (req, res) => {
 });
 
 // DCQL Query endpoint
-x509Router.get("/generateVPRequestDCQL", async (req, res) => {
+didRouter.get("/generateVPRequestDCQL", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const nonce = generateNonce(16);
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "dss.aegean.gr";
+  let controller = serverURL;
+  if (process.env.PROXY_PATH) {
+    controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
+  }
+  controller = controller.replace("https://", "");
+  const client_id = `did:web:${controller}`;
+  const kid = `did:web:${controller}#keys-1`;
 
   // Example DCQL query - this should be configurable
   const dcql_query = {
@@ -106,10 +116,10 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
     client_id,
     response_uri,
     null, // No presentation_definition for DCQL
-    null, // privateKey
-    "x509_san_dns",
+    privateKey,
+    "did:jwks",
     clientMetadata,
-    null, // kid
+    kid,
     serverURL,
     "vp_token",
     nonce,
@@ -117,7 +127,7 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
     null // transaction_data parameter (null for DCQL query)
   );
 
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(`${serverURL}/x509VPrequest/${uuid}`)}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(`${serverURL}/didVPrequest/${uuid}`)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -136,12 +146,18 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
 });
 
 // Transaction Data endpoint
-x509Router.get("/generateVPRequestTransaction", async (req, res) => {
+didRouter.get("/generateVPRequestTransaction", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const nonce = generateNonce(16);
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "dss.aegean.gr";
+  let controller = serverURL;
+  if (process.env.PROXY_PATH) {
+    controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
+  }
+  controller = controller.replace("https://", "");
+  const client_id = `did:web:${controller}`;
+  const kid = `did:web:${controller}#keys-1`;
 
   // Find the presentation definition for the credential type
   const presentation_definition = presentation_definition_sdJwt;
@@ -181,10 +197,10 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
     client_id,
     response_uri,
     presentation_definition,
-    null, // privateKey
-    "x509_san_dns",
+    privateKey,
+    "did:jwks",
     clientMetadata,
-    null, // kid
+    kid,
     serverURL,
     "vp_token",
     nonce,
@@ -192,7 +208,7 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
     [base64UrlEncodedTxData] // transaction_data parameter
   );
 
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(`${serverURL}/x509VPrequest/${uuid}`)}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(`${serverURL}/didVPrequest/${uuid}`)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -211,7 +227,7 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
 });
 
 // Request URI endpoint (POST method)
-x509Router.post("/x509VPrequest/:id", async (req, res) => {
+didRouter.post("/didVPrequest/:id", async (req, res) => {
   const uuid = req.params.id;
   const vpSession = await getVPSession(uuid);
   
@@ -220,16 +236,22 @@ x509Router.post("/x509VPrequest/:id", async (req, res) => {
   }
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "dss.aegean.gr";
+  let controller = serverURL;
+  if (process.env.PROXY_PATH) {
+    controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
+  }
+  controller = controller.replace("https://", "");
+  const client_id = `did:web:${controller}`;
+  const kid = `did:web:${controller}#keys-1`;
 
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
     vpSession.presentation_definition,
-    null, // privateKey
-    "x509_san_dns",
+    privateKey,
+    "did:jwks",
     clientMetadata,
-    null, // kid
+    kid,
     serverURL,
     "vp_token",
     vpSession.nonce,
@@ -240,4 +262,4 @@ x509Router.post("/x509VPrequest/:id", async (req, res) => {
   res.type("text/plain").send(vpRequestJWT);
 });
 
-export default x509Router; 
+export default didRouter; 
