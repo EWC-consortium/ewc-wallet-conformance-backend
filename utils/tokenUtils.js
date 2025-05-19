@@ -56,57 +56,45 @@ export function buildVPbyValue(
   state = "af0ifjsldkj",
   response_type = "vp_token",
   nonce,
+  response_mode = "direct_post",
+  dcql_query = null,
+  transaction_data = null
 ) {
   if(!nonce) nonce = generateNonce(16);
-  console.log("response_type:", response_type); // Debug log
   
   if (client_id_scheme == "redirect_uri") {
     redirect_uri = client_id;
   }
 
-  if (response_type == "id_token") {
-    let resp =
-      "openid4vp://?" +
-      "client_id=" +
-      encodeURIComponent(client_id) +
-      "&response_type=" +
-      response_type +
-      "&response_mode=direct_post" +
-      "&response_uri=" +
-      encodeURIComponent(redirect_uri) +
-      "&client_id_scheme=" +
-      client_id_scheme +
-      "&client_metadata_uri=" +
-      encodeURIComponent(client_metadata_uri) +
-      "&nonce=" + nonce +
-      "&state=" +
-      state +
-      "&scope=openid"+
-      "&id_token_type=subject_signed"
-      ;
-    return resp;
-  } else {
-    let res =
-      "openid4vp://?" +
-      "client_id=" +
-      encodeURIComponent(client_id) +
-      "&response_type=" +
-      response_type +
-      "&response_mode=direct_post" +
-      "&response_uri=" +
-      encodeURIComponent(redirect_uri) +
-      "&presentation_definition_uri=" +
-      encodeURIComponent(presentation_definition_uri) +
-      "&client_id_scheme=" +
-      client_id_scheme +
-      "&client_metadata_uri=" +
-      encodeURIComponent(client_metadata_uri) +
-      "&nonce=" + nonce + 
-      "&state=" +
-      state 
-      +"&scope=code"
-    return res;
+  let params = new URLSearchParams();
+  params.append("client_id", client_id);
+  params.append("response_type", response_type);
+  params.append("response_mode", response_mode);
+  params.append("response_uri", redirect_uri);
+  params.append("client_id_scheme", client_id_scheme);
+  params.append("client_metadata_uri", client_metadata_uri);
+  params.append("nonce", nonce);
+  params.append("state", state);
+
+  // Add presentation_definition_uri if provided and no dcql_query
+  if (presentation_definition_uri && !dcql_query) {
+    params.append("presentation_definition_uri", presentation_definition_uri);
   }
+
+  // Add dcql_query if provided
+  if (dcql_query) {
+    params.append("dcql_query", JSON.stringify(dcql_query));
+  }
+
+  // Add transaction_data if provided
+  if (transaction_data && Array.isArray(transaction_data)) {
+    // transaction_data must be an array of base64url-encoded strings
+    transaction_data.forEach((data, index) => {
+      params.append(`transaction_data[${index}]`, data);
+    });
+  }
+
+  return `openid4vp://?${params.toString()}`;
 }
 
 

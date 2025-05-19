@@ -117,7 +117,9 @@ export async function buildVpRequestJWT(
   kid = null, // Default to an empty object,
   serverURL,
   response_type = "vp_token",
-  nonce
+  nonce,
+  dcql_query = null,
+  transaction_data = null
 ) {
   if(!nonce) nonce = generateNonce(16);
   const state = generateNonce(16);
@@ -134,10 +136,6 @@ export async function buildVpRequestJWT(
       .replace("-----END CERTIFICATE-----", "")
       .replace(/\s+/g, "");
 
-    // The result is a JWS-signed JWT [RFC7519]. If signed, the Authorization Request Object SHOULD contain
-    // the Claims iss (issuer) and aud (audience) as members with their semantics being the same as defined in the JWT [RFC7519] specification.
-    // The value of aud should be the value of the authorization server (AS) issuer, as defined in RFC 8414 [RFC8414]
-
     // Construct the JWT payload
     let jwtPayload = {
       response_type: response_type,
@@ -147,26 +145,26 @@ export async function buildVpRequestJWT(
       response_uri: redirect_uri,
       nonce: nonce,
       state: state,
-      client_metadata: client_metadata, //
-      iss: client_id,//serverURL,
+      client_metadata: client_metadata,
+      iss: client_id,
       aud: "https://self-issued.me/v2",
     };
-    // SIOPv2 supports only redirect_uri and did so x509 cannot be used
 
-    // if (response_type.indexOf("id_token") >=0 ) {
-    //   jwtPayload["id_token_type"] = "subject_signed";
-    //   jwtPayload["scope"] = "openid";
-    // }
-
-    if (presentation_definition) {
+    // Add presentation_definition if provided and no dcql_query
+    if (presentation_definition && !dcql_query) {
       jwtPayload.presentation_definition = presentation_definition;
     }
 
-    // Define the JWT header
-    // const header = {
-    //   alg: "ES256",
-    //   kid: `aegean#authentication-key`, // Ensure this kid is resolvable from the did.json endpoint
-    // };
+    // Add dcql_query if provided
+    if (dcql_query) {
+      jwtPayload.dcql_query = dcql_query;
+    }
+
+    // Add transaction_data if provided
+    if (transaction_data) {
+      jwtPayload.transaction_data = transaction_data;
+    }
+
     const header = {
       alg: "RS256",
       typ: "JWT",
@@ -513,3 +511,4 @@ export async function didKeyToJwks(did) {
 
   return doc.didDocument.verificationMethod[0].publicKeyJwk;
 }
+
