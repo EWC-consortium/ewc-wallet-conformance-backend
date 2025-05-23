@@ -120,7 +120,8 @@ export async function buildVpRequestJWT(
   nonce,
   dcql_query = null,
   transaction_data = null,
-  response_mode = "direct_post" // Add response_mode parameter with default
+  response_mode = "direct_post", // Add response_mode parameter with default
+  audience = "https://self-issued.me/v2" // New audience parameter
 ) {
   if(!nonce) nonce = generateNonce(16);
   const state = generateNonce(16);
@@ -142,7 +143,7 @@ export async function buildVpRequestJWT(
     state: state,
     client_metadata: client_metadata,
     iss: client_id,
-    aud: "https://self-issued.me/v2",
+    aud: audience, // Use the audience parameter
   };
 
   // Add presentation_definition if provided and no dcql_query

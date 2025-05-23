@@ -995,13 +995,10 @@ export const getLoyaltyCardSDJWTDataWithPayload = (
       expiry_date: payload.credential?.expiry_date
     }
   };
-<<<<<<< HEAD
   
   
 
   console.log("validPayload", validPayload);
-=======
->>>>>>> loyalty-card
 
   const claims = {
     id: decodedHeaderSubjectDID || uuidv4(), // Top-level ID

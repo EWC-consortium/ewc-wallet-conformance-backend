@@ -65,7 +65,8 @@ didRouter.get("/generateVPRequest", async (req, res) => {
     responseMode
   );
 
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(`${serverURL}/didVPrequest/${uuid}`)}`;
+  const requestUri = `${serverURL}/didVPrequest/${uuid}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -87,6 +88,7 @@ didRouter.get("/generateVPRequest", async (req, res) => {
 didRouter.get("/generateVPRequestDCQL", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const nonce = generateNonce(16);
+  const responseMode = req.query.response_mode || "direct_post";
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
   let controller = serverURL;
@@ -97,7 +99,6 @@ didRouter.get("/generateVPRequestDCQL", async (req, res) => {
   const client_id = `did:web:${controller}`;
   const kid = `did:web:${controller}#keys-1`;
 
-  // Example DCQL query - this should be configurable
   const dcql_query = {
     type: "CredentialQuery",
     credentialTypes: ["VerifiableCredential"],
@@ -109,25 +110,28 @@ didRouter.get("/generateVPRequestDCQL", async (req, res) => {
     status: "pending",
     claims: null,
     dcql_query: dcql_query,
-    nonce: nonce
+    nonce: nonce,
+    response_mode: responseMode
   });
 
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
-    null, // No presentation_definition for DCQL
+    null,
     privateKey,
-    "did:jwks",
+    "did",
     clientMetadata,
     kid,
     serverURL,
     "vp_token",
     nonce,
-    dcql_query, // dcql_query parameter
-    null // transaction_data parameter (null for DCQL query)
+    dcql_query,
+    null,
+    responseMode
   );
 
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(`${serverURL}/didVPrequest/${uuid}`)}`;
+  const requestUri = `${serverURL}/didVPrequest/${uuid}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -149,6 +153,7 @@ didRouter.get("/generateVPRequestDCQL", async (req, res) => {
 didRouter.get("/generateVPRequestTransaction", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const nonce = generateNonce(16);
+  const responseMode = req.query.response_mode || "direct_post";
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
   let controller = serverURL;
@@ -159,13 +164,8 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
   const client_id = `did:web:${controller}`;
   const kid = `did:web:${controller}#keys-1`;
 
-  // Find the presentation definition for the credential type
   const presentation_definition = presentation_definition_sdJwt;
-  
-  // Get credential IDs from the presentation definition
   const credentialIds = presentation_definition.input_descriptors.map(descriptor => descriptor.id);
-
-  // Create transaction data as per OpenID4VP spec
   const transactionDataObj = {
     type: "identity_verification",
     credential_ids: credentialIds,
@@ -175,14 +175,8 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     timestamp: new Date().toISOString(),
     transaction_id: uuidv4()
   };
-
-  // Base64url encode the transaction data
-  const base64UrlEncodedTxData = Buffer.from(
-    JSON.stringify(transactionDataObj)
-  ).toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  const base64UrlEncodedTxData = Buffer.from(JSON.stringify(transactionDataObj))
+    .toString('base64url');
 
   storeVPSession(uuid, {
     uuid: uuid,
@@ -190,7 +184,8 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     claims: null,
     presentation_definition: presentation_definition,
     nonce: nonce,
-    transaction_data: [base64UrlEncodedTxData] // Store as array of encoded strings
+    transaction_data: [base64UrlEncodedTxData],
+    response_mode: responseMode
   });
 
   const vpRequestJWT = await buildVpRequestJWT(
@@ -198,17 +193,19 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     response_uri,
     presentation_definition,
     privateKey,
-    "did:jwks",
+    "did",
     clientMetadata,
     kid,
     serverURL,
     "vp_token",
     nonce,
-    null, // dcql_query parameter (null for transaction data)
-    [base64UrlEncodedTxData] // transaction_data parameter
+    null,
+    [base64UrlEncodedTxData],
+    responseMode
   );
 
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(`${serverURL}/didVPrequest/${uuid}`)}`;
+  const requestUri = `${serverURL}/didVPrequest/${uuid}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
 
   let code = qr.image(vpRequest, {
     type: "png",

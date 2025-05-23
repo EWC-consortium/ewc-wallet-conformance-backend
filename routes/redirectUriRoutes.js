@@ -1,4 +1,5 @@
 import express from "express";
+import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import qr from "qr-image";
 import imageDataURI from "image-data-uri";
@@ -13,6 +14,11 @@ const redirectUriRouter = express.Router();
 // Configuration
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 const proxyPath = process.env.PROXY_PATH || null;
+
+// Load Verifier Configuration / Client Metadata
+const clientMetadata = JSON.parse(
+  fs.readFileSync("./data/verifier-config.json", "utf-8")
+);
 
 // Load presentation definitions
 const presentation_definition_sdJwt = JSON.parse(
@@ -30,7 +36,6 @@ redirectUriRouter.get("/generateVPRequest", async (req, res) => {
 
   const response_uri = serverURL + "/direct_post" + "/" + stateParam;
   const presentation_definition_uri = serverURL + "/presentation-definition/itbsdjwt";
-  const client_metadata_uri = serverURL + "/client-metadata";
   const clientId = serverURL + "/direct_post" + "/" + stateParam;
 
   // Find the field object that has path $.vct
@@ -53,7 +58,7 @@ redirectUriRouter.get("/generateVPRequest", async (req, res) => {
     clientId,
     presentation_definition_uri,
     "redirect_uri",
-    client_metadata_uri,
+    clientMetadata,
     response_uri,
     state,
     "vp_token",
@@ -85,7 +90,6 @@ redirectUriRouter.get("/generateVPRequestDCQL", async (req, res) => {
   const state = generateNonce(16);
 
   const response_uri = serverURL + "/direct_post" + "/" + stateParam;
-  const client_metadata_uri = serverURL + "/client-metadata";
   const clientId = serverURL + "/direct_post" + "/" + stateParam;
 
   // Example DCQL query - this should be configurable based on requirements
@@ -107,7 +111,7 @@ redirectUriRouter.get("/generateVPRequestDCQL", async (req, res) => {
     clientId,
     null, // No presentation_definition_uri for DCQL
     "redirect_uri",
-    client_metadata_uri,
+    clientMetadata,
     response_uri,
     state,
     "vp_token",
@@ -141,7 +145,6 @@ redirectUriRouter.get("/generateVPRequestTransaction", async (req, res) => {
 
   const response_uri = serverURL + "/direct_post" + "/" + stateParam;
   const presentation_definition_uri = serverURL + "/presentation-definition/itbsdjwt";
-  const client_metadata_uri = serverURL + "/client-metadata";
   const clientId = serverURL + "/direct_post" + "/" + stateParam;
 
   // Find the presentation definition for the credential type
@@ -182,14 +185,13 @@ redirectUriRouter.get("/generateVPRequestTransaction", async (req, res) => {
     clientId,
     presentation_definition_uri,
     "redirect_uri",
-    client_metadata_uri,
+    clientMetadata,
     response_uri,
     state,
     "vp_token",
     nonce,
     "direct_post",
     null,
-    [base64UrlEncodedTxData] // Pass as array of encoded strings
   );
 
   let code = qr.image(vpRequest, {

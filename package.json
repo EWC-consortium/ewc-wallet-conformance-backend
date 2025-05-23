@@ -6,11 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-<<<<<<< HEAD
-    "dev": "SERVER_URL=https://56de-2a02-587-8703-400-4b80-45b8-c0a8-3b3f.ngrok-free.app   node server.js"
-=======
-    "dev": "SERVER_URL=https://d1d8-2a02-587-8703-400-fe9f-9d20-b29a-727f.ngrok-free.app   node server.js"
->>>>>>> loyalty-card
+    "dev": "SERVER_URL=https://fed1-2a02-587-8703-400-aaee-23b3-4f35-fef5.ngrok-free.app   node server.js"
   },
   "author": "",
   "license": "ISC",

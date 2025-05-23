@@ -51,7 +51,7 @@ export function buildVPbyValue(
   client_id,
   presentation_definition_uri,
   client_id_scheme,
-  client_metadata_uri,
+  client_metadata,
   response_uri,
   state,
   response_type = "vp_token",
@@ -64,6 +64,9 @@ export function buildVPbyValue(
   if (!allowedResponseModes.includes(response_mode)) {
     throw new Error(`Invalid response_mode. Must be one of: ${allowedResponseModes.join(", ")}`);
   }
+
+  if (!nonce) nonce = generateNonce(16);
+  if (!state) state = generateNonce(16);
 
   let vpRequest = "openid4vp://?";
   vpRequest += `client_id=${encodeURIComponent(client_id)}`;
@@ -78,8 +81,9 @@ export function buildVPbyValue(
     vpRequest += `&presentation_definition_uri=${encodeURIComponent(presentation_definition_uri)}`;
   }
 
-  if (client_metadata_uri) {
-    vpRequest += `&client_metadata_uri=${encodeURIComponent(client_metadata_uri)}`;
+  // Handle client_metadata (object)
+  if (client_metadata && typeof client_metadata === 'object') {
+    vpRequest += `&client_metadata=${encodeURIComponent(JSON.stringify(client_metadata))}`;
   }
 
   if (dcql_query) {

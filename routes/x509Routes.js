@@ -42,7 +42,9 @@ x509Router.get("/generateVPRequest", async (req, res) => {
     response_mode: responseMode // Store response mode in session
   });
 
-  // Build and sign the VP request JWT
+  // Build and sign the VP request JWT (which will be served at the request_uri)
+  // Note: buildVpRequestJWT itself doesn't need request_uri_method. 
+  // This parameter is for the initial openid4vp:// URI.
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
@@ -56,11 +58,14 @@ x509Router.get("/generateVPRequest", async (req, res) => {
     nonce,
     null, // dcql_query
     null, // transaction_data
-    responseMode // Pass response_mode parameter
+    responseMode
   );
 
   // Create the openid4vp:// URL
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(`${serverURL}/x509VPrequest/${uuid}`)}`;
+  // Since the /x509VPrequest/:id endpoint is a POST endpoint (as per its definition later in this file),
+  // we add request_uri_method=post.
+  const requestUri = `${serverURL}/x509VPrequest/${uuid}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
 
   // Generate QR code
   let code = qr.image(vpRequest, {
@@ -83,6 +88,7 @@ x509Router.get("/generateVPRequest", async (req, res) => {
 x509Router.get("/generateVPRequestDCQL", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const nonce = generateNonce(16);
+  const responseMode = req.query.response_mode || "direct_post"; // Added for consistency if needed for JWT
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
   const client_id = "dss.aegean.gr";
@@ -99,9 +105,11 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
     status: "pending",
     claims: null,
     dcql_query: dcql_query,
-    nonce: nonce
+    nonce: nonce,
+    response_mode: responseMode // Store response mode
   });
 
+  // JWT for request_uri
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
@@ -114,10 +122,12 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
     "vp_token",
     nonce,
     dcql_query, // dcql_query parameter
-    null // transaction_data parameter (null for DCQL query)
+    null, // transaction_data parameter (null for DCQL query)
+    responseMode
   );
 
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(`${serverURL}/x509VPrequest/${uuid}`)}`;
+  const requestUri = `${serverURL}/x509VPrequest/${uuid}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -139,17 +149,15 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
 x509Router.get("/generateVPRequestTransaction", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const nonce = generateNonce(16);
+  const responseMode = req.query.response_mode || "direct_post"; // Added for consistency
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
   const client_id = "dss.aegean.gr";
 
-  // Find the presentation definition for the credential type
-  const presentation_definition = presentation_definition_sdJwt;
-  
-  // Get credential IDs from the presentation definition
-  const credentialIds = presentation_definition.input_descriptors.map(descriptor => descriptor.id);
+  // For transaction data, we still need a presentation definition
+  const presentation_definition = presentation_definition_sdJwt; 
 
-  // Create transaction data as per OpenID4VP spec
+  const credentialIds = presentation_definition.input_descriptors.map(descriptor => descriptor.id);
   const transactionDataObj = {
     type: "identity_verification",
     credential_ids: credentialIds,
@@ -159,40 +167,38 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
     timestamp: new Date().toISOString(),
     transaction_id: uuidv4()
   };
-
-  // Base64url encode the transaction data
-  const base64UrlEncodedTxData = Buffer.from(
-    JSON.stringify(transactionDataObj)
-  ).toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  const base64UrlEncodedTxData = Buffer.from(JSON.stringify(transactionDataObj))
+    .toString('base64url');
 
   storeVPSession(uuid, {
     uuid: uuid,
     status: "pending",
     claims: null,
-    presentation_definition: presentation_definition,
+    presentation_definition: presentation_definition, 
     nonce: nonce,
-    transaction_data: [base64UrlEncodedTxData] // Store as array of encoded strings
+    transaction_data: [base64UrlEncodedTxData],
+    response_mode: responseMode // Store response mode
   });
 
+  // JWT for request_uri
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
-    presentation_definition,
-    null, // privateKey
+    presentation_definition, 
+    null, 
     "x509_san_dns",
     clientMetadata,
-    null, // kid
+    null, 
     serverURL,
     "vp_token",
     nonce,
-    null, // dcql_query parameter (null for transaction data)
-    [base64UrlEncodedTxData] // transaction_data parameter
+    null, // No DCQL query when using transaction data with PD
+    [base64UrlEncodedTxData],
+    responseMode
   );
 
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(`${serverURL}/x509VPrequest/${uuid}`)}`;
+  const requestUri = `${serverURL}/x509VPrequest/${uuid}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
 
   let code = qr.image(vpRequest, {
     type: "png",
