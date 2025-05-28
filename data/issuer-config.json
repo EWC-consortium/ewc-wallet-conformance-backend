@@ -4,7 +4,7 @@
   "credential_endpoint": "https://server.example.com/credential",
   "deferred_credential_endpoint": "https://server.example.com/credential_deferred",
   "notification_endpoint": "https://server.example.com/notification",
-  "batch_credential_endpoint": "https://server.example.com/batch",
+ 
   "display": [
     {
       "name": "EWC Issuer",

@@ -171,6 +171,8 @@ codeFlowRouterSDJWT.post("/par", async (req, res) => {
   const issuerState = decodeURIComponent(req.body.issuer_state); // This can be associated with the ITB session
   let authorizationDetails = req.body.authorization_details;
   const clientMetadata = req.body.client_metadata;
+  const wallet_issuer_id = req.body.wallet_issuer_id;
+  const user_hint = req.body.user_hint;
 
   let requestURI = "urn:aegean.gr:" + uuidv4();
   let parRequests = getPushedAuthorizationRequests();
@@ -188,6 +190,8 @@ codeFlowRouterSDJWT.post("/par", async (req, res) => {
     issuerState: issuerState,
     authorizationDetails: authorizationDetails,
     clientMetadata: clientMetadata,
+    wallet_issuer_id: wallet_issuer_id,
+    user_hint: user_hint,
   });
 
   console.log("par state " + state);
@@ -218,6 +222,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
 
   let client_metadata = req.query.client_metadata; //details of the wallet
 
+
   const nonce = req.query.nonce;
   code_challenge = decodeURIComponent(req.query.code_challenge);
   let code_challenge_method = req.query.code_challenge_method; //this should equal to S256
@@ -226,6 +231,11 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
 
   let isPIDIssuanceFlow = false;
 
+// Draft 15 new parameters
+let wallet_issuer_id = req.query.wallet_issuer_id;
+let user_hint = req.query.user_hint;
+
+  
   //validations
   let errors = [];
 
@@ -249,6 +259,9 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       authorizationDetails = parRequest.authorizationDetails;
       response_type = parRequest.response_type;
       client_metadata = parRequest.clientMetadata;
+      wallet_issuer_id = parRequest.wallet_issuer_id;
+      user_hint = parRequest.user_hint;
+
     } else {
       console.log(
         "ERROR: request_uri present in authorization endpoint, but no par request cached for request_uri" +
@@ -256,6 +269,9 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       );
     }
   }
+
+  console.log("wallet_issuer_id: " + wallet_issuer_id);
+  console.log("user_hint: " + user_hint);
 
   const redirectUri = redirect_uri
     ? decodeURIComponent(redirect_uri)

@@ -28,9 +28,14 @@ metadataRouter.get(
     issuerConfig.credential_issuer = serverURL;
     issuerConfig.authorization_servers = [serverURL];
     issuerConfig.credential_endpoint = serverURL + "/credential";
-    issuerConfig.batch_credential_endpoint = serverURL + "/batch_credential_endpoint";
     issuerConfig.deferred_credential_endpoint =
       serverURL + "/credential_deferred";
+    issuerConfig.nonce_endpoint = serverURL + "/nonce";
+    issuerConfig.notification_endpoint = serverURL + "/notification";
+
+    if (issuerConfig.batch_credential_endpoint) {
+      console.warn("Warning: batch_credential_endpoint is part of issuerConfig but removed from spec draft -14. Consider removing from data/issuer-config.json");
+    }
 
     res.type("application/json").send(issuerConfig);
   }
