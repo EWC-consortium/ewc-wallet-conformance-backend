@@ -4,7 +4,7 @@ import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import { generateNonce, buildVpRequestJWT, didKeyToJwks } from "../utils/cryptoUtils.js";
-import { storeVPSession } from "../services/cacheServiceRedis.js";
+import { getVPSession, storeVPSession } from "../services/cacheServiceRedis.js";
 import { getSDsFromPresentationDef } from "../utils/vpHeplers.js";
 import fs from "fs";
 
@@ -13,7 +13,7 @@ const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 
 // Load presentation definitions
 const presentation_definition_sdJwt = JSON.parse(
-  fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
+  fs.readFileSync("./data/presentation_definition_pid.json", "utf-8")
 );
 
 // Load client metadata
@@ -65,8 +65,67 @@ didRouter.get("/generateVPRequest", async (req, res) => {
     responseMode
   );
 
-  const requestUri = `${serverURL}/didVPrequest/${uuid}`;
+  const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
   const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+
+  let code = qr.image(vpRequest, {
+    type: "png",
+    ec_level: "M",
+    size: 20,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  
+  res.json({
+    qr: encodedQR,
+    deepLink: vpRequest,
+    sessionId: uuid,
+  });
+});
+
+didRouter.get("/generateVPRequestGET", async (req, res) => {
+  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  const responseMode = req.query.response_mode || "direct_post";
+  const nonce = generateNonce(16);
+
+  const response_uri = `${serverURL}/direct_post/${uuid}`;
+  let controller = serverURL;
+  if (process.env.PROXY_PATH) {
+    controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
+  }
+  controller = controller.replace("https://", "");
+  const client_id = `did:web:${controller}`;
+  const kid = `did:web:${controller}#keys-1`;
+
+  storeVPSession(uuid, {
+    uuid: uuid,
+    status: "pending",
+    claims: null,
+    presentation_definition: presentation_definition_sdJwt,
+    nonce: nonce,
+    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt),
+    response_mode: responseMode
+  });
+
+  const vpRequestJWT = await buildVpRequestJWT(
+    client_id,
+    response_uri,
+    presentation_definition_sdJwt,
+    privateKey,
+    "did", // this references the key format not the DID method
+    clientMetadata,
+    kid,
+    serverURL,
+    "vp_token",
+    nonce,
+    null,
+    null,
+    responseMode
+  );
+
+  const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -130,7 +189,7 @@ didRouter.get("/generateVPRequestDCQL", async (req, res) => {
     responseMode
   );
 
-  const requestUri = `${serverURL}/didVPrequest/${uuid}`;
+  const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
   const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
 
   let code = qr.image(vpRequest, {
@@ -204,8 +263,8 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     responseMode
   );
 
-  const requestUri = `${serverURL}/didVPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+  const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -223,40 +282,77 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
   });
 });
 
-// Request URI endpoint (POST method)
-didRouter.post("/didVPrequest/:id", async (req, res) => {
-  const uuid = req.params.id;
-  const vpSession = await getVPSession(uuid);
-  
-  if (!vpSession) {
-    return res.status(400).json({ error: "Invalid session ID" });
-  }
+// Request URI endpoint (now handles POST and GET)
+didRouter.route("/VPrequest/:id")
+  .post(async (req, res) => {
+    const uuid = req.params.id;
+    const vpSession = await getVPSession(uuid);
+    
+    if (!vpSession) {
+      return res.status(400).json({ error: "Invalid session ID" });
+    }
 
-  const response_uri = `${serverURL}/direct_post/${uuid}`;
-  let controller = serverURL;
-  if (process.env.PROXY_PATH) {
-    controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
-  }
-  controller = controller.replace("https://", "");
-  const client_id = `did:web:${controller}`;
-  const kid = `did:web:${controller}#keys-1`;
+    const response_uri = `${serverURL}/direct_post/${uuid}`;
+    let controller = serverURL;
+    if (process.env.PROXY_PATH) {
+      controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
+    }
+    controller = controller.replace("https://", "");
+    const client_id = `did:web:${controller}`;
+    const kid = `did:web:${controller}#keys-1`;
 
-  const vpRequestJWT = await buildVpRequestJWT(
-    client_id,
-    response_uri,
-    vpSession.presentation_definition,
-    privateKey,
-    "did:jwks",
-    clientMetadata,
-    kid,
-    serverURL,
-    "vp_token",
-    vpSession.nonce,
-    vpSession.dcql_query || null,
-    vpSession.transaction_data || null
-  );
+    const vpRequestJWT = await buildVpRequestJWT(
+      client_id,
+      response_uri,
+      vpSession.presentation_definition,
+      privateKey,
+      "did:jwks",
+      clientMetadata,
+      kid,
+      serverURL,
+      "vp_token",
+      vpSession.nonce,
+      vpSession.dcql_query || null,
+      vpSession.transaction_data || null
+    );
 
-  res.type("text/plain").send(vpRequestJWT);
-});
+    // Respond with JWT as per OpenID4VP spec for request_uri
+    res.type("application/oauth-authz-req+jwt").send(vpRequestJWT);
+  })
+  .get(async (req, res) => { // Added GET handler
+    const uuid = req.params.id;
+    const vpSession = await getVPSession(uuid);
+    console.log("GET request for VP session ID: " + uuid);
+    if (!vpSession) {
+      return res.status(400).json({ error: "Invalid session ID" });
+    }
+
+    const response_uri = `${serverURL}/direct_post/${uuid}`;
+    let controller = serverURL;
+    if (process.env.PROXY_PATH) {
+      controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
+    }
+    controller = controller.replace("https://", "");
+    const client_id = `did:web:${controller}`;
+    const kid = `did:web:${controller}#keys-1`;
+
+    const vpRequestJWT = await buildVpRequestJWT(
+      client_id,
+      response_uri,
+      vpSession.presentation_definition,
+      privateKey, // Assuming privateKey is accessible in this scope
+      "did",
+      clientMetadata, // Assuming clientMetadata is accessible
+      kid,
+      serverURL,
+      "vp_token",
+      vpSession.nonce,
+      vpSession.dcql_query || null,
+      vpSession.transaction_data || null
+    );
+
+    // Respond with JWT as per OpenID4VP spec for request_uri
+    res.type("application/oauth-authz-req+jwt").send(vpRequestJWT);
+  });
 
 export default didRouter; 

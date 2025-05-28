@@ -174,7 +174,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     //   "iat": timestamp,
     //   "vp_token": "verifiable_presentation_jwt_or_sd_jwt"
     // }
-    if (req.headers['content-type'] === 'application/jwt') {
+    console.log("response mode" + vpSession.response_mode);
+
+
+    if (vpSession. response_mode === 'direct_post.jwt') {
       const jwtResponse = req.body;
       try {
         // Verify the JWT signature
