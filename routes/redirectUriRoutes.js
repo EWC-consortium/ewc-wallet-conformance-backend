@@ -7,7 +7,7 @@ import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import { generateNonce } from "../utils/cryptoUtils.js";
 import { buildVPbyValue } from "../utils/tokenUtils.js";
 import { getSDsFromPresentationDef } from "../utils/vpHeplers.js";
-import { storeVPSession } from "../services/cacheServiceRedis.js";
+import { getVPSession, storeVPSession } from "../services/cacheServiceRedis.js";
 
 const redirectUriRouter = express.Router();
 
@@ -93,11 +93,26 @@ redirectUriRouter.get("/generateVPRequestDCQL", async (req, res) => {
   const clientId = serverURL + "/direct_post" + "/" + stateParam;
 
   // Example DCQL query - this should be configurable based on requirements
-  const dcql_query = {
-    type: "CredentialQuery",
-    credentialTypes: ["VerifiableCredential"],
-    claims: ["name", "birthDate", "nationality"]
-  };
+  const dcql_query =   {
+    "credentials": [
+      {
+        "id": "cmwallet",
+        "format": "dc+sd-jwt",
+        "meta": {
+          "vct_values": [
+            "urn:eu.europa.ec.eudi:pid:1"
+          ]
+        },
+        "claims": [
+          {
+            "path": [
+              "family_name"
+            ]
+          }
+        ]
+      }
+    ]
+  }
 
   storeVPSession(stateParam, {
     uuid: stateParam,

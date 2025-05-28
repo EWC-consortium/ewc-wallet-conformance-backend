@@ -158,11 +158,26 @@ didRouter.get("/generateVPRequestDCQL", async (req, res) => {
   const client_id = `did:web:${controller}`;
   const kid = `did:web:${controller}#keys-1`;
 
-  const dcql_query = {
-    type: "CredentialQuery",
-    credentialTypes: ["VerifiableCredential"],
-    claims: ["name", "birthDate", "nationality"]
-  };
+  const dcql_query =   {
+    "credentials": [
+      {
+        "id": "cmwallet",
+        "format": "dc+sd-jwt",
+        "meta": {
+          "vct_values": [
+            "urn:eu.europa.ec.eudi:pid:1"
+          ]
+        },
+        "claims": [
+          {
+            "path": [
+              "family_name"
+            ]
+          }
+        ]
+      }
+    ]
+  }
 
   storeVPSession(uuid, {
     uuid: uuid,

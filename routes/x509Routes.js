@@ -137,7 +137,7 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
   const client_id = "dss.aegean.gr";
 
   // Example DCQL query - this should be configurable
-  const dcql_query = {
+  const dcql_query =   {
     "credentials": [
       {
         "id": "cmwallet",
@@ -157,6 +157,8 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
       }
     ]
   }
+
+  
   storeVPSession(uuid, {
     uuid: uuid,
     status: "pending",

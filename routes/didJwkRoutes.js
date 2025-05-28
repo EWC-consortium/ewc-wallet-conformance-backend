@@ -4,7 +4,7 @@ import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import { generateNonce, buildVpRequestJWT } from "../utils/cryptoUtils.js";
-import { storeVPSession } from "../services/cacheServiceRedis.js";
+import { getVPSession, storeVPSession } from "../services/cacheServiceRedis.js";
 import { getSDsFromPresentationDef } from "../utils/vpHeplers.js";
 import fs from "fs";
 import base64url from "base64url";
@@ -15,7 +15,7 @@ const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 
 // Load presentation definitions
 const presentation_definition_sdJwt = JSON.parse(
-  fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
+  fs.readFileSync("./data/presentation_definition_pid.json", "utf-8")
 );
 
 // Load client metadata
@@ -67,7 +67,7 @@ didJwkRouter.get("/generateVPRequest", async (req, res) => {
     responseMode // Pass response_mode parameter
   );
 
-  const requestUri = `${serverURL}/didJwkVPrequest/${uuid}`;
+  const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
   const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
 
   let code = qr.image(vpRequest, {
@@ -86,6 +86,47 @@ didJwkRouter.get("/generateVPRequest", async (req, res) => {
   });
 });
 
+// Standard VP Request with presentation_definition
+didJwkRouter.get("/generateVPRequestGET", async (req, res) => {
+  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  const responseMode = req.query.response_mode || "direct_post";
+  const nonce = generateNonce(16);
+
+  const response_uri = `${serverURL}/direct_post/${uuid}`;
+  const client_id = didJwkIdentifier;
+  const kid = `${didJwkIdentifier}#0`; // did:jwk uses #0 as default key ID
+
+  storeVPSession(uuid, {
+    uuid: uuid,
+    status: "pending",
+    claims: null,
+    presentation_definition: presentation_definition_sdJwt,
+    nonce: nonce,
+    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt),
+    response_mode: responseMode // Store response mode in session
+  });
+
+  
+  const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}`;
+
+  let code = qr.image(vpRequest, {
+    type: "png",
+    ec_level: "M",
+    size: 20,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  
+  res.json({
+    qr: encodedQR,
+    deepLink: vpRequest,
+    sessionId: uuid,
+  });
+});
+
+
 // DCQL Query endpoint
 didJwkRouter.get("/generateVPRequestDCQL", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
@@ -96,11 +137,26 @@ didJwkRouter.get("/generateVPRequestDCQL", async (req, res) => {
   const client_id = didJwkIdentifier;
   const kid = `${didJwkIdentifier}#0`;
 
-  const dcql_query = {
-    type: "CredentialQuery",
-    credentialTypes: ["VerifiablePortableDocumentA1SDJWT"],
-    claims: ["given_name", "last_name"]
-  };
+  const dcql_query =   {
+    "credentials": [
+      {
+        "id": "cmwallet",
+        "format": "dc+sd-jwt",
+        "meta": {
+          "vct_values": [
+            "urn:eu.europa.ec.eudi:pid:1"
+          ]
+        },
+        "claims": [
+          {
+            "path": [
+              "family_name"
+            ]
+          }
+        ]
+      }
+    ]
+  }
 
   storeVPSession(uuid, {
     uuid: uuid,
@@ -127,8 +183,68 @@ didJwkRouter.get("/generateVPRequestDCQL", async (req, res) => {
     responseMode
   );
 
-  const requestUri = `${serverURL}/didJwkVPrequest/${uuid}`;
+  const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
   const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+
+  let code = qr.image(vpRequest, {
+    type: "png",
+    ec_level: "M",
+    size: 20,
+    margin: 10,
+  });
+  let mediaType = "PNG";
+  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  
+  res.json({
+    qr: encodedQR,
+    deepLink: vpRequest,
+    sessionId: uuid,
+  });
+});
+
+
+// DCQL Query endpoint with GET method
+didJwkRouter.get("/generateVPRequestDCQLGET", async (req, res) => {
+  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  const nonce = generateNonce(16);
+  const responseMode = req.query.response_mode || "direct_post";
+
+  const response_uri = `${serverURL}/direct_post/${uuid}`;
+  const client_id = didJwkIdentifier;
+  const kid = `${didJwkIdentifier}#0`;
+
+  const dcql_query =   {
+    "credentials": [
+      {
+        "id": "cmwallet",
+        "format": "dc+sd-jwt",
+        "meta": {
+          "vct_values": [
+            "urn:eu.europa.ec.eudi:pid:1"
+          ]
+        },
+        "claims": [
+          {
+            "path": [
+              "family_name"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+
+  storeVPSession(uuid, {
+    uuid: uuid,
+    status: "pending",
+    claims: null,
+    dcql_query: dcql_query,
+    nonce: nonce,
+    response_mode: responseMode
+  });
+
+  const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -196,7 +312,7 @@ didJwkRouter.get("/generateVPRequestTransaction", async (req, res) => {
     responseMode
   );
 
-  const requestUri = `${serverURL}/didJwkVPrequest/${uuid}`;
+  const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
   const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
 
   let code = qr.image(vpRequest, {
@@ -216,34 +332,66 @@ didJwkRouter.get("/generateVPRequestTransaction", async (req, res) => {
 });
 
 // Request URI endpoint (POST method)
-didJwkRouter.post("/didJwkVPrequest/:id", async (req, res) => {
-  const uuid = req.params.id;
-  const vpSession = await getVPSession(uuid);
-  
-  if (!vpSession) {
-    return res.status(400).json({ error: "Invalid session ID" });
-  }
+didJwkRouter.route("/didJwkVPrequest/:id")
+  .post(async (req, res) => {
+    const uuid = req.params.id;
+    const vpSession = await getVPSession(uuid);
+    
+    if (!vpSession) {
+      return res.status(400).json({ error: "Invalid session ID" });
+    }
 
-  const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = didJwkIdentifier;
-  const kid = `${didJwkIdentifier}#0`;
+    const response_uri = `${serverURL}/direct_post/${uuid}`;
+    const client_id = didJwkIdentifier;
+    const kid = `${didJwkIdentifier}#0`;
 
-  const vpRequestJWT = await buildVpRequestJWT(
-    client_id,
-    response_uri,
-    vpSession.presentation_definition,
-    privateKey,
-    "did",
-    clientMetadata,
-    kid,
-    serverURL,
-    "vp_token",
-    vpSession.nonce,
-    vpSession.dcql_query || null,
-    vpSession.transaction_data || null
-  );
+    const vpRequestJWT = await buildVpRequestJWT(
+      client_id,
+      response_uri,
+      vpSession.presentation_definition,
+      privateKey,
+      "did",
+      clientMetadata,
+      kid,
+      serverURL,
+      "vp_token",
+      vpSession.nonce,
+      vpSession.dcql_query || null,
+      vpSession.transaction_data || null,
+      vpSession.response_mode
+    );
 
-  res.type("text/plain").send(vpRequestJWT);
-});
+    res.type("text/plain").send(vpRequestJWT);
+  })
+  .get(async (req, res) => {
+    const uuid = req.params.id;
+    const vpSession = await getVPSession(uuid);
+    
+    if (!vpSession) {
+      return res.status(400).json({ error: "Invalid session ID" });
+    }
+
+    const response_uri = `${serverURL}/direct_post/${uuid}`;
+    const client_id = didJwkIdentifier;
+    const kid = `${didJwkIdentifier}#0`;
+
+    const vpRequestJWT = await buildVpRequestJWT(
+      client_id,
+      response_uri,
+      vpSession.presentation_definition,
+      privateKey,
+      "did",
+      clientMetadata,
+      kid,
+      serverURL,
+      "vp_token",
+      vpSession.nonce,
+      vpSession.dcql_query || null,
+      vpSession.transaction_data || null,
+      vpSession.response_mode
+    );
+
+    res.type("text/plain").send(vpRequestJWT);
+  });
 
 export default didJwkRouter; 
