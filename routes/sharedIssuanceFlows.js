@@ -101,6 +101,9 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
   // Fetch the Authorization header
   const authorizationHeader = req.headers["authorization"]; // Fetch the 'Authorization' header
   // console.log("token_endpoint authorizatiotn header-" + authorizationHeader);
+  const body = req.body;
+  // const containsCredentialIdentifier = body.hasOwnProperty('authorization_details');
+  const authorizationDetails = body.authorization_details;
 
   const clientAttestation = req.headers["OAuth-Client-Attestation"]; //this is the WUA
   const pop = req.headers["OAuth-Client-Attestation-PoP"];
@@ -130,7 +133,7 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
 
   let generatedAccessToken = buildAccessToken(serverURL, privateKey);
 
-  let authorization_details_for_response = getAuthCodeAuthorizationDetail().get(code);
+ 
 
   if (!(code || preAuthorizedCode)) {
     // RFC6749 Section 5.2: invalid_request
@@ -143,10 +146,18 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
     if (grantType == "urn:ietf:params:oauth:grant-type:pre-authorized_code") {
       console.log("pre-auth code flow");
       let chosenCredentialConfigurationId = null;
+      let existingPreAuthSession = await getPreAuthSession(preAuthorizedCode);
 
-      if (req.body.authorization_details) {
+      //Credential Issuers MAY support requesting authorization to issue a Credential using the 
+      // authorization_details parameter. This is particularly useful, if the Credential Issuer offered 
+      // multiple Credential Configurations in the Credential Offer of a Pre-Authorized Code Flow.
+      if(existingPreAuthSession.authorizationDetails && !authorizationDetails) {
+        console.log("!!!authorization_details found in session but not in request");
+        //TODO this should through an error
+      }
+      let parsedAuthDetails = authorizationDetails;
+      if (authorizationDetails) {
         try {
-          let parsedAuthDetails = req.body.authorization_details;
           // If it's a string, it might be URL-encoded JSON, as in spec examples
           if (typeof parsedAuthDetails === 'string') {
             parsedAuthDetails = JSON.parse(decodeURIComponent(parsedAuthDetails));
@@ -159,7 +170,6 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
               chosenCredentialConfigurationId = parsedAuthDetails[0].credential_configuration_id;
               console.log(`Wallet selected credential_configuration_id via authorization_details: ${chosenCredentialConfigurationId}`);
               // We will store this choice in the session.
-              // The authorization_details object itself might also be stored or passed through if needed by the /credential endpoint directly.
               authorization_details_for_response = parsedAuthDetails; // Use the parsed one for the response
             } else {
               console.warn("authorization_details provided in token request body but missing credential_configuration_id in the first element.");
@@ -174,25 +184,20 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
         }
       }
 
-      let existingPreAuthSession = await getPreAuthSession(preAuthorizedCode);
+     
       if (existingPreAuthSession) {
         console.log(
-          `Issuing token for pre-authorized session ${preAuthorizedCode}`
+          `generating token for pre-authorized session ${preAuthorizedCode}`
         );
         existingPreAuthSession.status = "success";
         existingPreAuthSession.accessToken = generatedAccessToken;
         
-        if (chosenCredentialConfigurationId) {
-          existingPreAuthSession.chosenCredentialConfigurationId = chosenCredentialConfigurationId;
-        }
+       
         // Store the c_nonce in the session for later validation at the credential endpoint
         const cNonceForSession = generateNonce(); // Generate c_nonce here to ensure it's in session and response
         existingPreAuthSession.c_nonce = cNonceForSession;
 
-        let personaId = getPersonaPart(preAuthorizedCode);
-        if (personaId) {
-          existingPreAuthSession.persona = personaId;
-        }
+
         storePreAuthSession(preAuthorizedCode, existingPreAuthSession);
         
         // Prepare response, ensuring c_nonce is consistent
@@ -201,11 +206,12 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
             refresh_token: generateRefreshToken(),
             token_type: "bearer",
             expires_in: 86400,
-            c_nonce: cNonceForSession, // Use the c_nonce stored in session
-            c_nonce_expires_in: 86400,
+            // c_nonce: cNonceForSession, // Use the c_nonce stored in session
+            // c_nonce_expires_in: 86400,
         };
-        if (authorization_details_for_response) {
-            tokenResponse.authorization_details = authorization_details_for_response;
+        if (authorizationDetails) {
+          parsedAuthDetails.credential_identifiers = [chosenCredentialConfigurationId];
+            tokenResponse.authorization_details = parsedAuthDetails;
         }
         return res.json(tokenResponse);
 
@@ -222,6 +228,7 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
       if (issuanceSessionId) {
         let existingCodeSession = await getCodeFlowSession(issuanceSessionId);
         if (existingCodeSession) {
+          
           // TODO: if PKCE validation fails, the flow should respond with an error
           const pkceVerified = await validatePKCE(
             existingCodeSession,
@@ -230,13 +237,13 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
             existingCodeSession.requests // PKCE challenge stored here (e.g., existingCodeSession.requests.challenge)
           );
 
-          if (!pkceVerified) {
-             console.log("PKCE verification failed for authorization_code flow.");
-             return res.status(400).json({
-                error: "invalid_grant",
-                error_description: "PKCE verification failed."
-             });
-          }
+          // if (!pkceVerified) {
+          //    console.log("PKCE verification failed for authorization_code flow.");
+          //    return res.status(400).json({
+          //       error: "invalid_grant",
+          //       error_description: "PKCE verification failed."
+          //    });
+          // }
 
           existingCodeSession.results.status = "success";
           existingCodeSession.status = "success";
@@ -247,7 +254,7 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
           existingCodeSession.c_nonce = cNonceForSession;
 
           storeCodeFlowSession(
-            existingCodeSession.results.issuerState, // or issuanceSessionId, ensure correct key is used
+            existingCodeSession.results.issuerState,  
             existingCodeSession
           );
 
@@ -257,15 +264,12 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
             refresh_token: generateRefreshToken(),
             token_type: "bearer",
             expires_in: 86400,
-            c_nonce: cNonceForSession,
-            c_nonce_expires_in: 86400,
+            // c_nonce: cNonceForSession,
+            // c_nonce_expires_in: 86400, removed in ID2
           };
-          if (authorization_details_for_response) { // This is from getAuthCodeAuthorizationDetail().get(code)
-            tokenResponse.authorization_details = authorization_details_for_response;
-          } else {
-            // As per spec, id_token is not typically returned when access_token is, unless it's OIDC hybrid flow.
-            // For VCI, c_nonce is more relevant here. Consider if id_token is strictly needed.
-            // tokenResponse.id_token = buildIdToken(serverURL, privateKey);
+          if (authorizationDetails) {
+            parsedAuthDetails.credential_identifiers = [chosenCredentialConfigurationId];
+              tokenResponse.authorization_details = parsedAuthDetails;
           }
           return res.json(tokenResponse);
         }
@@ -312,10 +316,7 @@ sharedRouter.post("/credential", async (req, res) => {
   
   // Determine the ID to use for looking up metadata configuration.
   // For proof validation, credential_configuration_id is more direct.
-  // If only credential_identifier is provided, you might need a way to map it back to a configuration
-  // or assume it implies a specific configuration if your system supports that.
-  // For this change, we'll prioritize credential_configuration_id for fetching proof validation rules.
-  const effectiveConfigurationId = credentialConfigurationId; 
+   const effectiveConfigurationId = credentialConfigurationId; 
 
   if (!effectiveConfigurationId && credentialIdentifier) {
      console.warn("Proof validation based on metadata currently relies on credential_configuration_id. Credential_identifier was provided without it.");
@@ -689,12 +690,12 @@ sharedRouter.post("/nonce", async (req, res) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
-  if (!token) {
-    return res.status(401).json({ 
-      error: "unauthorized", 
-      error_description: "Access token is missing or invalid."
-    });
-  }
+  // if (!token) {
+  //   return res.status(401).json({ 
+  //     error: "unauthorized", 
+  //     error_description: "Access token is missing or invalid."
+  //   });
+  // }
 
   let sessionObject = null;
   let sessionKey = null;
