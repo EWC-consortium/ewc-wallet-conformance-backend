@@ -34,6 +34,7 @@ const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 // ******************************************************************
 codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
+  const signatureType = req.query.signatureType ? req.query.signatureType : "jwt";
   const credentialType = req.query.credentialType
     ? req.query.credentialType
     : "VerifiablePortableDocumentA2SDJWT";
@@ -52,12 +53,13 @@ codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
       client_id_scheme: client_id_scheme,
       flowType: "code",
       isDynamic: false,
+      signatureType: signatureType,
     });
     // codeSessions.results.push({ sessionId: uuid, status: "pending" });
   }
 
   let encodedCredentialOfferUri = encodeURIComponent(
-    `${serverURL}/credential-offer-code-sd-jwt/${uuid}?scheme=${client_id_scheme}&credentialType=${credentialType}`
+    `${serverURL}/credential-offer-code-sd-jwt/${uuid}?credentialType=${credentialType}&scheme=${client_id_scheme}&`
   );
   let credentialOffer = `openid-credential-offer://?credential_offer_uri=${encodedCredentialOfferUri}`;
 
@@ -171,9 +173,9 @@ codeFlowRouterSDJWT.get(["/credential-offer-code-sd-jwt/:id"], (req, res) => {
     ? req.query.credentialType
     : "VerifiablePortableDocumentA2SDJWT";
 
-  console.log(req.query);
-  console.log(req.query.client_id_scheme);
-  const client_id_scheme = req.query.scheme ? req.query.scheme : "redirect_uri";
+  // console.log(req.query);
+  // console.log(req.query.client_id_scheme);
+  // const client_id_scheme = req.query.scheme ? req.query.scheme : "redirect_uri";
 
   /*
     To support multiple client_id_schemas, this param  client_id_scheme 
@@ -198,7 +200,7 @@ codeFlowRouterSDJWT.get(["/credential-offer-code-sd-jwt/:id"], (req, res) => {
  *               Push Authoriozation Request Endpoints
  * https://datatracker.ietf.org/doc/html/rfc9126
  ***************************************************************/
-codeFlowRouterSDJWT.post("/par", async (req, res) => {
+codeFlowRouterSDJWT.post(["/par", "/authorize/par"], async (req, res) => {
   const client_id = req.body.client_id; //DID of the holder requesting the credential
   const scope = req.body.scope;
   const response_type = req.body.response_type;
@@ -331,7 +333,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     console.log(error);
   }
 
-  let credentialsRequested = null;
+  let credentialsRequested = []; // multiple credentials can be requested
   // ************CASE 1: With authorizationDetails
   /* required parameters: response_type, client_id, code_challenge, 
     optional: code_challenge_method, authorization_details, redirect_uri, issuer_state
@@ -352,7 +354,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       if (authorizationDetails.length > 0) {
         authorizationDetails.forEach((item) => {
           let cred = fetchVCTorCredentialConfigId(item);
-          credentialsRequested = cred;
+          credentialsRequested.push(cred);
           // check if a PID is requested
           if (
             cred === "urn:eu.europa.ec.eudi:pid:1" ||
@@ -386,7 +388,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     console.log("authorization_details not found trying scope");
     if (scope) {
       console.log("requested credentials: " + scope);
-      credentialsRequested = scope;
+      credentialsRequested.push(scope);
       if (scope.indexOf("urn:eu.europa.ec.eudi:pid:1") >= 0) {
         isPIDIssuanceFlow = true;
       }
@@ -499,6 +501,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
           "vp_token",
           nonce
         );
+        //TODO clean this up what happens in case of multiple credentials requested
         if (credentialsRequested.indexOf("urn:eu.europa.ec.eudi:pid:1") >= 0) {
           //we should request only DID binding in this case
           console.log("passing id_token!!");
@@ -585,17 +588,14 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       // issuer will respond with  a redirect to teh client with the authorization code
 
       const authorizationCode = generateNonce(16);
-      // //cache authorizatiton_detatils witth the generated code. this is needed for the token_endpoint
-      // getAuthCodeAuthorizationDetail().set(
-      //   authorizationCode,
-      //   authorizationDetails
-      // );
+ 
 
       let issuanceState = issuerState; //codeSessions.results[sessionIndex].state;
       existingCodeSession.results.sessionId = authorizationCode;
       existingCodeSession.requests.sessionId = authorizationCode;
       existingCodeSession.results.state = state; // Update results.state with current wallet state
       existingCodeSession.authorizationCode = authorizationCode;
+      existingCodeSession.authorizationDetails = authorizationDetails;
       storeCodeFlowSession(issuanceState, existingCodeSession);
 
       const redirectUrl = `${existingCodeSession.requests.redirectUri}?code=${authorizationCode}&state=${state}`;
@@ -834,16 +834,46 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
 
 // Function to fetch either vct or credential_configuration_id
 function fetchVCTorCredentialConfigId(data) {
-  // Check for vct first, fallback to credential_configuration_id if not found
+  // 1. Handle the structure from the user's first modification (most specific)
+  if (
+    data.credential_definition &&
+    data.credential_definition.type &&
+    Array.isArray(data.credential_definition.type) &&
+    data.credential_definition.type.length > 0
+  ) {
+    return data.credential_definition.type[0];
+  }
+
+  // 2. Handle 'credential_configuration_id'
+  // (Covers A, C, D part 1, E part 1 from examples)
+  if (data.credential_configuration_id) {
+    return data.credential_configuration_id;
+  }
+
+  // 3. Handle 'format' and its associated fields
+  if (data.format) {
+    // For 'vc+sd-jwt' format, use 'vct' (Covers B from examples)
+    if (data.format === "vc+sd-jwt" && data.vct) {
+      return data.vct;
+    }
+    // For 'mso_mdoc' format, use 'doctype' (Covers D part 2 from examples)
+    if (data.format === "mso_mdoc" && data.doctype) {
+      return data.doctype;
+    }
+  }
+
+  // 4. Fallback for the original `data.vct` if it wasn't caught by format-specific logic
+  // This respects the original function's high priority for `vct`.
   if (data.vct) {
     return data.vct;
-  } else if (data.credential_configuration_id) {
-    return data.credential_configuration_id;
-  } else if (data.types) {
-    return data.types;
-  } else {
-    return null; // Return null if neither is found
   }
+
+  // 5. Fallback to 'types' (from original function structure)
+  if (data.types) {
+    return data.types;
+  }
+
+  return null; // If none of the above, return null
 }
 
 export default codeFlowRouterSDJWT;

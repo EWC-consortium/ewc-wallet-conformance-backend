@@ -42,21 +42,6 @@ import {
 import jwt from "jsonwebtoken";
 import jwkToPem from "jwk-to-pem";
 
-import {
-  createPIDPayload,
-  createStudentIDPayload,
-  getPIDSDJWTData,
-  getStudentIDSDJWTData,
-  getGenericSDJWTData,
-  getEPassportSDJWTData,
-  createEPassportPayload,
-  getVReceiptSDJWTData,
-  getVReceiptSDJWTDataWithPayload,
-  createPaymentWalletAttestationPayload,
-  createPhotoIDAttestationPayload,
-  getFerryBoardingPassSDJWTData,
-  createPCDAttestationPayload,
-} from "../utils/credPayloadUtil.js";
 
 import {
   handleVcSdJwtFormat,
@@ -102,12 +87,15 @@ const { signer, verifier } = await createSignerVerifierX509(
 
 sharedRouter.post("/token_endpoint", async (req, res) => {
   // Fetch the Authorization header
-  const authorizationHeader = req.headers["authorization"]; // Fetch the 'Authorization' header
+  const authorizationHeader = req.
+  headers["authorization"]; // Fetch the 'Authorization' header
   // console.log("token_endpoint authorizatiotn header-" + authorizationHeader);
   const body = req.body;
 
-  const authorizationDetails = body.authorization_details;
-  const scope = body.scope;
+  //Authorization Details or Scope are not provided in the token request body
+  // is this true for both pre-auth and code flow?
+  let authorizationDetails = body.authorization_details;
+  let scope = body.scope;
 
   const clientAttestation = req.headers["OAuth-Client-Attestation"]; //this is the WUA
   const pop = req.headers["OAuth-Client-Attestation-PoP"];
@@ -150,6 +138,8 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
       console.log("pre-auth code flow");
       let chosenCredentialConfigurationId = null;
       let existingPreAuthSession = await getPreAuthSession(preAuthorizedCode);
+      
+  
 
       if (existingPreAuthSession) {
         //Credential Issuers MAY support requesting authorization to issue a Credential using the
@@ -163,7 +153,8 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
             "!!!authorization_details found in session but not in request"
           );
           //TODO this should through an error
-        }
+        } 
+
         let parsedAuthDetails = authorizationDetails;
         if (authorizationDetails) {
           try {
@@ -234,16 +225,7 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
             chosenCredentialConfigurationId,
           ];
           tokenResponse.authorization_details = parsedAuthDetails;
-        } else {
-          //verbose reponse that includes authorization_details
-          tokenResponse.authorization_details = [
-            {
-              type: "openid_credential",
-              credential_configuration_id: scope,
-              credential_identifiers: [scope],
-            },
-          ];
-        }
+        }  
 
         return res.json(tokenResponse);
       } else {
@@ -259,6 +241,11 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
       if (issuanceSessionId) {
         let existingCodeSession = await getCodeFlowSession(issuanceSessionId);
         if (existingCodeSession) {
+
+          authorizationDetails =existingCodeSession.authorization_details;
+          scope = existingCodeSession.scope;
+
+
           // TODO: if PKCE validation fails, the flow should respond with an error
           const pkceVerified = await validatePKCE(
             existingCodeSession,
@@ -292,7 +279,7 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
           const tokenResponse = {
             access_token: generatedAccessToken,
             refresh_token: generateRefreshToken(),
-            token_type: "bearer",
+            token_type: "Bearer",
             expires_in: 86400,
             // c_nonce: cNonceForSession,
             // c_nonce_expires_in: 86400, removed in ID2
@@ -302,6 +289,14 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
               chosenCredentialConfigurationId,
             ];
             tokenResponse.authorization_details = parsedAuthDetails;
+          }else{
+            tokenResponse.authorization_details = [
+              {
+                type: "openid_credential",
+                credential_configuration_id: scope,
+                credential_identifiers: [scope],
+              },
+            ];
           }
           return res.json(tokenResponse);
         }
@@ -677,19 +672,21 @@ sharedRouter.post("/credential", async (req, res) => {
       const credential = await handleVcSdJwtFormat(
         requestBody,
         sessionObject,
-        serverURL
+        serverURL,
+        "vc+sd-jwt"
       );
 
       // We're assuming handleVcSdJwtFormat returns a raw credential
       // Wrap it in the proper format according to the specification
-      res.json({
+      const response ={
         credentials: [
           {
             credential,
           },
         ],
        
-      });
+      };
+      res.json(response);
     } catch (err) {
       console.log(err);
       return res.status(400).json({

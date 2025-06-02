@@ -21,7 +21,7 @@ import {
   createPhotoIDAttestationPayload,
   getFerryBoardingPassSDJWTData,
   createPCDAttestationPayload,
-  getLoyaltyCardSDJWTDataWithPayload
+  getLoyaltyCardSDJWTDataWithPayload,
 } from "../utils/credPayloadUtil.js";
 
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
@@ -35,31 +35,35 @@ const certificatePemX509 = fs.readFileSync(
   "utf8"
 );
 
-export async function 
-handleVcSdJwtFormat(
+export async function handleVcSdJwtFormat(
   requestBody,
   sessionObject,
-  serverURL
+  serverURL,
+  format="vc+sd-jwt"
 ) {
   const vct = requestBody.vct;
 
   let signer, verifier;
 
-  if (process.env.ISSUER_SIGNATURE_TYPE === "x509") {
+  if (
+    process.env.ISSUER_SIGNATURE_TYPE === "x509" ||
+    sessionObject.signatureType === "x509" ||
+    sessionObject.isHaip
+  ) {
+    console.log("x509 signature type");
     ({ signer, verifier } = await createSignerVerifierX509(
       privateKeyPemX509,
       certificatePemX509
     ));
   } else {
+    console.log("jwk signature type");
     ({ signer, verifier } = await createSignerVerifier(
       pemToJWK(privateKey, "private"),
       pemToJWK(publicKeyPem, "public")
     ));
   }
-  
-  console.log("vc+sd-jwt ", vct);
 
-  
+  console.log("vc+sd-jwt ", vct);
 
   if (!requestBody.proof || !requestBody.proof.jwt) {
     const error = new Error("proof not found");
@@ -71,14 +75,6 @@ handleVcSdJwtFormat(
     complete: true,
   });
   const holderJWKS = decodedWithHeader.header;
-
-  const isHaip = sessionObject ? sessionObject.isHaip : false;
-  if (!isHaip) {
-    ({ signer, verifier } = await createSignerVerifier(
-      pemToJWK(privateKey, "private"),
-      pemToJWK(publicKeyPem, "public")
-    ));
-  }
 
   const sdjwt = new SDJwtVcInstance({
     signer,
@@ -137,8 +133,10 @@ handleVcSdJwtFormat(
       credPayload = createPCDAttestationPayload(issuerName);
       break;
     case "LoyaltyCard":
-        credPayload = getLoyaltyCardSDJWTDataWithPayload(sessionObject.credentialPayload);
-        break;  
+      credPayload = getLoyaltyCardSDJWTDataWithPayload(
+        sessionObject.credentialPayload
+      );
+      break;
     default:
       throw new Error(`Unsupported credential type: ${credType}`);
   }
@@ -150,17 +148,19 @@ handleVcSdJwtFormat(
   }
 
   // Prepare issuance headers
-  const headerOptions = isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509"
-    ? {
-        header: {
-          x5c: [pemToBase64Der(certificatePemX509)],
-        },
-      }
-    : {
-        header: {
-          kid: "aegean#authentication-key",
-        },
-      };
+  const headerOptions =
+    (sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509") ||
+    sessionObject.signatureType === "x509"
+      ? {
+          header: {
+            x5c: [pemToBase64Der(certificatePemX509)],
+          },
+        }
+      : {
+          header: {
+            kid: "aegean#authentication-key",
+          },
+        };
 
   const now = new Date();
   const expiryDate = new Date(now);
@@ -180,14 +180,27 @@ handleVcSdJwtFormat(
     headerOptions
   );
 
-  console.log("Credential issued: ", credential);
+  // console.log("Credential issued: ", credential);
 
-  return {
-    format: "vc+sd-jwt",
-    credential,
-    c_nonce: generateNonce(),
-    c_nonce_expires_in: 86400,
-  };
+  if (format === "vc+sd-jwt") {
+    console.log("Credential issued: ", credential);
+    return   credential
+      // format: "vc+sd-jwt",
+      // c_nonce: generateNonce(),
+      // c_nonce_expires_in: 86400,
+     
+  }
+  if (format === "mDL") {
+    // console.log("Credential issued: ", credential);
+    // TODO: generate here the mDL
+    return  credential
+    // {
+    //   format: "mdl",
+    //   credential,
+    //   c_nonce: generateNonce(),
+    //   c_nonce_expires_in: 86400,
+    // };
+  }
 }
 
 export async function handleVcSdJwtFormatDeferred(sessionObject, serverURL) {
