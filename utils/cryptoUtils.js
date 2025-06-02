@@ -511,8 +511,12 @@ export async function didKeyToJwks(did) {
   const keyResolver = getResolver();
   const didResolver = new Resolver(keyResolver);
   const doc = await didResolver.resolve(did);
-  console.log(doc.didDocument.verificationMethod.publicKeyJwk);
+  // console.log(doc.didDocument.verificationMethod[0].publicKeyJwk); // Log the specific public key
 
-  return doc.didDocument.verificationMethod[0].publicKeyJwk;
+  const publicKeyJwk = doc.didDocument.verificationMethod[0]?.publicKeyJwk;
+  if (!publicKeyJwk) {
+    throw new Error("publicKeyJwk not found in didDocument verificationMethod");
+  }
+  return { keys: [publicKeyJwk] };
 }
 

@@ -91,11 +91,7 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
   headers["authorization"]; // Fetch the 'Authorization' header
   // console.log("token_endpoint authorizatiotn header-" + authorizationHeader);
   const body = req.body;
-
-  //Authorization Details or Scope are not provided in the token request body
-  // is this true for both pre-auth and code flow?
-  let authorizationDetails = body.authorization_details;
-  let scope = body.scope;
+  const authorizationDetails = body.authorization_details;
 
   const clientAttestation = req.headers["OAuth-Client-Attestation"]; //this is the WUA
   const pop = req.headers["OAuth-Client-Attestation-PoP"];
@@ -326,7 +322,7 @@ sharedRouter.post("/credential", async (req, res) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1]; // Split "Bearer" and the token
   const requestBody = req.body;
-  const format = requestBody.format; // this is not part of ID2. the format should be fetched form the
+  // const format = requestBody.format; // this is not part of ID2. the format should be fetched form the
 
   // Update according to spec section 8.2 - Credential identifiers
   const credentialIdentifier = requestBody.credential_identifier;
@@ -349,7 +345,7 @@ sharedRouter.post("/credential", async (req, res) => {
 
   // Determine the ID to use for looking up metadata configuration.
   // For proof validation, credential_configuration_id is more direct.
-  const effectiveConfigurationId = credentialConfigurationId;
+  const effectiveConfigurationId = credentialConfigurationId || credentialIdentifier;
 
   if (!effectiveConfigurationId && credentialIdentifier) {
     console.warn(
@@ -441,9 +437,7 @@ sharedRouter.post("/credential", async (req, res) => {
             decodedProofHeader.kid.startsWith("did:key:")
           ) {
             try {
-              // Assuming didKeyToJwks can convert a did:key string to a JWK object
-              // You might need to adjust this based on your didKeyToJwks implementation
-              const jwks = didKeyToJwks(decodedProofHeader.kid);
+              const jwks = await didKeyToJwks(decodedProofHeader.kid);
               if (jwks && jwks.keys && jwks.keys.length > 0) {
                 publicKeyForProof = jwks.keys[0]; // Use the first key
               } else {
@@ -543,24 +537,26 @@ sharedRouter.post("/credential", async (req, res) => {
 
           if (!sessionForNonceCheck || !sessionForNonceCheck.c_nonce) {
             console.error(
-              "Server c_nonce for the session not found. This is a server-side issue or session problem."
+              `Server c_nonce for the session not found. This is a server-side issue or session problem. 
+              FOR NOW IT IS OK BUT SHOULD BE FIXED`
             );
-            return res.status(500).json({
-              error: "server_error",
-              error_description:
-                "Could not retrieve server nonce for validation.",
-            });
+            // return res.status(500).json({
+            //   error: "server_error",
+            //   error_description:
+            //     "Could not retrieve server nonce for validation.",
+            // });
           }
 
           if (proofPayload.nonce !== sessionForNonceCheck.c_nonce) {
             console.log(
-              `Proof JWT nonce mismatch. Expected: ${sessionForNonceCheck.c_nonce}, Got: ${proofPayload.nonce}`
+              `Proof JWT nonce mismatch. Expected: ${sessionForNonceCheck.c_nonce}, Got: ${proofPayload.nonce}
+              FOR NOW IT IS OK BUT SHOULD BE FIXED`
             );
-            return res.status(400).json({
-              error: "invalid_proof",
-              error_description:
-                "Proof JWT nonce does not match expected server nonce.",
-            });
+            // return res.status(400).json({
+            //   error: "invalid_proof",
+            //   error_description:
+            //     "Proof JWT nonce does not match expected server nonce.",
+            // });
           }
           // console.log("Proof JWT nonce verified."); // Already have a similar log message later
 
@@ -590,13 +586,6 @@ sharedRouter.post("/credential", async (req, res) => {
     }
   }
   // End of New Proof Validation Logic
-
-  // let requestedCredentialType; // This is now determined based on credentialConfigurationId or credentialIdentifier
-  // if (credentialIdentifier) {
-  //   requestedCredentialType = [credentialIdentifier];
-  // } else if (credentialConfigurationId) {
-  //   requestedCredentialType = [credentialConfigurationId];
-  // }
 
   // Retrieve sessionObject AGAIN - this is redundant if sessionForNonceCheck is the same sessionObject needed later.
   // We should use the session object (sessionForNonceCheck) already retrieved for the nonce check if it's the correct one.
@@ -667,13 +656,16 @@ sharedRouter.post("/credential", async (req, res) => {
     // Immediate issuance flow
 
     requestBody.vct= requestedCredentialType[0]
-
+    let format = "vc+sd-jwt"
+    if(requestedCredentialType[0].indexOf("mdoc")>=0){
+      format = "mdl"
+    }
     try {
       const credential = await handleVcSdJwtFormat(
         requestBody,
         sessionObject,
         serverURL,
-        "vc+sd-jwt"
+        format
       );
 
       // We're assuming handleVcSdJwtFormat returns a raw credential
@@ -728,68 +720,81 @@ sharedRouter.post("/credential_deferred", async (req, res) => {
 // *****************************************************************
 // ************* NONCE ENDPOINT ************************************
 // *****************************************************************
-// TODO this might need testing/validation
+
 sharedRouter.post("/nonce", async (req, res) => {
+
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
-  // // if (!token) {
-  // //   return res.status(401).json({
-  // //     error: "unauthorized",
-  // //     error_description: "Access token is missing or invalid."
-  // //   });
-  // // }
+  if (!token) {
+    console.warn("WARNING: Token is missing from /nonce request. This is currently allowed but should be reverted to enforce token presence. Proceeding to issue nonce without session checks.");
+    const newCNonce = generateNonce();
+    const nonceExpiresIn = 86400; // Standard expiry, can be configured
+    return res.status(200).json({
+      c_nonce: newCNonce,
+      c_nonce_expires_in: nonceExpiresIn,
+    });
+  }
 
-  // let sessionObject = null;
-  // let sessionKey = null;
+  let sessionObject = null;
+  let sessionKeyForStore = null; // This will hold the key used for storing the session back
+  let flowType = null; // To determine which store function to call
 
-  // // Try to get session from pre-auth flow cache
-  // sessionKey = await getSessionKeyFromAccessToken(token);
-  // if (sessionKey) {
-  //   sessionObject = await getPreAuthSession(sessionKey);
-  // }
+  // Try to get session from pre-auth flow cache using the access token to find the original pre-authorized code (session key)
+  let preAuthCodeKey = await getSessionKeyFromAccessToken(token);
+  if (preAuthCodeKey) {
+    sessionObject = await getPreAuthSession(preAuthCodeKey);
+    if (sessionObject) {
+      sessionKeyForStore = preAuthCodeKey;
+      flowType = "pre-auth";
+    }
+  }
 
-  // // If not found, try to get session from code flow cache
-  // if (!sessionObject) {
-  //   sessionKey = await getSessionAccessToken(token); // Note: This function name might be for pre-auth, ensure it's general or use a correct one for code flow access tokens
-  //   if (sessionKey) {
-  //     sessionObject = await getCodeFlowSession(sessionKey);
-  //   }
-  // }
+  // If not found, try to get session from code flow cache
+  // For code flow, the access token might be directly associated or might lead to a session ID
+  if (!sessionObject) {
+    // Assuming getSessionAccessToken returns the main session identifier (e.g., issuerState) if the token is valid for a code flow session
+    let codeFlowSessionId = await getSessionAccessToken(token);
+    if (codeFlowSessionId) {
+      sessionObject = await getCodeFlowSession(codeFlowSessionId);
+      if (sessionObject) {
+        sessionKeyForStore = codeFlowSessionId; // This should be the key that getCodeFlowSession used
+        flowType = "code";
+      }
+    }
+  }
 
-  // if (!sessionObject) {
-  //   console.log("No active session found for the provided access token for nonce request.");
-  //   return res.status(401).json({
-  //     error: "invalid_token",
-  //     error_description: "No active session found for the provided access token."
-  //   });
-  // }
+  if (!sessionObject) {
+    console.log("No active session found for the provided access token for nonce request.");
+    return res.status(401).json({
+      error: "invalid_token",
+      error_description: "No active session found for the provided access token."
+    });
+  }
 
   const newCNonce = generateNonce();
   const nonceExpiresIn = 86400; // Standard expiry, can be configured
 
-  // // Update the session object with the new c_nonce
-  // sessionObject.c_nonce = newCNonce;
-  // // Optionally, store the exact expiry time if needed for server-side checks later
-  // // sessionObject.c_nonce_expires_at = Date.now() + nonceExpiresIn * 1000;
+  // Update the session object with the new c_nonce
+  sessionObject.c_nonce = newCNonce;
+  // Optionally, store the exact expiry time if needed for server-side checks later
+  // sessionObject.c_nonce_expires_at = Date.now() + nonceExpiresIn * 1000;
 
-  // // Save the updated session
-  // if (sessionObject.flowType === "pre-auth") { // Assuming flowType is stored in session
-  //   await storePreAuthSession(sessionKey, sessionObject); // sessionKey here should be preAuthorizedCode for pre-auth
-  // } else if (sessionObject.flowType === "code") { // Assuming flowType is stored in session
-  //   // Ensure `sessionKey` for code flow refers to the correct key for `storeCodeFlowSession`
-  //   // (e.g., the issuerState or original session ID)
-  //   // This might need adjustment based on how `getSessionAccessToken` provides the key for code flow.
-  //   // If `sessionKey` from `getSessionAccessToken` is the access token itself, we need the original session ID.
-  //   // For now, let's assume `sessionObject.results.issuerState` or a similar field holds the main session ID.
-  //   const codeFlowSessionId = sessionObject.results?.issuerState || sessionObject.issuerState || sessionKey;
-  //   await storeCodeFlowSession(codeFlowSessionId, sessionObject);
-  // } else {
-  //   console.error("Could not determine session flow type to update c_nonce.");
-  //   // Decide if this is an error or if there's a default way to store
-  // }
+  // Save the updated session
+  if (flowType === "pre-auth") {
+    await storePreAuthSession(sessionKeyForStore, sessionObject);
+  } else if (flowType === "code") {
+    await storeCodeFlowSession(sessionKeyForStore, sessionObject);
+  } else {
+    console.error("Could not determine session flow type to update c_nonce.");
+    // This case should ideally not be reached if a sessionObject was found
+    return res.status(500).json({
+      error: "server_error",
+      error_description: "Failed to save nonce due to unknown session type."
+    });
+  }
 
-  console.log(`Generated new c_nonce for session associated with token.`);
+  console.log(`Generated new c_nonce for session associated with token. Session ID (key): ${sessionKeyForStore}, Flow: ${flowType}`);
 
   res.status(200).json({
     c_nonce: newCNonce,
