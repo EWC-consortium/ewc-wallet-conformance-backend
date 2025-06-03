@@ -91,7 +91,7 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
   headers["authorization"]; // Fetch the 'Authorization' header
   // console.log("token_endpoint authorizatiotn header-" + authorizationHeader);
   const body = req.body;
-  const authorizationDetails = body.authorization_details;
+  let authorizationDetails = body.authorization_details;
 
   const clientAttestation = req.headers["OAuth-Client-Attestation"]; //this is the WUA
   const pop = req.headers["OAuth-Client-Attestation-PoP"];
@@ -238,8 +238,8 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
         let existingCodeSession = await getCodeFlowSession(issuanceSessionId);
         if (existingCodeSession) {
 
-          authorizationDetails =existingCodeSession.authorization_details;
-          scope = existingCodeSession.scope;
+          // authorizationDetails =existingCodeSession.authorization_details;
+          let scope = existingCodeSession.scope;
 
 
           // TODO: if PKCE validation fails, the flow should respond with an error
@@ -285,15 +285,16 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
               chosenCredentialConfigurationId,
             ];
             tokenResponse.authorization_details = parsedAuthDetails;
-          }else{
-            tokenResponse.authorization_details = [
-              {
-                type: "openid_credential",
-                credential_configuration_id: scope,
-                credential_identifiers: [scope],
-              },
-            ];
           }
+          // else{
+          //   tokenResponse.authorization_details = [
+          //     {
+          //       type: "openid_credential",
+          //       credential_configuration_id: scope,
+          //       credential_identifiers: [scope],
+          //     },
+          //   ];
+          // }
           return res.json(tokenResponse);
         }
       }
@@ -514,7 +515,6 @@ sharedRouter.post("/credential", async (req, res) => {
           }
 
           // c_nonce check - CRITICAL for replay protection
-          //TODO CHECK THIS IMPLEMENTATION
           // Retrieve the session object to get the server-side c_nonce
           // This reuses the session retrieval logic that is already present later in this endpoint
           let sessionForNonceCheck = null;
@@ -540,11 +540,11 @@ sharedRouter.post("/credential", async (req, res) => {
               `Server c_nonce for the session not found. This is a server-side issue or session problem. 
               FOR NOW IT IS OK BUT SHOULD BE FIXED`
             );
-            // return res.status(500).json({
-            //   error: "server_error",
-            //   error_description:
-            //     "Could not retrieve server nonce for validation.",
-            // });
+            return res.status(500).json({
+              error: "server_error",
+              error_description:
+                "Could not retrieve server nonce for validation.",
+            });
           }
 
           if (proofPayload.nonce !== sessionForNonceCheck.c_nonce) {
@@ -552,11 +552,11 @@ sharedRouter.post("/credential", async (req, res) => {
               `Proof JWT nonce mismatch. Expected: ${sessionForNonceCheck.c_nonce}, Got: ${proofPayload.nonce}
               FOR NOW IT IS OK BUT SHOULD BE FIXED`
             );
-            // return res.status(400).json({
-            //   error: "invalid_proof",
-            //   error_description:
-            //     "Proof JWT nonce does not match expected server nonce.",
-            // });
+            return res.status(400).json({
+              error: "invalid_proof",
+              error_description:
+                "Proof JWT nonce does not match expected server nonce.",
+            });
           }
           // console.log("Proof JWT nonce verified."); // Already have a similar log message later
 
@@ -726,15 +726,15 @@ sharedRouter.post("/nonce", async (req, res) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
-  if (!token) {
-    console.warn("WARNING: Token is missing from /nonce request. This is currently allowed but should be reverted to enforce token presence. Proceeding to issue nonce without session checks.");
-    const newCNonce = generateNonce();
-    const nonceExpiresIn = 86400; // Standard expiry, can be configured
-    return res.status(200).json({
-      c_nonce: newCNonce,
-      c_nonce_expires_in: nonceExpiresIn,
-    });
-  }
+  // if (!token) {
+  //   console.warn("WARNING: Token is missing from /nonce request. This is currently allowed but should be reverted to enforce token presence. Proceeding to issue nonce without session checks.");
+  //   const newCNonce = generateNonce();
+  //   const nonceExpiresIn = 86400; // Standard expiry, can be configured
+  //   return res.status(200).json({
+  //     c_nonce: newCNonce,
+  //     c_nonce_expires_in: nonceExpiresIn,
+  //   });
+  // }
 
   let sessionObject = null;
   let sessionKeyForStore = null; // This will hold the key used for storing the session back
