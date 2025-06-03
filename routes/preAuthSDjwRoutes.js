@@ -104,6 +104,7 @@ router.get(["/offer-no-code"], async (req, res) => {
   const credentialType = req.query.credentialType
     ? req.query.credentialType
     : "VerifiablePortableDocumentA2SDJWT";
+  const signatureType = req.query.signatureType;
 
   let existingPreAuthSession = await getPreAuthSession(uuid);
   if (!existingPreAuthSession) {
@@ -113,7 +114,8 @@ router.get(["/offer-no-code"], async (req, res) => {
       persona: null,
       accessToken: null,
       flowType: "pre-auth",
-      isHaip: true
+      isHaip: false,
+      signatureType: signatureType
     });
   }
   let encodedCredentialOfferUri = encodeURIComponent(`${serverURL}/credential-offer-no-code/${uuid}?type=${credentialType}`)

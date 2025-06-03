@@ -47,6 +47,17 @@ const certificatePemX509 = fs.readFileSync(
   "utf8"
 );
 
+// Load issuer configuration for KID and JWK header preference
+let issuerConfigValues = {};
+try {
+  const issuerConfigRaw = fs.readFileSync("./data/issuer-config.json", "utf-8");
+  issuerConfigValues = JSON.parse(issuerConfigRaw);
+} catch (err) {
+  console.warn("Could not load ./data/issuer-config.json for KID, using defaults.", err);
+}
+const defaultSigningKid = issuerConfigValues.default_signing_kid || "aegean#authentication-key";
+
+
 // Helper functions for mDL generation
 
 // Convert PEM to DER ArrayBuffer (Node.js)
@@ -173,23 +184,54 @@ export async function handleVcSdJwtFormat(
   const vct = requestBody.vct;
 
   let signer, verifier;
+  let headerOptions; // Define headerOptions here to be populated based on sig type
 
-  if (
-    process.env.ISSUER_SIGNATURE_TYPE === "x509" ||
-    sessionObject.signatureType === "x509" ||
-    sessionObject.isHaip
-  ) {
-    console.log("x509 signature type");
+  const effectiveSignatureType = sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509"
+    ? "x509"
+    : sessionObject.signatureType;
+
+  if (effectiveSignatureType === "x509") {
+    console.log("x509 signature type selected.");
     ({ signer, verifier } = await createSignerVerifierX509(
       privateKeyPemX509,
       certificatePemX509
     ));
-  } else {
-    console.log("jwk signature type");
+    headerOptions = {
+      header: {
+        x5c: [pemToBase64Der(certificatePemX509)],
+      },
+    };
+  } else { // Covers "jwk" and "kid-jwk"
+    const publicJwkForSigning = pemToJWK(publicKeyPem, "public");
     ({ signer, verifier } = await createSignerVerifier(
       pemToJWK(privateKey, "private"),
-      pemToJWK(publicKeyPem, "public")
+      publicJwkForSigning
     ));
+
+    let joseHeader = {};
+    if (effectiveSignatureType === "jwk") {
+      console.log("jwk signature type selected: Using embedded JWK in header.");
+      joseHeader = { 
+        jwk: publicJwkForSigning,
+        alg: "ES256" // Algorithm must be specified when jwk is used in header
+      };
+    } else if (effectiveSignatureType === "kid-jwk") { // Assuming "kid-jwk" as the type for kid-based JWK signing
+      console.log(`kid-jwk signature type selected: Using KID: ${defaultSigningKid} in header.`);
+      joseHeader = { 
+        kid: defaultSigningKid,
+        alg: "ES256" // alg is also typically included with kid for clarity, though not strictly required by RFC7515 if kid is enough for resolution
+      };
+    } else {
+      // Fallback or default if signatureType is something else (e.g., a generic 'jwk' without specific instruction)
+      // For now, defaulting to KID if not explicitly 'jwk' for direct embedding.
+      // This matches the previous default behavior when jwkHeaderPreference was 'kid'.
+      console.warn(`Unspecified or unrecognized JWK signature type '${effectiveSignatureType}', defaulting to KID: ${defaultSigningKid}.`);
+      joseHeader = { 
+        kid: defaultSigningKid,
+        alg: "ES256"
+      };
+    }
+    headerOptions = { header: joseHeader };
   }
 
   console.log("vc+sd-jwt ", vct);
@@ -278,20 +320,6 @@ export async function handleVcSdJwtFormat(
   }
 
   // Prepare issuance headers
-  const headerOptions =
-    (sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509") ||
-    sessionObject.signatureType === "x509"
-      ? {
-          header: {
-            x5c: [pemToBase64Der(certificatePemX509)],
-          },
-        }
-      : {
-          header: {
-            kid: "aegean#authentication-key",
-          },
-        };
-
   const now = new Date();
   const expiryDate = new Date(now);
   expiryDate.setMonth(now.getMonth() + 6);

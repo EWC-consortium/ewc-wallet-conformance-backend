@@ -15,6 +15,16 @@ const oauthConfig = JSON.parse(
   fs.readFileSync("./data/oauth-config.json", "utf-8")
 );
 
+// Load defaultSigningKid from issuer-config.json, similar to credGenerationUtils.js
+let issuerConfigValues = {};
+try {
+  const issuerConfigRaw = fs.readFileSync("./data/issuer-config.json", "utf-8");
+  issuerConfigValues = JSON.parse(issuerConfigRaw);
+} catch (err) {
+  console.warn("Could not load ./data/issuer-config.json for defaultSigningKid in metadataroutes, using defaults.", err);
+}
+const defaultSigningKid = issuerConfigValues.default_signing_kid || "aegean#authentication-key";
+
 const jwks = pemToJWK(publicKeyPem, "public");
 
 
@@ -66,8 +76,8 @@ metadataRouter.get(
 metadataRouter.get(["/", "/jwks"], (req, res) => {
   res.json({
     keys: [
-      { ...jwks, kid: `aegean#authentication-key`, use: "sig" },
-      { ...jwks, kid: `aegean#agreement-key`, use: "keyAgreement" }, //key to encrypt the sd-jwt response])
+      { ...jwks, kid: defaultSigningKid, use: "sig" },
+      { ...jwks, kid: `${defaultSigningKid}-agreement`, use: "keyAgreement" },
     ],
   });
 });
@@ -93,8 +103,8 @@ which contains the Issuer's public keys. The value of this field MUST be a JSON 
       issuer: serverURL,
       jwks : {
         keys: [
-          { ...jwks, kid: `aegean#authentication-key`, use: "sig" },
-          { ...jwks, kid: `aegean#agreement-key`, use: "keyAgreement" }, //key to encrypt the sd-jwt response])
+          { ...jwks, kid: defaultSigningKid, use: "sig" },
+          { ...jwks, kid: `${defaultSigningKid}-agreement`, use: "keyAgreement" },
         ]
       }
 

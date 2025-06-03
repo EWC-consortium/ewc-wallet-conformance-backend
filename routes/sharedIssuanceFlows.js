@@ -242,21 +242,19 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
           let scope = existingCodeSession.scope;
 
 
-          // TODO: if PKCE validation fails, the flow should respond with an error
           const pkceVerified = await validatePKCE(
             existingCodeSession,
-            code, // code from request
-            code_verifier, // code_verifier from request
-            existingCodeSession.requests // PKCE challenge stored here (e.g., existingCodeSession.requests.challenge)
+            code_verifier, // Pass only code_verifier, original code is not needed here
+            existingCodeSession.requests.challenge // Pass the stored challenge directly
           );
 
-          // if (!pkceVerified) {
-          //    console.log("PKCE verification failed for authorization_code flow.");
-          //    return res.status(400).json({
-          //       error: "invalid_grant",
-          //       error_description: "PKCE verification failed."
-          //    });
-          // }
+          if (!pkceVerified) {
+             console.log("PKCE verification failed for authorization_code flow.");
+             return res.status(400).json({
+                error: "invalid_grant",
+                error_description: "PKCE verification failed."
+             });
+          }
 
           existingCodeSession.results.status = "success";
           existingCodeSession.status = "success";
@@ -837,17 +835,31 @@ sharedRouter.get(["/issueStatus"], async (req, res) => {
   }
 });
 
-async function validatePKCE(sessions, code, code_verifier, issuanceResults) {
-  if ((code = sessions.requests.challenge)) {
-    let challenge = sessions.challenge;
-    let tester = await base64UrlEncodeSha256(code_verifier);
-    if (tester === challenge) {
-      codeSessions.results.status = "success";
-      console.log("PKCE verification success");
-      return true;
-    }
+async function validatePKCE(session, code_verifier, stored_code_challenge) {
+  // The 'code' (authorization code) parameter is not needed here.
+  // 'issuanceResults' parameter was also not used and can be removed.
+
+  if (!stored_code_challenge) {
+    console.log("PKCE challenge not found in session.");
+    return false;
   }
+  if (!code_verifier) {
+    console.log("Code verifier not provided in token request.");
+    return false;
+  }
+
+  let tester = await base64UrlEncodeSha256(code_verifier);
+  if (tester === stored_code_challenge) {
+    // Optionally, update the session status here if desired, e.g.,
+    // session.pkceVerified = true;
+    // Or rely on the calling function to update overall session status.
+    console.log("PKCE verification success");
+    return true;
+  }
+
   console.log("PKCE verification FAILED!!!");
+  console.log(`Expected challenge: ${stored_code_challenge}`);
+  console.log(`Derived from verifier: ${tester}`);
   return false;
 }
 

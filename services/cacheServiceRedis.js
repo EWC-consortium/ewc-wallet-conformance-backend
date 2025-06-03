@@ -46,7 +46,7 @@ export async function getPreAuthSession(sessionKey) {
     const key = `pre-auth-sessions:${sessionKey}`;
     const result = await client.get(key);
     if (result) {
-      console.log("Session retrieved:", JSON.parse(result));
+      // console.log("Session retrieved:", JSON.parse(result));
       return JSON.parse(result);
     } else {
       console.log("Session not found for key:", key);
@@ -94,7 +94,7 @@ export async function getCodeFlowSession(sessionKey) {
     const key = `code-flow-sessions:${sessionKey}`;
     const result = await client.get(key);
     if (result) {
-      console.log("Session retrieved:", JSON.parse(result));
+      // console.log("Session retrieved:", JSON.parse(result));
       return JSON.parse(result);
     } else {
       console.log("Session not found for key:", key);
@@ -194,7 +194,7 @@ export async function getVPSession(sessionKey) {
     const key = `vp-sessions:${sessionKey}`;
     const result = await client.get(key);
     if (result) {
-      console.log("VP Session retrieved:", JSON.parse(result));
+      // console.log("VP Session retrieved:", JSON.parse(result));
       return JSON.parse(result);
     } else {
       console.log("Session not found for key:", key);
