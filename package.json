@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "SERVER_URL=https://e1bb-2a02-587-8705-2f00-120b-cc01-ea24-3051.ngrok-free.app  node server.js"
+    "dev": "SERVER_URL=https://18ed-2a02-587-8703-400-2e95-abe0-9597-977.ngrok-free.app   node server.js"
   },
   "author": "",
   "license": "ISC",
@@ -15,6 +15,7 @@
     "@ceramicnetwork/key-did-resolver": "^0.2.2",
     "@digitalbazaar/did-method-key": "^5.2.0",
     "@jorgeferrero/stream-to-buffer": "^2.0.6",
+    "@m-doc/mdl": "^0.1.0",
     "@sd-jwt/core": "^0.6.1",
     "@sd-jwt/crypto-nodejs": "^0.7.2",
     "@sd-jwt/sd-jwt-vc": "^0.7.2",
@@ -28,6 +29,7 @@
     "jsonpath": "^1.1.1",
     "jsonpointer": "^5.0.1",
     "jsonwebtoken": "^9.0.2",
+    "jwk-to-pem": "^2.0.7",
     "key-did-resolver": "^4.0.0",
     "multicodec": "^3.2.1",
     "multiformats": "^13.3.1",

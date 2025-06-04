@@ -50,63 +50,47 @@ export function buildIdToken(issuerURL, privateKey) {
 export function buildVPbyValue(
   client_id,
   presentation_definition_uri,
-  client_id_scheme = "redirect_uri",
-  client_metadata_uri,
-  redirect_uri,
-  state = "af0ifjsldkj",
+  client_id_scheme,
+  client_metadata,
+  response_uri,
+  state,
   response_type = "vp_token",
   nonce,
+  response_mode = "direct_post",
+  dcql_query = null
 ) {
-  if(!nonce) nonce = generateNonce(16);
-  console.log("response_type:", response_type); // Debug log
-  
-  if (client_id_scheme == "redirect_uri") {
-    redirect_uri = client_id;
+  // Validate response_mode
+  const allowedResponseModes = ["direct_post", "direct_post.jwt"];
+  if (!allowedResponseModes.includes(response_mode)) {
+    throw new Error(`Invalid response_mode. Must be one of: ${allowedResponseModes.join(", ")}`);
   }
 
-  if (response_type == "id_token") {
-    let resp =
-      "openid4vp://?" +
-      "client_id=" +
-      encodeURIComponent(client_id) +
-      "&response_type=" +
-      response_type +
-      "&response_mode=direct_post" +
-      "&response_uri=" +
-      encodeURIComponent(redirect_uri) +
-      "&client_id_scheme=" +
-      client_id_scheme +
-      "&client_metadata_uri=" +
-      encodeURIComponent(client_metadata_uri) +
-      "&nonce=" + nonce +
-      "&state=" +
-      state +
-      "&scope=openid"+
-      "&id_token_type=subject_signed"
-      ;
-    return resp;
-  } else {
-    let res =
-      "openid4vp://?" +
-      "client_id=" +
-      encodeURIComponent(client_id) +
-      "&response_type=" +
-      response_type +
-      "&response_mode=direct_post" +
-      "&response_uri=" +
-      encodeURIComponent(redirect_uri) +
-      "&presentation_definition_uri=" +
-      encodeURIComponent(presentation_definition_uri) +
-      "&client_id_scheme=" +
-      client_id_scheme +
-      "&client_metadata_uri=" +
-      encodeURIComponent(client_metadata_uri) +
-      "&nonce=" + nonce + 
-      "&state=" +
-      state 
-      +"&scope=code"
-    return res;
+  if (!nonce) nonce = generateNonce(16);
+  if (!state) state = generateNonce(16);
+
+  let vpRequest = "openid4vp://?";
+  vpRequest += `client_id=${encodeURIComponent(client_id)}`;
+  vpRequest += `&client_id_scheme=${encodeURIComponent(client_id_scheme)}`;
+  vpRequest += `&response_type=${encodeURIComponent(response_type)}`;
+  vpRequest += `&response_mode=${encodeURIComponent(response_mode)}`;
+  vpRequest += `&response_uri=${encodeURIComponent(response_uri)}`;
+  vpRequest += `&nonce=${encodeURIComponent(nonce)}`;
+  vpRequest += `&state=${encodeURIComponent(state)}`;
+
+  if (presentation_definition_uri) {
+    vpRequest += `&presentation_definition_uri=${encodeURIComponent(presentation_definition_uri)}`;
   }
+
+  // Handle client_metadata (object)
+  if (client_metadata && typeof client_metadata === 'object') {
+    vpRequest += `&client_metadata=${encodeURIComponent(JSON.stringify(client_metadata))}`;
+  }
+
+  if (dcql_query) {
+    vpRequest += `&dcql_query=${encodeURIComponent(JSON.stringify(dcql_query))}`;
+  }
+
+  return vpRequest;
 }
 
 

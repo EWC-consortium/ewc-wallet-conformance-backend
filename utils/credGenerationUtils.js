@@ -21,7 +21,20 @@ import {
   createPhotoIDAttestationPayload,
   getFerryBoardingPassSDJWTData,
   createPCDAttestationPayload,
+  getLoyaltyCardSDJWTDataWithPayload,
 } from "../utils/credPayloadUtil.js";
+
+import {
+  MDoc,
+  IssuerSignedDocument,
+} from "@m-doc/mdl";
+import {
+  createSign,
+  createPrivateKey,
+  createHash,
+  randomBytes,
+} from "crypto";
+import { Buffer } from "buffer";
 
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
@@ -34,16 +47,193 @@ const certificatePemX509 = fs.readFileSync(
   "utf8"
 );
 
+// Load issuer configuration for KID and JWK header preference
+let issuerConfigValues = {};
+try {
+  const issuerConfigRaw = fs.readFileSync("./data/issuer-config.json", "utf-8");
+  issuerConfigValues = JSON.parse(issuerConfigRaw);
+} catch (err) {
+  console.warn("Could not load ./data/issuer-config.json for KID, using defaults.", err);
+}
+const defaultSigningKid = issuerConfigValues.default_signing_kid || "aegean#authentication-key";
+
+
+// Helper functions for mDL generation
+
+// Convert PEM to DER ArrayBuffer (Node.js)
+function pemToDerArrayBufferNode(pem) {
+  if (!pem) return null;
+  const b64 = pem.replace(/(-----(BEGIN|END)[\w\s]+-----|[\n\r])/g, "");
+  return Buffer.from(b64, "base64").buffer;
+}
+
+// Convert JWK to a COSE Key Map structure (simplified)
+// Note: @m-doc/mdl might offer a utility like coseFromJwk which should be preferred
+function jwkToCoseKeyMap(jwk) {
+  if (!jwk || jwk.kty !== "EC" || jwk.crv !== "P-256" || !jwk.x || !jwk.y) {
+    console.warn("Unsupported or incomplete JWK for COSE conversion:", jwk);
+    // Depending on mDL requirements, may need to throw error or return specific empty structure
+    return new Map(); 
+  }
+  const coseKey = new Map();
+  coseKey.set(1, 2); // kty: EC2 (Elliptic Curve Keys)
+  coseKey.set(-1, 1); // crv: P-256
+  coseKey.set(-2, Buffer.from(jwk.x, "base64url")); // x-coordinate
+  coseKey.set(-3, Buffer.from(jwk.y, "base64url")); // y-coordinate
+  return coseKey;
+}
+
+function generateRandomBytesSyncForMdl(length) {
+  return randomBytes(length).buffer;
+}
+
+async function sha256HasherForMdl(data /*: ArrayBuffer */) {
+  const hash = createHash("sha256");
+  hash.update(Buffer.from(data));
+  return hash.digest().buffer;
+}
+
+// Creates a signer for mDL's signIssuerAuth
+async function createMdlSignerForKey(
+  signatureType, // "x509" or "jwk"
+  isHaip, // boolean
+  // For X.509
+  x509PrivateKeyPem,
+  // For JWK
+  jwkPrivateKeyPem // e.g., content of private-key.pem
+) {
+  let nodePrivateKey;
+  const alg = "ES256"; // mDL typically uses ES256 with P-256 keys
+
+  const effectiveSignatureType =
+    (isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509") ||
+    signatureType === "x509"
+      ? "x509"
+      : "jwk";
+
+  if (effectiveSignatureType === "x509") {
+    if (!x509PrivateKeyPem) throw new Error("X.509 private key PEM is required for mDL signing.");
+    nodePrivateKey = createPrivateKey(x509PrivateKeyPem);
+  } else { // jwk
+    if (!jwkPrivateKeyPem) throw new Error("JWK private key PEM is required for mDL signing.");
+    const privateJwk = pemToJWK(jwkPrivateKeyPem, "private"); // pemToJWK is from cryptoUtils
+    nodePrivateKey = createPrivateKey({ key: privateJwk, format: "jwk" });
+  }
+
+  return {
+    sign: async (dataToSign /*: ArrayBuffer */) => {
+      const signInstance = createSign("SHA256"); // ES256 uses SHA256 hash
+      signInstance.update(Buffer.from(dataToSign));
+      const signature = signInstance.sign({
+        key: nodePrivateKey,
+        dsaEncoding: "ieee-p1363", // For raw r||s signature format
+      });
+      return signature.buffer;
+    },
+    alg: alg,
+    // x5c: if effectiveSignatureType is 'x509', the cert could be here or passed to signIssuerAuth
+  };
+}
+
+// Maps claims from existing payload to mDL format
+// This is a simplified mapper and needs to be extended for different VCTs
+function mapClaimsToMdl(claims, vct) {
+  const mdlClaims = {};
+  // Standard mDL claims (ISO 18013-5) often go into 'org.iso.18013.5.1' namespace
+  // Mapping common claims:
+  if (claims.family_name) mdlClaims.family_name = claims.family_name;
+  if (claims.given_name) mdlClaims.given_name = claims.given_name;
+  
+  // mDL uses 'birth_date', SD-JWT might use 'birthdate'
+  if (claims.birthdate) mdlClaims.birth_date = claims.birthdate; 
+  else if (claims.birth_date) mdlClaims.birth_date = claims.birth_date;
+
+  // mDL 'issue_date' and 'expiry_date' for the document itself
+  if (claims.issuance_date) mdlClaims.issue_date = claims.issuance_date; // Map PID's issuance_date
+  else if (claims.issue_date) mdlClaims.issue_date = claims.issue_date;
+
+  if (claims.expiry_date) mdlClaims.expiry_date = claims.expiry_date; // Map PID's expiry_date
+
+  // Placeholder for other claims and VCT specific mappings
+  // For example, for a driver's license (mDL docType):
+  // if (vct === 'some_driver_license_vct') {
+  //   mdlClaims.driving_privileges = claims.driving_privileges;
+  //   mdlClaims.portrait = claims.portrait; // Needs to be bytes
+  //   mdlClaims.document_number = claims.document_number;
+  //   mdlClaims.issuing_country = claims.issuing_country;
+  // }
+
+  if (claims.unique_id && (vct === "VerifiablePIDSDJWT" || vct === "urn:eu.europa.ec.eudi:pid:1")){
+      mdlClaims.unique_identifier = claims.unique_id; // Example mapping for PID
+  }
+
+  // Add more specific mappings based on vct and mDL data element definitions
+  // console.log("Mapped mDL claims:", mdlClaims);
+  return mdlClaims;
+}
+
+const DOC_TYPE_MDL = "org.iso.18013.5.1.mDL";
+const DEFAULT_MDL_NAMESPACE = "org.iso.18013.5.1";
+
 export async function handleVcSdJwtFormat(
   requestBody,
   sessionObject,
-  serverURL
+  serverURL,
+  format="vc+sd-jwt"
 ) {
   const vct = requestBody.vct;
-  let { signer, verifier } = await createSignerVerifierX509(
-    privateKeyPemX509,
-    certificatePemX509
-  );
+
+  let signer, verifier;
+  let headerOptions; // Define headerOptions here to be populated based on sig type
+
+  const effectiveSignatureType = sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509"
+    ? "x509"
+    : sessionObject.signatureType;
+
+  if (effectiveSignatureType === "x509") {
+    console.log("x509 signature type selected.");
+    ({ signer, verifier } = await createSignerVerifierX509(
+      privateKeyPemX509,
+      certificatePemX509
+    ));
+    headerOptions = {
+      header: {
+        x5c: [pemToBase64Der(certificatePemX509)],
+      },
+    };
+  } else { // Covers "jwk" and "kid-jwk"
+    const publicJwkForSigning = pemToJWK(publicKeyPem, "public");
+    ({ signer, verifier } = await createSignerVerifier(
+      pemToJWK(privateKey, "private"),
+      publicJwkForSigning
+    ));
+
+    let joseHeader = {};
+    if (effectiveSignatureType === "jwk") {
+      console.log("jwk signature type selected: Using embedded JWK in header.");
+      joseHeader = { 
+        jwk: publicJwkForSigning,
+        alg: "ES256" // Algorithm must be specified when jwk is used in header
+      };
+    } else if (effectiveSignatureType === "kid-jwk") { // Assuming "kid-jwk" as the type for kid-based JWK signing
+      console.log(`kid-jwk signature type selected: Using KID: ${defaultSigningKid} in header.`);
+      joseHeader = { 
+        kid: defaultSigningKid,
+        alg: "ES256" // alg is also typically included with kid for clarity, though not strictly required by RFC7515 if kid is enough for resolution
+      };
+    } else {
+      // Fallback or default if signatureType is something else (e.g., a generic 'jwk' without specific instruction)
+      // For now, defaulting to KID if not explicitly 'jwk' for direct embedding.
+      // This matches the previous default behavior when jwkHeaderPreference was 'kid'.
+      console.warn(`Unspecified or unrecognized JWK signature type '${effectiveSignatureType}', defaulting to KID: ${defaultSigningKid}.`);
+      joseHeader = { 
+        kid: defaultSigningKid,
+        alg: "ES256"
+      };
+    }
+    headerOptions = { header: joseHeader };
+  }
+
   console.log("vc+sd-jwt ", vct);
 
   if (!requestBody.proof || !requestBody.proof.jwt) {
@@ -56,14 +246,6 @@ export async function handleVcSdJwtFormat(
     complete: true,
   });
   const holderJWKS = decodedWithHeader.header;
-
-  const isHaip = sessionObject ? sessionObject.isHaip : false;
-  if (!isHaip) {
-    ({ signer, verifier } = await createSignerVerifier(
-      pemToJWK(privateKey, "private"),
-      pemToJWK(publicKeyPem, "public")
-    ));
-  }
 
   const sdjwt = new SDJwtVcInstance({
     signer,
@@ -119,7 +301,13 @@ export async function handleVcSdJwtFormat(
       credPayload = createPhotoIDAttestationPayload(issuerName);
       break;
     case "eu.europa.ec.eudi.pcd.1":
+    case "urn:eu.europa.ec.eudi:pid:1:mso_mdoc":
       credPayload = createPCDAttestationPayload(issuerName);
+      break;
+    case "LoyaltyCard":
+      credPayload = getLoyaltyCardSDJWTDataWithPayload(
+        sessionObject.credentialPayload
+      );
       break;
     default:
       throw new Error(`Unsupported credential type: ${credType}`);
@@ -132,18 +320,6 @@ export async function handleVcSdJwtFormat(
   }
 
   // Prepare issuance headers
-  const headerOptions = isHaip
-    ? {
-        header: {
-          x5c: [pemToBase64Der(certificatePemX509)],
-        },
-      }
-    : {
-        header: {
-          kid: "aegean#authentication-key",
-        },
-      };
-
   const now = new Date();
   const expiryDate = new Date(now);
   expiryDate.setMonth(now.getMonth() + 6);
@@ -162,12 +338,103 @@ export async function handleVcSdJwtFormat(
     headerOptions
   );
 
-  return {
-    format: "vc+sd-jwt",
-    credential,
-    c_nonce: generateNonce(),
-    c_nonce_expires_in: 86400,
-  };
+  // console.log("Credential issued: ", credential);
+
+  if (format === "vc+sd-jwt") {
+    console.log("Credential issued: ", credential);
+    return credential;
+    // format: "vc+sd-jwt",
+    // c_nonce: generateNonce(),
+    // c_nonce_expires_in: 86400,
+  }
+  if (format === "mDL" || format === "mdl") {
+    console.log("Attempting to generate mDL credential...");
+    try {
+      const mdlSignerInstance = await createMdlSignerForKey(
+        sessionObject.signatureType, // "x509" or "jwk"
+        sessionObject.isHaip,
+        privateKeyPemX509, // x509 private key
+        privateKey // jwk private key (loaded from private-key.pem)
+      );
+
+      const mDLClaimsMapped = mapClaimsToMdl(credPayload.claims, vct);
+
+      const issuedDocument = new IssuerSignedDocument({
+        docType: DOC_TYPE_MDL,
+      });
+
+      // Add claims to the default mDL namespace
+      await issuedDocument.addNamespace(
+        DEFAULT_MDL_NAMESPACE,
+        mDLClaimsMapped,
+        generateRandomBytesSyncForMdl
+      );
+      
+      const holderJwkForDeviceKey = holderJWKS.jwk ? await jwkToCoseKeyMap(holderJWKS.jwk) : new Map();
+      
+      const msoOptions = {
+         // deviceKey expects a COSE_Key structure. jwkToCoseKeyMap provides a Map.
+         // If @m-doc/mdl provides coseFromJwk, use: coseFromJwk(holderJWKS.jwk)
+        deviceKey: holderJwkForDeviceKey, 
+      };
+
+      let otherProtectedHeaders = new Map();
+      let otherUnprotectedHeaders = new Map();
+      let issuerCertificateDer;
+
+      const effectiveSignatureType =
+        (sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509") ||
+        sessionObject.signatureType === "x509"
+          ? "x509"
+          : "jwk";
+
+      if (effectiveSignatureType === "x509") {
+        issuerCertificateDer = pemToDerArrayBufferNode(certificatePemX509);
+        if (issuerCertificateDer) {
+          // COSE header for x5c chain is 33
+          otherProtectedHeaders.set(33, [issuerCertificateDer]); 
+        }
+        // For X.509, a kid might be derived from cert, or not used if x5c is present
+      } else { // JWK
+        if(headerOptions.header.kid) {
+            otherUnprotectedHeaders.set(4, Buffer.from(headerOptions.header.kid, 'utf-8')); // COSE kid is label 4
+        }
+      }
+      
+      // Validity information
+      const mDLValidityInfo = {
+        signed: now, // current date object
+        validFrom: now, // current date object
+        validUntil: expiryDate, // expiry date object
+      };
+
+      await issuedDocument.signIssuerAuth(
+        { alg: mdlSignerInstance.alg, signer: mdlSignerInstance.sign }, // Corrected structure
+        { digestAlgorithm: "SHA-256", hasher: sha256HasherForMdl }, // Hash options
+        mDLValidityInfo, // Validity info
+        msoOptions, // Device key options (for MSO)
+        otherProtectedHeaders, // Other protected headers (e.g., x5c)
+        otherUnprotectedHeaders // Other unprotected headers (e.g., kid for JWK)
+      );
+
+      const mobileDocument = new MDoc({
+        documents: [issuedDocument],
+      });
+
+      const encodedMobileDocument = mobileDocument.encode(); // Returns ArrayBuffer
+      // Convert to hex or base64url for transmission
+      const encodedMobileDocumentHex = Buffer.from(encodedMobileDocument).toString("hex");
+      
+      console.log("mDL Credential generated (hex):", encodedMobileDocumentHex.substring(0,100) + "..."); // Log snippet
+      return encodedMobileDocumentHex;
+
+    } catch (error) {
+      console.error("Error generating mDL credential:", error);
+      // Fallback or re-throw, depending on desired behavior
+      // For now, re-throwing to make it visible
+      throw new Error(`Failed to generate mDL: ${error.message}`);
+    }
+  }
 }
 
 export async function handleVcSdJwtFormatDeferred(sessionObject, serverURL) {

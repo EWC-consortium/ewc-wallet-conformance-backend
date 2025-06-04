@@ -54,69 +54,84 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
   }
 
   let extractedClaims = [];
-  let keybindJwt;
+  let keybindJwt; // This might need to be an array if multiple SD-JWTs with different kbJwts are possible
 
   for (const descriptor of descriptorMap) {
     const vpResult = await processDescriptorEntry(
-      vpToken,
+      vpToken, // This is the outer JWT (VP) when path_nested is used
       descriptor,
       requestedInputDescriptors
     );
-    let submittedSdjwt;
 
-    try {
-      submittedSdjwt = JSON.parse(vpResult);
-    } catch (e) {
-      console.log(e);
-      submittedSdjwt = vpResult;
+    if (vpResult === null) {
+      console.warn(`Skipping descriptor with id '${descriptor.id}' due to null vpResult.`);
+      continue;
+    }
+    
+    // vpResult could be a single credential string or an array of them (from jp.query in nested).
+    // It could also be the original vpToken if it's a root jwt_vc_json or sd-jwt.
+    // Normalize to an array of credential strings to process.
+    let credentialStringsToProcess = [];
+    if (typeof vpResult === 'string') {
+        // If it's a root JWT (either sd-jwt or plain jwt_vc_json) or a single nested result
+        credentialStringsToProcess.push(vpResult);
+    } else if (Array.isArray(vpResult)) {
+        // If jp.query returned an array of JWT strings (nested case)
+        credentialStringsToProcess = vpResult.filter(item => typeof item === 'string');
+    } else {
+        console.warn(`vpResult for descriptor id '${descriptor.id}' is neither a string nor an array of strings. Skipping.`, vpResult);
+        continue;
     }
 
-    if (Array.isArray(submittedSdjwt)) {
-      for (const element of submittedSdjwt) {
-        try {
-          const decodedSdJwt = await decodeSdJwt(element, digest);
-          // if (isPaymentVP) {
-          //
+    if (credentialStringsToProcess.length === 0 && (descriptor.format === "vc+sd-jwt" || descriptor.format === "dc+sd-jwt" || descriptor.format === "jwt_vc_json" || descriptor.format === "jwt_vp")) {
+        // If vpResult was the vpToken itself (e.g. root and format matches sd-jwt or jwt_vc_json)
+        // and it wasn't caught by the string check (e.g. if vpToken itself was complex and processDescriptorEntry returned it directly),
+        // this is a fallback, though processDescriptorEntry should ideally return a string here.
+        // This might indicate an issue in processDescriptorEntry if vpResult is not a string for root jwt_vc_json/sd-jwt.
+        // For now, let's assume processDescriptorEntry returns the string for root cases.
+        // If vpResult IS the vpToken (outer JWT) and format is jwt_vc_json, it implies vpToken *is* the credential.
+        // If format is sd-jwt, vpToken *is* the sd-jwt.
+         console.log(`Processing vpResult for descriptor id '${descriptor.id}' which is likely the root vpToken.`)
+    }
 
-          keybindJwt = decodedSdJwt.kbJwt;
-          // console.log("keybindJwt -1");
-          // console.log(keybindJwt);
-          // }
 
+    for (const credString of credentialStringsToProcess) {
+      try {
+        if (descriptor.format === "vc+sd-jwt" || descriptor.format === "dc+sd-jwt" || descriptor.format === "jwt_vp") {
+          const decodedSdJwt = await decodeSdJwt(credString, digest);
+          if (decodedSdJwt.kbJwt) { // Check if kbJwt exists
+            keybindJwt = decodedSdJwt.kbJwt; // Assign if present. Note: overwrites if multiple SD-JWTs have kbJwt.
+          }
           const claims = await getClaims(
             decodedSdJwt.jwt.payload,
             decodedSdJwt.disclosures,
             digest
           );
           extractedClaims.push(claims);
-        } catch (e) {
-          console.error("Error decoding submitted sdjwt:", element, e);
-          // Optionally, you can choose to throw the error or continue processing other elements
-          throw new Error("Failed to decode submitted sdjwt.");
+        } else if (descriptor.format === "jwt_vc_json") {
+          const decodedJwt = await decodeJwtVC(credString); // Using your existing decodeJwtVC
+          if (decodedJwt && decodedJwt.payload) {
+            extractedClaims.push(decodedJwt.payload);
+            // keybindJwt is typically not part of a plain jwt_vc_json unless a custom mechanism is used.
+            // If there's a cnf claim with jwk, it could be related but not directly a kbJwt.
+          } else {
+            console.error("Failed to decode jwt_vc_json or payload missing:", credString);
+            throw new Error("Failed to decode jwt_vc_json.");
+          }
+        } else {
+          console.warn(`Unsupported format '${descriptor.format}' for descriptor id '${descriptor.id}'. Skipping credential.`);
         }
-      }
-    } else {
-      try {
-        const decodedSdJwt = await decodeSdJwt(submittedSdjwt, digest);
-        keybindJwt = decodedSdJwt.kbJwt;
-        // console.log("keybindJwt -2");
-        // console.log(keybindJwt);
-
-        const claims = await getClaims(
-          decodedSdJwt.jwt.payload,
-          decodedSdJwt.disclosures,
-          digest
-        );
-        extractedClaims.push(claims);
       } catch (e) {
-        console.error("Error decoding submitted sdjwt:", submittedSdjwt, e);
-        throw new Error("Failed to decode submitted sdjwt.");
+        console.error(`Error processing credential for descriptor id '${descriptor.id}', format '${descriptor.format}':`, credString, e);
+        // Decide if one error should stop all processing or just skip this credential
+        // For now, let's throw to indicate a problem with a specific submission component.
+        throw new Error(`Failed to process submitted credential for descriptor ${descriptor.id}.`);
       }
     }
   }
 
-  console.log("keybindJwt -3");
-  console.log(keybindJwt);
+  // console.log("Final keybindJwt (could be from the last processed SD-JWT with one):");
+  // console.log(keybindJwt);
   return { sessionId, extractedClaims, keybindJwt };
 }
 
@@ -274,30 +289,43 @@ export async function processDescriptorEntry(
 
   if (!path_nested) {
     // the vp is in the root
-    if (format === "vc+sd-jwt") {
-      //return the root document that is the presented sd-jwt
+    if (format === "dc+sd-jwt" || format === "vc+sd-jwt" || format === "jwt_vc_json" || format === "jwt_vp") {
+      //return the root document that is the presented sd-jwt, jwt_vc_json, or jwt_vp
       return vpToken;
     } else {
       console.log(
-        "presentation_submission format " + format + " not supported"
+        "presentation_submission format (root) " + format + " not supported"
       );
       return null;
     }
   } else {
-    // the vp is nested
-    const acceptableCombinations =
-      format === "vc+sd-jwt" ||
-      format === "dc+sd-jwt" ||
-      (path_nested.format = "vc+sd-jwt");
-    if (acceptableCombinations) {
-      // decode the vpToken jwt
-      let decodedVpToken = await decodeJwtVC(vpToken);
-      //   console.log(decodedVpToken);
-      //return an array of matching query elements
-      return jp.query(decodedVpToken.payload, path_nested.path);
+    // The VP is nested. vpToken is an outer JWT containing the credential/presentation.
+    // `format` is the format of the target credential/presentation.
+    // `path_nested.path` is the JSONPath to find it within the decoded `vpToken`.
+    const supportedNestedFormats = [
+      "dc+sd-jwt", // Current/preferred for SD-JWT
+      "vc+sd-jwt", // Older/alternative for SD-JWT
+      "jwt_vc_json",
+      "jwt_vp"
+    ];
+
+    if (supportedNestedFormats.includes(format)) {
+      try {
+        // decode the vpToken jwt (the outer presentation/container)
+        let decodedVpToken = await decodeJwtVC(vpToken);
+        if (!decodedVpToken || !decodedVpToken.payload) {
+            console.error("Failed to decode vpToken or payload missing for nested VP/VC processing.");
+            return null;
+        }
+        //return an array of matching query elements from the payload (should be the JWT string(s))
+        return jp.query(decodedVpToken.payload, path_nested.path);
+      } catch (e) {
+        console.error("Error decoding or querying nested VP/VC:", e);
+        return null;
+      }
     } else {
       console.log(
-        "presentation_submission format " + format + " not supported"
+        `presentation_submission format (nested) "${format}" not supported for this extraction method.`
       );
       return null;
     }

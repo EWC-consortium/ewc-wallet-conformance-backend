@@ -117,10 +117,49 @@ export async function buildVpRequestJWT(
   kid = null, // Default to an empty object,
   serverURL,
   response_type = "vp_token",
-  nonce
+  nonce,
+  dcql_query = null,
+  transaction_data = null,
+  response_mode = "direct_post", // Add response_mode parameter with default
+  audience = "https://self-issued.me/v2" // New audience parameter
 ) {
   if(!nonce) nonce = generateNonce(16);
   const state = generateNonce(16);
+
+  // Validate response_mode
+  const allowedResponseModes = ["direct_post", "direct_post.jwt"];
+  if (!allowedResponseModes.includes(response_mode)) {
+    throw new Error(`Invalid response_mode. Must be one of: ${allowedResponseModes.join(", ")}`);
+  }
+
+  // Construct the JWT payload
+  let jwtPayload = {
+    response_type: response_type,
+    response_mode: response_mode,
+    client_id: client_id,
+    client_id_scheme: client_id_scheme,
+    response_uri: redirect_uri,
+    nonce: nonce,
+    state: state,
+    client_metadata: client_metadata,
+    iss: client_id,
+    aud: audience, // Use the audience parameter
+  };
+
+  // Add presentation_definition if provided and no dcql_query
+  if (presentation_definition && !dcql_query) {
+    jwtPayload.presentation_definition = presentation_definition;
+  }
+
+  // Add dcql_query if provided
+  if (dcql_query) {
+    jwtPayload.dcql_query = dcql_query;
+  }
+
+  // Add transaction_data if provided
+  if (transaction_data) {
+    jwtPayload.transaction_data = transaction_data;
+  }
 
   if (client_id_scheme === "x509_san_dns") {
     privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
@@ -134,39 +173,6 @@ export async function buildVpRequestJWT(
       .replace("-----END CERTIFICATE-----", "")
       .replace(/\s+/g, "");
 
-    // The result is a JWS-signed JWT [RFC7519]. If signed, the Authorization Request Object SHOULD contain
-    // the Claims iss (issuer) and aud (audience) as members with their semantics being the same as defined in the JWT [RFC7519] specification.
-    // The value of aud should be the value of the authorization server (AS) issuer, as defined in RFC 8414 [RFC8414]
-
-    // Construct the JWT payload
-    let jwtPayload = {
-      response_type: response_type,
-      response_mode: "direct_post",
-      client_id: client_id, // this should match the dns record in the certificate (dss.aegean.gr)
-      client_id_scheme: client_id_scheme,
-      response_uri: redirect_uri,
-      nonce: nonce,
-      state: state,
-      client_metadata: client_metadata, //
-      iss: client_id,//serverURL,
-      aud: "https://self-issued.me/v2",
-    };
-    // SIOPv2 supports only redirect_uri and did so x509 cannot be used
-
-    // if (response_type.indexOf("id_token") >=0 ) {
-    //   jwtPayload["id_token_type"] = "subject_signed";
-    //   jwtPayload["scope"] = "openid";
-    // }
-
-    if (presentation_definition) {
-      jwtPayload.presentation_definition = presentation_definition;
-    }
-
-    // Define the JWT header
-    // const header = {
-    //   alg: "ES256",
-    //   kid: `aegean#authentication-key`, // Ensure this kid is resolvable from the did.json endpoint
-    // };
     const header = {
       alg: "RS256",
       typ: "JWT",
@@ -178,56 +184,52 @@ export async function buildVpRequestJWT(
       .sign(await jose.importPKCS8(privateKey, "RS256"));
 
     return jwt;
-  } else if (client_id_scheme.indexOf("did") >= 0) {
-    const signingKey = {
-      kty: "EC",
-      x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
-      y: "SfFShWAUGEnNx24V2b5G1jrhJNHmMwtgROBOi9OKJLc",
-      crv: "P-256",
-      use: "sig",
-      kid: kid,
-    };
+  } else if (client_id_scheme === "did") {
+    // Check if this is a did:jwk identifier
+    if (client_id.startsWith('did:jwk:')) {
+      const header = {
+        alg: "ES256",
+        typ: "JWT",
+        kid: kid // This will be in the format did:jwk:<base64url-encoded-jwk>#0
+      };
 
-    // Convert the private key to a KeyLike object
-    const privateKeyObj = await jose.importPKCS8(
-      privateKey,
-      signingKey.alg || "ES256"
-    );
+      const jwt = await new jose.SignJWT(jwtPayload)
+        .setProtectedHeader(header)
+        .sign(await jose.importPKCS8(privateKey, "ES256"));
 
-    const jwtPayload = {
-      response_type: response_type,
-      response_mode: "direct_post",
-      client_id: client_id, // DID the did of the verifier!!!!!!
-      client_id_scheme: client_id_scheme,
-      response_uri: redirect_uri,
-      nonce: nonce,
-      state: state,
-      client_metadata: client_metadata,
-      iss: client_id,
-      aud: "https://self-issued.me/v2",
-    };
-    if (presentation_definition) {
-      jwtPayload.presentation_definition = presentation_definition;
+      return jwt;
+    } else if (client_id.startsWith('did:web:')) {
+      // Handle did:web case
+      const signingKey = {
+        kty: "EC",
+        x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
+        y: "SfFShWAUGEnNx24V2b5G1jrhJNHmMwtgROBOi9OKJLc",
+        crv: "P-256",
+        use: "sig",
+        kid: kid,
+      };
+
+      // Convert the private key to a KeyLike object
+      const privateKeyObj = await jose.importPKCS8(
+        privateKey,
+        signingKey.alg || "ES256"
+      );
+
+      // JWT header
+      const header = {
+        alg: signingKey.alg || "ES256",
+        typ: "JWT",
+        kid: kid,
+      };
+
+      const jwt = await new jose.SignJWT(jwtPayload)
+        .setProtectedHeader(header)
+        .sign(privateKeyObj);
+
+      return jwt;
+    } else {
+      throw new Error("Unsupported DID method: " + client_id);
     }
-    if (response_type.indexOf("id_token") >= 0) {
-      jwtPayload["id_token_type"] = "subject_signed";
-      jwtPayload["scope"] = "openid";
-    }
-
-    // JWT header
-    const header = {
-      alg: signingKey.alg || "ES256",
-      typ: "JWT",
-      kid: kid,
-    };
-
-    const jwt = await new jose.SignJWT(jwtPayload)
-      .setProtectedHeader(header)
-      .sign(privateKeyObj);
-
-    return jwt;
-
-    // Conditional signing based on client_id_scheme
   } else {
     throw new Error("not supported client_id_scheme:" + client_id_scheme);
   }
@@ -509,7 +511,12 @@ export async function didKeyToJwks(did) {
   const keyResolver = getResolver();
   const didResolver = new Resolver(keyResolver);
   const doc = await didResolver.resolve(did);
-  console.log(doc.didDocument.verificationMethod.publicKeyJwk);
+  // console.log(doc.didDocument.verificationMethod[0].publicKeyJwk); // Log the specific public key
 
-  return doc.didDocument.verificationMethod[0].publicKeyJwk;
+  const publicKeyJwk = doc.didDocument.verificationMethod[0]?.publicKeyJwk;
+  if (!publicKeyJwk) {
+    throw new Error("publicKeyJwk not found in didDocument verificationMethod");
+  }
+  return { keys: [publicKeyJwk] };
 }
+

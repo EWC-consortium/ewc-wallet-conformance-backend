@@ -4,7 +4,7 @@
   "credential_endpoint": "https://server.example.com/credential",
   "deferred_credential_endpoint": "https://server.example.com/credential_deferred",
   "notification_endpoint": "https://server.example.com/notification",
-  "batch_credential_endpoint": "https://server.example.com/batch",
+ 
   "display": [
     {
       "name": "EWC Issuer",
@@ -14,6 +14,7 @@
     }
   ],
   "credential_configurations_supported": {
+    
     "VerifiablePortableDocumentA1SDJWT": {
       "scope": "VerifiablePortableDocumentA1SDJWT",
       "claims": {
@@ -61,6 +62,7 @@
         }
       }
     },
+
     "VerifiablePortableDocumentA2SDJWT": {
       "scope": "VerifiablePortableDocumentA2SDJWT",
       "claims": {
@@ -350,7 +352,7 @@
           "background_color": "#12107c",
           "text_color": "#FFFFFF",
           "logo": {
-           "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
+            "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
             "alt_text": "UAegean"
           }
         }
@@ -655,83 +657,105 @@
       "scope": "vReceipt",
       "claims": {
         "monetary_total.line_extension_amount": {
-          "display": [{"name": "Line Total", "locale": "en-GB"}]
+          "display": [{ "name": "Line Total", "locale": "en-GB" }]
         },
         "monetary_total.payable_amount": {
-          "display": [{"name": "Total Payable", "locale": "en-GB"}]
+          "display": [{ "name": "Total Payable", "locale": "en-GB" }]
         },
         "monetary_total.tax_inclusive_amount": {
-          "display": [{"name": "Tax Inclusive Total", "locale": "en-GB"}]
+          "display": [{ "name": "Tax Inclusive Total", "locale": "en-GB" }]
         },
-  
         "tax_total.tax_subtotal.tax_amount": {
-          "display": [{"name": "Tax Subtotal Amount", "locale": "en-GB"}]
+          "display": [{ "name": "Tax Subtotal Amount", "locale": "en-GB" }]
         },
         "tax_total.tax_subtotal.tax_category.tax_scheme.name": {
-          "display": [{"name": "Tax Scheme", "locale": "en-GB"}]
+          "display": [{ "name": "Tax Scheme", "locale": "en-GB" }]
         },
         "tax_total.tax_subtotal.percent": {
-          "display": [{"name": "Tax Percentage", "locale": "en-GB"}]
+          "display": [{ "name": "Tax Percentage", "locale": "en-GB" }]
         },
-  
+        "tax_total.tax_amount": {
+          "display": [{ "name": "Total Tax Amount", "locale": "en-GB" }]
+        },
         "address.street_name": {
-          "display": [{"name": "Street Name", "locale": "en-GB"}]
+          "display": [{ "name": "Street Name", "locale": "en-GB" }]
         },
         "address.city_name": {
-          "display": [{"name": "City", "locale": "en-GB"}]
+          "display": [{ "name": "City", "locale": "en-GB" }]
         },
         "address.postcode": {
-          "display": [{"name": "Postal Code", "locale": "en-GB"}]
+          "display": [{ "name": "Postal Code", "locale": "en-GB" }]
         },
         "address.country_identifier": {
-          "display": [{"name": "Country Code", "locale": "en-GB"}]
+          "display": [{ "name": "Country Code", "locale": "en-GB" }]
         },
-  
         "payment_means.payment_means_code": {
-          "display": [{"name": "Payment Method", "locale": "en-GB"}]
+          "display": [{ "name": "Payment Method", "locale": "en-GB" }]
         },
         "payment_means.card_account.network_id": {
-          "display": [{"name": "Card Network", "locale": "en-GB"}]
+          "display": [{ "name": "Card Network", "locale": "en-GB" }]
         },
         "payment_means.card_account.account_number_id": {
-          "display": [{"name": "Card Number", "locale": "en-GB"}]
+          "display": [{ "name": "Card Number", "locale": "en-GB" }]
         },
-  
         "item_property.item_property_name": {
-          "display": [{"name": "Item Property", "locale": "en-GB"}]
+          "display": [{ "name": "Item Property", "locale": "en-GB" }]
         },
         "item_property.value": {
-          "display": [{"name": "Item Value", "locale": "en-GB"}]
+          "display": [{ "name": "Item Value", "locale": "en-GB" }]
         },
-  
         "purchase_receipt.id": {
-          "display": [{"name": "Receipt ID", "locale": "en-GB"}]
+          "display": [{ "name": "Receipt ID", "locale": "en-GB" }]
         },
         "purchase_receipt.issue_date": {
-          "display": [{"name": "Issue Date", "locale": "en-GB"}]
+          "display": [{ "name": "Issue Date", "locale": "en-GB" }]
         },
         "purchase_receipt.document_currency_code": {
-          "display": [{"name": "Currency", "locale": "en-GB"}]
+          "display": [{ "name": "Currency", "locale": "en-GB" }]
         },
         "purchase_receipt.legal_monetary_total": {
-          "display": [{"name": "Legal Monetary Total", "locale": "en-GB"}]
+          "display": [{ "name": "Legal Monetary Total", "locale": "en-GB" }]
         },
-  
+        "purchase_receipt.seller_supplier_party.supplier_party_id": {
+          "display": [{ "name": "Seller ID", "locale": "en-GB" }]
+        },
+        "purchase_receipt.tax_included_indicator": {
+          "display": [{ "name": "Tax Included", "locale": "en-GB" }]
+        },
+        "purchase_receipt.payment.paid_amount": {
+          "display": [{ "name": "Paid Amount", "locale": "en-GB" }]
+        },
+        "purchase_receipt.payment.authorization_id": {
+          "display": [{ "name": "Authorization ID", "locale": "en-GB" }]
+        },
+        "purchase_receipt.payment.transaction_id": {
+          "display": [{ "name": "Transaction ID", "locale": "en-GB" }]
+        },
+        "purchase_receipt.purchase_receipt_line.id": {
+          "display": [{ "name": "Line ID", "locale": "en-GB" }]
+        },
+        "purchase_receipt.purchase_receipt_line.quantity": {
+          "display": [{ "name": "Quantity", "locale": "en-GB" }]
+        },
+        "purchase_receipt.purchase_receipt_line.tax_inclusive_line_extension_amount": {
+          "display": [
+            { "name": "Line Tax Inclusive Amount", "locale": "en-GB" }
+          ]
+        },
+        "purchase_receipt.purchase_receipt_line.item.commodity_classification.item_classification_code": {
+          "display": [{ "name": "Item Classification Code", "locale": "en-GB" }]
+        },
         "delivery.actual_delivery_date": {
-          "display": [{"name": "Delivery Date", "locale": "en-GB"}]
+          "display": [{ "name": "Delivery Date", "locale": "en-GB" }]
         },
         "delivery.actual_delivery_time": {
-          "display": [{"name": "Delivery Time", "locale": "en-GB"}]
+          "display": [{ "name": "Delivery Time", "locale": "en-GB" }]
         },
-  
         "party_name.name": {
-          "display": [{"name": "Business Name", "locale": "en-GB"}]
+          "display": [{ "name": "Business Name", "locale": "en-GB" }]
         },
         "party_identification.id": {
-          "display": [{"name": "Business ID", "locale": "en-GB"}]
-        },
-        "partyTaxScheme_.id": {
-          "display": [{"name": "Business ID", "locale": "en-GB"}]
+          "display": [{ "name": "Business ID", "locale": "en-GB" }]
         }
       },
       "cryptographic_binding_methods_supported": ["jwk"],
@@ -842,6 +866,99 @@
       "format": "vc+sd-jwt",
 
       "vct": "urn:eu.europa.ec.eudi:pid:1",
+      "proof_types_supported": {
+        "jwt": {
+          "proof_signing_alg_values_supported": ["ES256"]
+        }
+      }
+    },
+    
+    "urn:eu.europa.ec.eudi:pid:1:mso_mdoc": {
+      "scope": "urn:eu.europa.ec.eudi:pid:1",
+      "claims": {
+        "urn:eu.europa.ec.eudi:pid:1": {
+          "given_name": {
+            "display": [
+              {
+                "name": "Given Name",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "family_name": {
+            "display": [
+              {
+                "name": "Surname",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "birth_date": {
+            "display": [
+              {
+                "name": "Birth Date",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "age_over_18": {
+            "display": [
+              {
+                "name": "Age Over 18",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "issuance_date": {
+            "display": [
+              {
+                "name": "Issuance Date",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "expiry_date": {
+            "display": [
+              {
+                "name": "Expiry Date",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "issuing_authority": {
+            "display": [
+              {
+                "name": "Issuing Authority",
+                "locale": "en-GB"
+              }
+            ]
+          },
+          "issuing_country": {
+            "display": [
+              {
+                "name": "Issuing Country",
+                "locale": "en-GB"
+              }
+            ]
+          }
+        }
+      },
+      "cryptographic_binding_methods_supported": ["jwk"],
+      "display": [
+        {
+          "name": "Person Identification Data (mDoc)",
+          "locale": "en-GB",
+          "background_color": "#FFFFFF",
+          "text_color": "#000000",
+          "logo": {
+            "uri": "https://avatars.githubusercontent.com/u/140810559?s=400&u=ee2a7f495f540fd5f23ca59d38b7411ea56c0d6d&v=4",
+            "alt_text": "PID Logo mDoc"
+          }
+        }
+      ],
+      "credential_signing_alg_values_supported": ["ES256"],
+      "format": "mso_mdoc",
+      "doctype": "urn:eu.europa.ec.eudi:pid:1",
       "proof_types_supported": {
         "jwt": {
           "proof_signing_alg_values_supported": ["ES256"]
@@ -959,7 +1076,6 @@
             }
           }
         }
- 
       },
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
@@ -1558,6 +1674,185 @@
       "credential_signing_alg_values_supported": ["ES256"],
       "format": "vc+sd-jwt",
       "vct": "eu.europa.ec.eudi.pcd.1",
+      "proof_types_supported": {
+        "jwt": {
+          "proof_signing_alg_values_supported": ["ES256"]
+        }
+      }
+    },
+
+    "LoyaltyCard": {
+      "scope": "LoyaltyCard",
+      "claims": {
+        "customer.first_name": {
+          "display": [
+            {
+              "name": "First Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.last_name": {
+          "display": [
+            {
+              "name": "Last Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.nationality": {
+          "display": [
+            {
+              "name": "Nationality",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.address": {
+          "display": [
+            {
+              "name": "Address",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.city": {
+          "display": [
+            {
+              "name": "City",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.zip_code": {
+          "display": [
+            {
+              "name": "ZIP Code",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.phone": {
+          "display": [
+            {
+              "name": "Phone Number",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.mobile": {
+          "display": [
+            {
+              "name": "Mobile Number",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.birth_date": {
+          "display": [
+            {
+              "name": "Date of Birth",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "customer.email": {
+          "display": [
+            {
+              "name": "Email Address",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "loyalty_card.id": {
+          "display": [
+            {
+              "name": "Loyalty Card ID",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "loyalty_card.issue_date": {
+          "display": [
+            {
+              "name": "Issue Date",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "organization.name": {
+          "display": [
+            {
+              "name": "Organization Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "organization.id": {
+          "display": [
+            {
+              "name": "Organization ID",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "organization.country": {
+          "display": [
+            {
+              "name": "Organization Country",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "credential.type": {
+          "display": [
+            {
+              "name": "Credential Type",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "credential.issuer": {
+          "display": [
+            {
+              "name": "Issuer",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "credential.issuance_date": {
+          "display": [
+            {
+              "name": "Issuance Date",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        "credential.expiry_date": {
+          "display": [
+            {
+              "name": "Expiry Date",
+              "locale": "en-GB"
+            }
+          ]
+        }
+      },
+      "cryptographic_binding_methods_supported": ["jwk"],
+      "display": [
+        {
+          "name": "Fast Friends Card",
+          "locale": "en-GB",
+          "background_color": "#FFFFFF",
+          "text_color": "#000000",
+          "logo": {
+            "uri": "data:image/png;base64,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",
+            "alt_text": "Fast Friends Card Logo"
+          }
+        }
+      ],
+      "credential_signing_alg_values_supported": ["ES256"],
+      "format": "vc+sd-jwt",
+      "vct": "LoyaltyCard",
       "proof_types_supported": {
         "jwt": {
           "proof_signing_alg_values_supported": ["ES256"]
