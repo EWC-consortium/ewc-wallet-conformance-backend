@@ -674,10 +674,8 @@ sharedRouter.post("/credential", async (req, res) => {
         response = {
           format: "mso_mdoc", // This is the standard format identifier for mDL
           credentials: [
-            {
-              format: "mso_mdoc",
+          
               credential,
-            },
           ],
         };
         
