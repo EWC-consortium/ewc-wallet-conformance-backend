@@ -26,14 +26,10 @@ import {
 
 import {
   MDoc,
-  IssuerSignedDocument,
-} from "@m-doc/mdl";
-import {
-  createSign,
-  createPrivateKey,
-  createHash,
-  randomBytes,
-} from "crypto";
+  Document
+} from "@auth0/mdl";
+
+import cryptoModule from "crypto";
 import { Buffer } from "buffer";
 
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
@@ -61,79 +57,17 @@ const defaultSigningKid = issuerConfigValues.default_signing_kid || "aegean#auth
 // Helper functions for mDL generation
 
 // Convert PEM to DER ArrayBuffer (Node.js)
-function pemToDerArrayBufferNode(pem) {
-  if (!pem) return null;
-  const b64 = pem.replace(/(-----(BEGIN|END)[\w\s]+-----|[\n\r])/g, "");
-  return Buffer.from(b64, "base64").buffer;
-}
+// function pemToDerArrayBufferNode(pem) { ... }
 
 // Convert JWK to a COSE Key Map structure (simplified)
 // Note: @m-doc/mdl might offer a utility like coseFromJwk which should be preferred
-function jwkToCoseKeyMap(jwk) {
-  if (!jwk || jwk.kty !== "EC" || jwk.crv !== "P-256" || !jwk.x || !jwk.y) {
-    console.warn("Unsupported or incomplete JWK for COSE conversion:", jwk);
-    // Depending on mDL requirements, may need to throw error or return specific empty structure
-    return new Map(); 
-  }
-  const coseKey = new Map();
-  coseKey.set(1, 2); // kty: EC2 (Elliptic Curve Keys)
-  coseKey.set(-1, 1); // crv: P-256
-  coseKey.set(-2, Buffer.from(jwk.x, "base64url")); // x-coordinate
-  coseKey.set(-3, Buffer.from(jwk.y, "base64url")); // y-coordinate
-  return coseKey;
-}
+// REMOVED jwkToCoseKeyMap
 
-function generateRandomBytesSyncForMdl(length) {
-  return randomBytes(length).buffer;
-}
+// REMOVED generateRandomBytesSyncForMdl
 
-async function sha256HasherForMdl(data /*: ArrayBuffer */) {
-  const hash = createHash("sha256");
-  hash.update(Buffer.from(data));
-  return hash.digest().buffer;
-}
+// REMOVED sha256HasherForMdl
 
-// Creates a signer for mDL's signIssuerAuth
-async function createMdlSignerForKey(
-  signatureType, // "x509" or "jwk"
-  isHaip, // boolean
-  // For X.509
-  x509PrivateKeyPem,
-  // For JWK
-  jwkPrivateKeyPem // e.g., content of private-key.pem
-) {
-  let nodePrivateKey;
-  const alg = "ES256"; // mDL typically uses ES256 with P-256 keys
-
-  const effectiveSignatureType =
-    (isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509") ||
-    signatureType === "x509"
-      ? "x509"
-      : "jwk";
-
-  if (effectiveSignatureType === "x509") {
-    if (!x509PrivateKeyPem) throw new Error("X.509 private key PEM is required for mDL signing.");
-    nodePrivateKey = createPrivateKey(x509PrivateKeyPem);
-  } else { // jwk
-    if (!jwkPrivateKeyPem) throw new Error("JWK private key PEM is required for mDL signing.");
-    const privateJwk = pemToJWK(jwkPrivateKeyPem, "private"); // pemToJWK is from cryptoUtils
-    nodePrivateKey = createPrivateKey({ key: privateJwk, format: "jwk" });
-  }
-
-  return {
-    sign: async (dataToSign /*: ArrayBuffer */) => {
-      const signInstance = createSign("SHA256"); // ES256 uses SHA256 hash
-      signInstance.update(Buffer.from(dataToSign));
-      const signature = signInstance.sign({
-        key: nodePrivateKey,
-        dsaEncoding: "ieee-p1363", // For raw r||s signature format
-      });
-      return signature.buffer;
-    },
-    alg: alg,
-    // x5c: if effectiveSignatureType is 'x509', the cert could be here or passed to signIssuerAuth
-  };
-}
+// REMOVED createMdlSignerForKey
 
 // Maps claims from existing payload to mDL format
 // This is a simplified mapper and needs to be extended for different VCTs
@@ -348,91 +282,58 @@ export async function handleVcSdJwtFormat(
     // c_nonce_expires_in: 86400,
   }
   if (format === "mDL" || format === "mdl") {
-    console.log("Attempting to generate mDL credential...");
+    console.log("Attempting to generate mDL credential using @auth0/mdl...");
     try {
-      const mdlSignerInstance = await createMdlSignerForKey(
-        sessionObject.signatureType, // "x509" or "jwk"
-        sessionObject.isHaip,
-        privateKeyPemX509, // x509 private key
-        privateKey // jwk private key (loaded from private-key.pem)
-      );
-
       const mDLClaimsMapped = mapClaimsToMdl(credPayload.claims, vct);
+      const devicePublicKeyJwk = cnf.jwk;
 
-      const issuedDocument = new IssuerSignedDocument({
-        docType: DOC_TYPE_MDL,
-      });
+      // Determine signature type for mDL
+      const currentEffectiveSignatureType =
+        (sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509") || sessionObject.signatureType === "x509"
+        ? "x509"
+        : "jwk";
 
-      // Add claims to the default mDL namespace
-      await issuedDocument.addNamespace(
-        DEFAULT_MDL_NAMESPACE,
-        mDLClaimsMapped,
-        generateRandomBytesSyncForMdl
-      );
-      
-      const holderJwkForDeviceKey = holderJWKS.jwk ? await jwkToCoseKeyMap(holderJWKS.jwk) : new Map();
-      
-      const msoOptions = {
-         // deviceKey expects a COSE_Key structure. jwkToCoseKeyMap provides a Map.
-         // If @m-doc/mdl provides coseFromJwk, use: coseFromJwk(holderJWKS.jwk)
-        deviceKey: holderJwkForDeviceKey, 
-      };
+      // Prepare signing arguments based on signature type
+      let issuerPrivateKeyForSign, issuerCertificateForSign;
 
-      let otherProtectedHeaders = new Map();
-      let otherUnprotectedHeaders = new Map();
-      let issuerCertificateDer;
-
-      const effectiveSignatureType =
-        (sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509") ||
-        sessionObject.signatureType === "x509"
-          ? "x509"
-          : "jwk";
-
-      if (effectiveSignatureType === "x509") {
-        issuerCertificateDer = pemToDerArrayBufferNode(certificatePemX509);
-        if (issuerCertificateDer) {
-          // COSE header for x5c chain is 33
-          otherProtectedHeaders.set(33, [issuerCertificateDer]); 
-        }
-        // For X.509, a kid might be derived from cert, or not used if x5c is present
-      } else { // JWK
-        if(headerOptions.header.kid) {
-            otherUnprotectedHeaders.set(4, Buffer.from(headerOptions.header.kid, 'utf-8')); // COSE kid is label 4
-        }
+      if (currentEffectiveSignatureType === "x509") {
+        console.log("Using X.509 for mDL signing with @auth0/mdl.");
+        // Convert PEM to JWK for @auth0/mdl
+        issuerPrivateKeyForSign = pemToJWK(privateKeyPemX509, "private");
+        issuerCertificateForSign = certificatePemX509; // Certificate stays as PEM
+      } else { // "jwk"
+        console.log("Using JWK for mDL signing with @auth0/mdl.");
+        // Convert PEM to JWK for @auth0/mdl
+        issuerPrivateKeyForSign = pemToJWK(privateKey, "private");
+        issuerCertificateForSign = publicKeyPem; // Certificate stays as PEM
       }
+
+      // Create and sign document using @auth0/mdl API
+      const document = await new Document(DOC_TYPE_MDL)
+        .addIssuerNameSpace(DEFAULT_MDL_NAMESPACE, mDLClaimsMapped)
+        .useDigestAlgorithm('SHA-256')
+        .addValidityInfo({
+          signed: now,
+        })
+        .addDeviceKeyInfo({ deviceKey: devicePublicKeyJwk })
+        .sign({
+          issuerPrivateKey: issuerPrivateKeyForSign,
+          issuerCertificate: issuerCertificateForSign,
+          alg: 'ES256',
+        });
+
+      // Wrap signed document in MDoc and encode
+      const mdoc = new MDoc([document]).encode();
       
-      // Validity information
-      const mDLValidityInfo = {
-        signed: now, // current date object
-        validFrom: now, // current date object
-        validUntil: expiryDate, // expiry date object
-      };
-
-      await issuedDocument.signIssuerAuth(
-        { alg: mdlSignerInstance.alg, signer: mdlSignerInstance.sign }, // Corrected structure
-        { digestAlgorithm: "SHA-256", hasher: sha256HasherForMdl }, // Hash options
-        mDLValidityInfo, // Validity info
-        msoOptions, // Device key options (for MSO)
-        otherProtectedHeaders, // Other protected headers (e.g., x5c)
-        otherUnprotectedHeaders // Other unprotected headers (e.g., kid for JWK)
-      );
-
-      const mobileDocument = new MDoc({
-        documents: [issuedDocument],
-      });
-
-      const encodedMobileDocument = mobileDocument.encode(); // Returns ArrayBuffer
-      // Convert to hex or base64url for transmission
-      const encodedMobileDocumentHex = Buffer.from(encodedMobileDocument).toString("hex");
+      // Return as base64url encoded string (standard for OpenID4VCI)
+      const encodedMobileDocumentBase64Url = Buffer.from(mdoc).toString("base64url");
       
-      console.log("mDL Credential generated (hex):", encodedMobileDocumentHex.substring(0,100) + "..."); // Log snippet
-      return encodedMobileDocumentHex;
+      console.log("mDL Credential generated with @auth0/mdl (base64url):", encodedMobileDocumentBase64Url.substring(0,100) + "...");
+      return encodedMobileDocumentBase64Url;
 
     } catch (error) {
-      console.error("Error generating mDL credential:", error);
-      // Fallback or re-throw, depending on desired behavior
-      // For now, re-throwing to make it visible
-      throw new Error(`Failed to generate mDL: ${error.message}`);
+      console.error("Error generating mDL credential with @auth0/mdl:", error);
+      throw new Error(`Failed to generate mDL with @auth0/mdl: ${error.message}`);
     }
   }
 }

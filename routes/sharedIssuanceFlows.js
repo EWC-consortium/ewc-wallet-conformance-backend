@@ -666,16 +666,34 @@ sharedRouter.post("/credential", async (req, res) => {
         format
       );
 
-      // We're assuming handleVcSdJwtFormat returns a raw credential
-      // Wrap it in the proper format according to the specification
-      const response ={
-        credentials: [
-          {
-            credential,
-          },
-        ],
-       
-      };
+      // Handle different response formats based on credential type
+      let response;
+      
+      if (format === "mdl") {
+        // For mDL/mdoc credentials, return with proper format specification
+        response = {
+          format: "mso_mdoc", // This is the standard format identifier for mDL
+          credentials: [
+            {
+              format: "mso_mdoc",
+              credential,
+            },
+          ],
+        };
+        
+        // Set proper content type for mDL
+        res.setHeader('Content-Type', 'application/json');
+      } else {
+        // For SD-JWT credentials (existing format)
+        response = {
+          credentials: [
+            {
+              credential,
+            },
+          ],
+        };
+      }
+      
       res.json(response);
     } catch (err) {
       console.log(err);
