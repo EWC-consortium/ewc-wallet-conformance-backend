@@ -107,7 +107,7 @@ x509Router.get("/generateVPRequestGet", async (req, res) => {
   // Note: buildVpRequestJWT is called by the /x509/x509VPrequest/:id endpoint
   // So we don't need to call it here directly for the QR code generation step.
 
-  const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`; // Ensure this path is correct
+  const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;  
   // openid4vp:// URL without request_uri_method, defaulting to GET for request_uri
   const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}`;
 
