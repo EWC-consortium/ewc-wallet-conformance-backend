@@ -42,7 +42,6 @@ import {
 import jwt from "jsonwebtoken";
 import jwkToPem from "jwk-to-pem";
 
-
 import {
   handleVcSdJwtFormat,
   handleVcSdJwtFormatDeferred,
@@ -87,8 +86,7 @@ const { signer, verifier } = await createSignerVerifierX509(
 
 sharedRouter.post("/token_endpoint", async (req, res) => {
   // Fetch the Authorization header
-  const authorizationHeader = req.
-  headers["authorization"]; // Fetch the 'Authorization' header
+  const authorizationHeader = req.headers["authorization"]; // Fetch the 'Authorization' header
   // console.log("token_endpoint authorizatiotn header-" + authorizationHeader);
   const body = req.body;
   let authorizationDetails = body.authorization_details;
@@ -134,8 +132,6 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
       console.log("pre-auth code flow");
       let chosenCredentialConfigurationId = null;
       let existingPreAuthSession = await getPreAuthSession(preAuthorizedCode);
-      
-  
 
       if (existingPreAuthSession) {
         //Credential Issuers MAY support requesting authorization to issue a Credential using the
@@ -149,7 +145,7 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
             "!!!authorization_details found in session but not in request"
           );
           //TODO this should through an error
-        } 
+        }
 
         let parsedAuthDetails = authorizationDetails;
         if (authorizationDetails) {
@@ -221,7 +217,7 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
             chosenCredentialConfigurationId,
           ];
           tokenResponse.authorization_details = parsedAuthDetails;
-        }  
+        }
 
         return res.json(tokenResponse);
       } else {
@@ -237,10 +233,8 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
       if (issuanceSessionId) {
         let existingCodeSession = await getCodeFlowSession(issuanceSessionId);
         if (existingCodeSession) {
-
           // authorizationDetails =existingCodeSession.authorization_details;
           let scope = existingCodeSession.scope;
-
 
           const pkceVerified = await validatePKCE(
             existingCodeSession,
@@ -249,11 +243,13 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
           );
 
           if (!pkceVerified) {
-             console.log("PKCE verification failed for authorization_code flow.");
-             return res.status(400).json({
-                error: "invalid_grant",
-                error_description: "PKCE verification failed."
-             });
+            console.log(
+              "PKCE verification failed for authorization_code flow."
+            );
+            return res.status(400).json({
+              error: "invalid_grant",
+              error_description: "PKCE verification failed.",
+            });
           }
 
           existingCodeSession.results.status = "success";
@@ -344,7 +340,8 @@ sharedRouter.post("/credential", async (req, res) => {
 
   // Determine the ID to use for looking up metadata configuration.
   // For proof validation, credential_configuration_id is more direct.
-  const effectiveConfigurationId = credentialConfigurationId || credentialIdentifier;
+  const effectiveConfigurationId =
+    credentialConfigurationId || credentialIdentifier;
 
   if (!effectiveConfigurationId && credentialIdentifier) {
     console.warn(
@@ -621,12 +618,10 @@ sharedRouter.post("/credential", async (req, res) => {
     console.error(
       "Session object could not be retrieved after proof validation for credential issuance."
     );
-    return res
-      .status(500)
-      .json({
-        error: "server_error",
-        error_description: "Session lost after proof validation.",
-      });
+    return res.status(500).json({
+      error: "server_error",
+      error_description: "Session lost after proof validation.",
+    });
   }
   // At this point, sessionObject should be the one containing the validated c_nonce.
 
@@ -653,10 +648,10 @@ sharedRouter.post("/credential", async (req, res) => {
   } else {
     // Immediate issuance flow
 
-    requestBody.vct= requestedCredentialType[0]
-    let format = "vc+sd-jwt"
-    if(requestedCredentialType[0].indexOf("mdoc")>=0){
-      format = "mdl"
+    requestBody.vct = requestedCredentialType[0];
+    let format = "vc+sd-jwt";
+    if (requestedCredentialType[0].indexOf("mdoc") >= 0) {
+      format = "mdl";
     }
     try {
       const credential = await handleVcSdJwtFormat(
@@ -668,29 +663,15 @@ sharedRouter.post("/credential", async (req, res) => {
 
       // Handle different response formats based on credential type
       let response;
-      
-      if (format === "mdl") {
-        // For mDL/mdoc credentials, return with proper format specification
-        response = {
-          credentials: [
-          
-              credential,
-          ],
-        };
-        
-        // Set proper content type for mDL
-        res.setHeader('Content-Type', 'application/json');
-      } else {
-        // For SD-JWT credentials (existing format)
-        response = {
-          credentials: [
-            {
-              credential,
-            },
-          ],
-        };
-      }
-      
+
+      response = {
+        credentials: [
+          {
+            credential,
+          },
+        ],
+      };
+
       res.json(response);
     } catch (err) {
       console.log(err);
@@ -735,7 +716,6 @@ sharedRouter.post("/credential_deferred", async (req, res) => {
 // *****************************************************************
 
 sharedRouter.post("/nonce", async (req, res) => {
-
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
@@ -778,10 +758,13 @@ sharedRouter.post("/nonce", async (req, res) => {
   }
 
   if (!sessionObject) {
-    console.log("No active session found for the provided access token for nonce request.");
+    console.log(
+      "No active session found for the provided access token for nonce request."
+    );
     return res.status(401).json({
       error: "invalid_token",
-      error_description: "No active session found for the provided access token."
+      error_description:
+        "No active session found for the provided access token.",
     });
   }
 
@@ -803,11 +786,13 @@ sharedRouter.post("/nonce", async (req, res) => {
     // This case should ideally not be reached if a sessionObject was found
     return res.status(500).json({
       error: "server_error",
-      error_description: "Failed to save nonce due to unknown session type."
+      error_description: "Failed to save nonce due to unknown session type.",
     });
   }
 
-  console.log(`Generated new c_nonce for session associated with token. Session ID (key): ${sessionKeyForStore}, Flow: ${flowType}`);
+  console.log(
+    `Generated new c_nonce for session associated with token. Session ID (key): ${sessionKeyForStore}, Flow: ${flowType}`
+  );
 
   res.status(200).json({
     c_nonce: newCNonce,

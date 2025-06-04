@@ -313,7 +313,9 @@ export async function handleVcSdJwtFormat(
         .addIssuerNameSpace(DEFAULT_MDL_NAMESPACE, mDLClaimsMapped)
         .useDigestAlgorithm('SHA-256')
         .addValidityInfo({
-          signed: now,
+          signed: new Date(),
+          validFrom: new Date(), // Add validFrom as shown in documentation
+          validUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year validity
         })
         .addDeviceKeyInfo({ deviceKey: devicePublicKeyJwk })
         .sign({
@@ -323,13 +325,50 @@ export async function handleVcSdJwtFormat(
         });
 
       // Wrap signed document in MDoc and encode
-      const mdoc = new MDoc([document]).encode();
+      const mdoc = new MDoc([document]);
+      const encodedMdoc = mdoc.encode();
       
-      // Return as base64url encoded string (standard for OpenID4VCI)
-      const encodedMobileDocumentBase64Url = Buffer.from(mdoc).toString("base64url");
+      // Debug: Examine the raw CBOR bytes
+      console.log("=== CBOR Debug Information ===");
+      console.log(`CBOR byte length: ${encodedMdoc.length}`);
+      console.log(`First 20 bytes (hex): ${Buffer.from(encodedMdoc.slice(0, 20)).toString('hex')}`);
+      console.log(`First 20 bytes (decimal): [${Array.from(encodedMdoc.slice(0, 20)).join(', ')}]`);
       
-      console.log("mDL Credential generated with @auth0/mdl (base64url):", encodedMobileDocumentBase64Url.substring(0,100) + "...");
-      return encodedMobileDocumentBase64Url;
+      // Check if it's valid CBOR by trying to parse it
+      try {
+        // Let's see what the raw mdoc structure looks like
+        console.log("Raw mdoc type:", typeof encodedMdoc);
+        console.log("Raw mdoc constructor:", encodedMdoc.constructor.name);
+        console.log("Is Buffer?", Buffer.isBuffer(encodedMdoc));
+        console.log("Is Uint8Array?", encodedMdoc instanceof Uint8Array);
+      } catch (e) {
+        console.error("Error examining mdoc structure:", e);
+      }
+      
+      // // Support different encoding formats for wallet compatibility testing
+      // const encodingFormat = process.env.MDL_ENCODING_FORMAT || "base64url"; // Options: "hex", "base64url", "base64"
+      
+      let encodedMobileDocument;
+      // switch (encodingFormat) {
+      //   case "hex":
+      //     encodedMobileDocument = Buffer.from(encodedMdoc).toString("hex");
+      //     console.log("mDL Credential generated with @auth0/mdl (hex):", encodedMobileDocument.substring(0,100) + "...");
+      //     break;
+        // case "base64":
+          encodedMobileDocument = Buffer.from(encodedMdoc).toString("base64");
+        //   console.log("mDL Credential generated with @auth0/mdl (base64):", encodedMobileDocument.substring(0,100) + "...");
+        //   break;
+        // case "base64url":
+        // default:
+          // encodedMobileDocument = Buffer.from(encodedMdoc).toString("base64url");
+          console.log("mDL Credential generated with @auth0/mdl (base64url):", encodedMobileDocument.substring(0,100) + "...");
+          // break;
+      // }
+      
+      // console.log(`Using encoding format: ${encodingFormat}`);
+      console.log("=== End CBOR Debug ===");
+      
+      return encodedMobileDocument;
 
     } catch (error) {
       console.error("Error generating mDL credential with @auth0/mdl:", error);
