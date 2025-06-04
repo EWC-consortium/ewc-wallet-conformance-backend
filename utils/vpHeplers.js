@@ -24,6 +24,9 @@ async function decodeJwtVC(jwtString) {
  */
 export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
   const sessionId = req.params.id;
+  let extractedClaims = [];
+  let keybindJwt; // This might need to be an array if multiple SD-JWTs with different kbJwts are possible
+
 
   const sessionData = await getVPSession(sessionId);
   const requestedInputDescriptors =
@@ -53,8 +56,6 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
     throw new Error("descriptor_map is not an array.");
   }
 
-  let extractedClaims = [];
-  let keybindJwt; // This might need to be an array if multiple SD-JWTs with different kbJwts are possible
 
   for (const descriptor of descriptorMap) {
     const vpResult = await processDescriptorEntry(
@@ -451,35 +452,30 @@ export function hasOnlyAllowedFields(
   const allowedFields = new Set(
     allowedPaths.map((path) => path.replace(/^\$\./, ""))
   );
-  let dataKeys = [];
+
+  // Collect all flattened key paths from dataObj, respecting ignoredKeys.
+  // The flattenKeys function itself ensures that paths starting with an ignoredKey are not included.
+  let allFlattenedDataPaths = [];
   if (Array.isArray(dataObj)) {
-    dataKeys.push(
-      ...dataObj.reduce((acc, obj) => {
-        // Accumulate the keys.
-        const flattenedKeys = flattenKeys(obj, "", ignoredKeys);
-        // Get the keys for this object, filtering out ignored keys.
-        const keys = flattenedKeys.filter((key) => !ignoredKeys.includes(key));
-        return acc.concat(keys);
-      }, [])
-    );
-    // If you need unique keys, uncomment the next line:
-    // dataKeys = Array.from(new Set(dataKeys));
+    for (const obj of dataObj) {
+      allFlattenedDataPaths.push(...flattenKeys(obj, "", ignoredKeys));
+    }
   } else {
-    dataKeys.push(
-      ...Object.keys(dataObj).filter((key) => !ignoredKeys.includes(key))
-    );
+    allFlattenedDataPaths.push(...flattenKeys(dataObj, "", ignoredKeys));
   }
+  const dataKeySet = new Set(allFlattenedDataPaths);
 
-  // Convert dataKeys to a set.
-  const dataKeySet = new Set(dataKeys);
-
-  // Check if both sets have the same size.
-  if (dataKeySet.size !== allowedFields.size) return false;
-
-  // Check that every key in the data is in the allowed fields.
+  // Check that every discovered key path in dataObj is present in the allowedFields.
+  // This ensures that dataObj does not contain any fields/paths not specified in allowedPaths.
   for (let key of dataKeySet) {
-    if (!allowedFields.has(key)) return false;
+    if (!allowedFields.has(key)) {
+      // Found a key path in dataObj that is not in the allowed list.
+      return false;
+    }
   }
+
+  // If all key paths from dataKeySet were found in allowedFields,
+  // it means dataObj only contains fields permitted by allowedPaths.
   return true;
 }
 

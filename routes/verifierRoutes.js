@@ -175,7 +175,8 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     //   "vp_token": "verifiable_presentation_jwt_or_sd_jwt"
     // }
     console.log("response mode" + vpSession.response_mode);
-
+    let claimsFromExtraction;
+    let jwtFromKeybind;
 
     if (vpSession. response_mode === 'direct_post.jwt') {
       const jwtResponse = req.body;
@@ -190,8 +191,11 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         }
 
         // Process the VP token as before
-        const { extractedClaims, keybindJwt } = await extractClaimsFromRequest({ body: { vp_token: vpToken } }, digest);
-        
+        const result = await extractClaimsFromRequest({ body: { vp_token: vpToken } }, digest);
+        claimsFromExtraction = result.extractedClaims;
+        jwtFromKeybind = result.keybindJwt;
+
+
         // Verify nonce
         let submittedNonce;
         if (vpToken.indexOf("~") >= 0) {
@@ -225,13 +229,26 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     } 
     // Handle regular direct_post response mode
     else {
-      const { sessionId, extractedClaims, keybindJwt } = await extractClaimsFromRequest(req, digest);
+     
+
+      try {
+        const result = await extractClaimsFromRequest(req, digest);
+        claimsFromExtraction = result.extractedClaims;
+        jwtFromKeybind = result.keybindJwt;
+      }catch(error){
+        console.error("Error processing direct_post response:", error);
+        return res.status(400).json({ error: error.message });
+      }
       const vpToken = req.body["vp_token"];
 
       // Verify nonce
       let submittedNonce;
       if (vpToken.indexOf("~") >= 0) {
-        submittedNonce = keybindJwt.payload.nonce;
+        if (!jwtFromKeybind || !jwtFromKeybind.payload) {
+          console.error("keybindJwt or its payload is missing for SD-JWT");
+          return res.status(400).json({error: "Missing keybind JWT information for SD-JWT"});
+        }
+        submittedNonce = jwtFromKeybind.payload.nonce;
       } else {
         let decodedVpToken = await jwt.decode(vpToken, { complete: true });
         submittedNonce = decodedVpToken.payload.nonce;
@@ -242,15 +259,16 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
       }
 
-      if (!hasOnlyAllowedFields(extractedClaims, vpSession.sdsRequested)) {
+      if (!hasOnlyAllowedFields(claimsFromExtraction, vpSession.sdsRequested)) {
         return res.status(400).json({
-          error: "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(extractedClaims),
+          error: "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(claimsFromExtraction),
         });
       }
 
       vpSession.status = "success";
-      vpSession.claims = { ...extractedClaims };
+      vpSession.claims = { ...claimsFromExtraction };
       storeVPSession(sessionId, vpSession);
+      console.log(`vp session ${sessionId} status is success`);
       return res.status(200).json({ status: "ok" });
     }
   } catch (error) {
