@@ -6,16 +6,18 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "SERVER_URL=https://d271-2a02-587-8703-400-c738-8933-b0da-510b.ngrok-free.app   node server.js"
+    "dev": "SERVER_URL=https://0019-2a02-587-8703-400-aae4-b9f7-dabd-d176.ngrok-free.app   node server.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@auth0/mdl": "^2.1.0",
     "@cef-ebsi/key-did-resolver": "^2.0.5",
     "@ceramicnetwork/key-did-resolver": "^0.2.2",
     "@digitalbazaar/did-method-key": "^5.2.0",
     "@jorgeferrero/stream-to-buffer": "^2.0.6",
     "@m-doc/mdl": "^0.1.0",
+    "@peculiar/x509": "^1.12.3",
     "@sd-jwt/core": "^0.6.1",
     "@sd-jwt/crypto-nodejs": "^0.7.2",
     "@sd-jwt/sd-jwt-vc": "^0.7.2",
