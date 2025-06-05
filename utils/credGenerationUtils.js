@@ -54,20 +54,7 @@ try {
 const defaultSigningKid = issuerConfigValues.default_signing_kid || "aegean#authentication-key";
 
 
-// Helper functions for mDL generation
 
-// Convert PEM to DER ArrayBuffer (Node.js)
-// function pemToDerArrayBufferNode(pem) { ... }
-
-// Convert JWK to a COSE Key Map structure (simplified)
-// Note: @m-doc/mdl might offer a utility like coseFromJwk which should be preferred
-// REMOVED jwkToCoseKeyMap
-
-// REMOVED generateRandomBytesSyncForMdl
-
-// REMOVED sha256HasherForMdl
-
-// REMOVED createMdlSignerForKey
 
 // Maps claims from existing payload to mDL format
 // This is a simplified mapper and needs to be extended for different VCTs

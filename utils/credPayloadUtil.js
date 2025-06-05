@@ -745,9 +745,9 @@ export const createPaymentWalletAttestationPayload = (serverURL) => {
     id: "PSP-account-identifier", // Replace with actual account identifier
     fundingSource: {
       type: "card", // Example funding source type
-      parLastFour: "1234",
-      panLastFour: "5678", // Example PAN ends in
-      iin: "400000", // Example IIN
+      parLastFour: "0010",
+      panLastFour: "0010", // Example PAN ends in 000000
+      iin: "401636", // Example IIN
       aliasId: "alias-12345", // Example alias ID
       scheme: "Visa", // Example card scheme
       currency:"EUR",

@@ -322,6 +322,29 @@ sharedRouter.post("/credential", async (req, res) => {
   const requestBody = req.body;
   // const format = requestBody.format; // this is not part of ID2. the format should be fetched form the
 
+  //TODO: check if the token is valid and if it is a valid token for this issuer
+
+
+  let flowType = "pre-auth";
+  // Session object retrieval (this logic is similar to what's now in the nonce check)
+  const preAuthsessionKey = await getSessionKeyFromAccessToken(token);
+  let sessionObject; // This will be the main session object for the rest of the function
+  if (preAuthsessionKey) {
+    sessionObject = await getPreAuthSession(preAuthsessionKey);
+    if (!sessionObject)
+      sessionObject = await getCodeFlowSession(preAuthsessionKey);
+  }
+  if (!sessionObject) {
+    // If not found in pre-auth, try code flow
+    const codeSessionKey = await getSessionAccessToken(token);
+    if (codeSessionKey) {
+      sessionObject = await getCodeFlowSession(codeSessionKey);
+      flowType = "code";
+    }
+  }
+
+
+
   // Update according to spec section 8.2 - Credential identifiers
   const credentialIdentifier = requestBody.credential_identifier;
   const credentialConfigurationId = requestBody.credential_configuration_id;
@@ -501,7 +524,7 @@ sharedRouter.post("/credential", async (req, res) => {
           }
 
           // Verify claims
-          if (!proofPayload.iss) {
+          if (!proofPayload.iss && flowType == "code") {
             console.log("Proof JWT missing 'iss' claim.");
             return res.status(400).json({
               error: "invalid_proof",
@@ -566,21 +589,7 @@ sharedRouter.post("/credential", async (req, res) => {
 
   let payload = {};
 
-  // Session object retrieval (this logic is similar to what's now in the nonce check)
-  const preAuthsessionKey = await getSessionKeyFromAccessToken(token);
-  let sessionObject; // This will be the main session object for the rest of the function
-  if (preAuthsessionKey) {
-    sessionObject = await getPreAuthSession(preAuthsessionKey);
-    if (!sessionObject)
-      sessionObject = await getCodeFlowSession(preAuthsessionKey);
-  }
-  if (!sessionObject) {
-    // If not found in pre-auth, try code flow
-    const codeSessionKey = await getSessionAccessToken(token);
-    if (codeSessionKey) {
-      sessionObject = await getCodeFlowSession(codeSessionKey);
-    }
-  }
+
 
   // It is important that the `sessionObject` used from here on is the same one whose c_nonce was validated.
   // The nonce check block now fetches `sessionForNonceCheck`. We should ensure `sessionObject` here is consistent.

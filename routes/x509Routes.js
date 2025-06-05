@@ -66,7 +66,7 @@ x509Router.get("/generateVPRequest", async (req, res) => {
   // Since the /x509VPrequest/:id endpoint is a POST endpoint (as per its definition later in this file),
   // we add request_uri_method=post.
   const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post&client_id=${client_id}`;
 
   // Generate QR code
   let code = qr.image(vpRequest, {
@@ -109,7 +109,7 @@ x509Router.get("/generateVPRequestGet", async (req, res) => {
 
   const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;  
   // openid4vp:// URL without request_uri_method, defaulting to GET for request_uri
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&client_id=${client_id}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -186,7 +186,7 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post&client_id=${client_id}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -247,7 +247,7 @@ x509Router.get("/generateVPRequestDCQLGET", async (req, res) => {
   
 
   const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&client_id=${client_id}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -319,7 +319,7 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/x509VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post&client_id=${client_id}`;
 
   let code = qr.image(vpRequest, {
     type: "png",

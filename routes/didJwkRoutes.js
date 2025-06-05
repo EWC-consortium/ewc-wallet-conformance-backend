@@ -68,7 +68,7 @@ didJwkRouter.get("/generateVPRequest", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post&client_id=${client_id}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -108,7 +108,7 @@ didJwkRouter.get("/generateVPRequestGET", async (req, res) => {
 
   
   const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&client_id=${client_id}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -184,7 +184,7 @@ didJwkRouter.get("/generateVPRequestDCQL", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post&client_id=${client_id}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -244,7 +244,7 @@ didJwkRouter.get("/generateVPRequestDCQLGET", async (req, res) => {
   });
 
   const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&client_id=${client_id}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -313,7 +313,7 @@ didJwkRouter.get("/generateVPRequestTransaction", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post&client_id=${client_id}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
