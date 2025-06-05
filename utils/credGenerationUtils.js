@@ -355,12 +355,12 @@ export async function handleVcSdJwtFormat(
       //     console.log("mDL Credential generated with @auth0/mdl (hex):", encodedMobileDocument.substring(0,100) + "...");
       //     break;
         // case "base64":
-          encodedMobileDocument = Buffer.from(encodedMdoc).toString("base64");
+          // encodedMobileDocument = Buffer.from(encodedMdoc).toString("base64");
         //   console.log("mDL Credential generated with @auth0/mdl (base64):", encodedMobileDocument.substring(0,100) + "...");
         //   break;
         // case "base64url":
         // default:
-          // encodedMobileDocument = Buffer.from(encodedMdoc).toString("base64url");
+          encodedMobileDocument = Buffer.from(encodedMdoc).toString("base64url");
           console.log("mDL Credential generated with @auth0/mdl (base64url):", encodedMobileDocument.substring(0,100) + "...");
           // break;
       // }
