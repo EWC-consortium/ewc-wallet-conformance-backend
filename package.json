@@ -5,8 +5,8 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "SERVER_URL=https://abac-2a02-587-8703-400-c36a-795e-ef9-383a.ngrok-free.app   node server.js"
+    "test": "mocha tests/**/*.js",
+    "dev": "SERVER_URL=https://2e25-2a02-587-8703-400-c36a-795e-ef9-383a.ngrok-free.app node server.js"
   },
   "author": "",
   "license": "ISC",
@@ -43,5 +43,8 @@
     "uuid": "^9.0.1",
     "waltid-sd-jwt": "^1.2311200231.0",
     "zlib": "^1.0.5"
+  },
+  "devDependencies": {
+    "mocha": "^11.5.0"
   }
 }
