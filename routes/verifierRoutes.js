@@ -198,13 +198,19 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
         // Verify nonce
         let submittedNonce;
-        if (vpToken.indexOf("~") >= 0) {
-          submittedNonce = keybindJwt.payload.nonce;
+        if (jwtFromKeybind && jwtFromKeybind.payload) {
+          submittedNonce = jwtFromKeybind.payload.nonce;
         } else {
-          let decodedVpToken = await jwt.decode(vpToken, { complete: true });
-          submittedNonce = decodedVpToken.payload.nonce;
+          let decodedVpToken = jwt.decode(vpToken, { complete: true });
+          if (decodedVpToken && decodedVpToken.payload) {
+            submittedNonce = decodedVpToken.payload.nonce;
+          }
         }
 
+        if (!submittedNonce) {
+          return res.status(400).json({ error: "submitted nonce not found in vp_token" });
+        }
+        
         if (vpSession.nonce != submittedNonce) {
           console.log(`error nonces do not match ${submittedNonce} ${vpSession.nonce}`);
           return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
@@ -243,15 +249,20 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
       // Verify nonce
       let submittedNonce;
-      if (vpToken.indexOf("~") >= 0) {
-        if (!jwtFromKeybind || !jwtFromKeybind.payload) {
-          console.error("keybindJwt or its payload is missing for SD-JWT");
-          return res.status(400).json({error: "Missing keybind JWT information for SD-JWT"});
-        }
+      if (jwtFromKeybind && jwtFromKeybind.payload) {
+        // If a key-binding JWT was extracted, this is an SD-JWT presentation.
+        // The nonce MUST be taken from the key-binding JWT.
         submittedNonce = jwtFromKeybind.payload.nonce;
       } else {
-        let decodedVpToken = await jwt.decode(vpToken, { complete: true });
-        submittedNonce = decodedVpToken.payload.nonce;
+        // For regular JWT-based VPs
+        const decodedVpToken = jwt.decode(vpToken, { complete: true });
+        if (decodedVpToken && decodedVpToken.payload) {
+          submittedNonce = decodedVpToken.payload.nonce;
+        }
+      }
+
+      if (!submittedNonce) {
+        return res.status(400).json({ error: "submitted nonce not found in vp_token" });
       }
 
       if (vpSession.nonce != submittedNonce) {
@@ -420,37 +431,24 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
   } else {
     return res.status(400).type("text/plain").send("Invalid type parameter");
   }
-  /*
- TODO the vpRequest/:type/:id endpoint defined in routes/verifierRoutes.js, 
- that is used for JWT secured Authorization Requests (JAR), 
- returns a raw JSON object instead of a JWT. 
- 
- According to the JAR standard (RFC9101), the endpoint defined in request_uri should present a JWT in the response body,
-  never raw JSON. 
-  Also, as has been mentioned before, when a client_id_scheme of redirect_uri is used, 
-  the authorization request must not be signed, 
-  so perhaps the conformance backend shouldn't use JAR at all with this scheme.
-*/
 
-  let vpRequest = {
-    client_metadata: {
-      client_name: "UAegean EWC Verifier",
-      logo_uri:
-        "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
-      location: "Greece",
-      cover_uri: "string",
-      description: "EWC pilot case verification",
-    },
-    client_id: clientId,
-    client_id_scheme: "redirect_uri", //TODO change this
-    response_uri: response_uri,
-    response_type: "vp_token",
-    response_mode: "direct_post",
-    presentation_definition: presentationDefinition,
-    nonce: nonce,
-    state: uuid,
-  };
-  res.json(vpRequest);
+  const vpRequestJWT = await buildVpRequestJWT(
+    clientId,
+    response_uri,
+    presentationDefinition,
+    null, // privateKey will be loaded in buildVpRequestJWT
+    "redirect_uri", // client_id_scheme
+    client_metadata,
+    null, // kid
+    serverURL, // issuer
+    "vp_token", // response_type
+    nonce,
+    null, // dcql_query
+    null, // transaction_data
+    "direct_post" // response_mode
+  );
+  
+  res.type("application/oauth-authz-req+jwt").send(vpRequestJWT);
 });
 
 verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {

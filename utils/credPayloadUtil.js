@@ -967,33 +967,40 @@ export const getLoyaltyCardSDJWTDataWithPayload = (
 
   const validPayload = {
     customer: {
-      first_name: payload.customer?.first_name,
-      last_name: payload.customer?.last_name,
-      nationality: payload.customer?.nationality,
-      address: payload.customer?.address,
-      city: payload.customer?.city,
-      zip_code: payload.customer?.zip_code,
-      phone: payload.customer?.phone,
-      mobile: payload.customer?.mobile,
-      birth_date: payload.customer?.birth_date,
-      email: payload.customer?.email
+      first_name: payload["customer.first_name"],
+      last_name: payload["customer.last_name"],
+      nationality: payload["customer.nationality"],
+      address: payload["customer.address"],
+      city: payload["customer.city"],
+      zip_code: payload["customer.zip_code"],
+      phone: payload["customer.phone"],
+      mobile: payload["customer.mobile"],
+      birth_date: payload["customer.birth_date"],
+      email: payload["customer.email"],
     },
     loyalty_card: {
-      id: payload.loyalty_card?.id,
-      issue_date: payload.loyalty_card?.issue_date,
-      type: payload.loyalty_card?.type
+      id: payload["loyalty_card.id"],
+      issue_date: payload["loyalty_card.issue_date"],
+      status: payload["loyalty_card.status"],
+      type: payload["loyalty_card.type"],
+    },
+    portfolio: {
+      available_points: payload["portfolio.available_points"],
+      available_miles: payload["portfolio.available_miles"],
+      available_wallet: payload["portfolio.available_wallet"],
+      last_updated: payload["portfolio.last_updated"],
     },
     organization: {
-      name: payload.organization?.name,
-      id: payload.organization?.id,
-      country: payload.organization?.country
+      name: payload["organization.name"],
+      id: payload["organization.id"],
+      country: payload["organization.country"],
     },
     credential: {
-      type: payload.credential?.type,
-      issuer: payload.credential?.issuer,
-      issuance_date: payload.credential?.issuance_date,
-      expiry_date: payload.credential?.expiry_date
-    }
+      type: payload["credential.type"],
+      issuer: payload["credential.issuer"],
+      issuance_date: payload["credential.issuance_date"],
+      expiry_date: payload["credential.expiry_date"],
+    },
   };
   
   

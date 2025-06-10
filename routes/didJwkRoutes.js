@@ -293,7 +293,8 @@ didJwkRouter.get("/generateVPRequestTransaction", async (req, res) => {
     presentation_definition: presentation_definition,
     nonce: nonce,
     transaction_data: [base64UrlEncodedTxData],
-    response_mode: responseMode
+    response_mode: responseMode,
+    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt)
   });
 
   const vpRequestJWT = await buildVpRequestJWT(
@@ -336,6 +337,11 @@ didJwkRouter.route("/didJwkVPrequest/:id")
   .post(async (req, res) => {
     const uuid = req.params.id;
     const vpSession = await getVPSession(uuid);
+    // As per OpenID4VP spec, wallet can post wallet_nonce and wallet_metadata
+    const { wallet_nonce, wallet_metadata } = req.body;
+    if (wallet_nonce || wallet_metadata) {
+      console.log(`Received from wallet: wallet_nonce=${wallet_nonce}, wallet_metadata=${wallet_metadata}`);
+    }
     
     if (!vpSession) {
       return res.status(400).json({ error: "Invalid session ID" });
@@ -358,7 +364,9 @@ didJwkRouter.route("/didJwkVPrequest/:id")
       vpSession.nonce,
       vpSession.dcql_query || null,
       vpSession.transaction_data || null,
-      vpSession.response_mode
+      vpSession.response_mode,
+      wallet_nonce, 
+      wallet_metadata
     );
 
     res.type("text/plain").send(vpRequestJWT);

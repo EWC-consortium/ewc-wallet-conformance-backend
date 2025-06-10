@@ -298,7 +298,8 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
     presentation_definition: presentation_definition, 
     nonce: nonce,
     transaction_data: [base64UrlEncodedTxData],
-    response_mode: responseMode // Store response mode
+    response_mode: responseMode, // Store response mode
+    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt)
   });
 
   // JWT for request_uri
@@ -318,7 +319,7 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
     responseMode
   );
 
-  const requestUri = `${serverURL}/x509VPrequest/${uuid}`;
+  const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;
   const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post&client_id=${client_id}`;
 
   let code = qr.image(vpRequest, {
@@ -343,10 +344,17 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
 
 // Request URI endpoint (now handles POST and GET)
 x509Router.route("/x509VPrequest/:id") // Corrected path to match client requests
-  .post(async (req, res) => {
+  .post(express.urlencoded({ extended: true }), async (req, res) => {
     console.log("POST request received");
     const uuid = req.params.id;
-    const result = await generateX509VPRequest(uuid, clientMetadata, serverURL);
+
+    // As per OpenID4VP spec, wallet can post wallet_nonce and wallet_metadata
+    const { wallet_nonce, wallet_metadata } = req.body;
+    if (wallet_nonce || wallet_metadata) {
+      console.log(`Received from wallet: wallet_nonce=${wallet_nonce}, wallet_metadata=${wallet_metadata}`);
+    }
+
+    const result = await generateX509VPRequest(uuid, clientMetadata, serverURL, wallet_nonce, wallet_metadata);
 
     if (result.error) {
       return res.status(result.status).json({ error: result.error });
@@ -373,7 +381,7 @@ x509Router.route("/x509VPrequest/:id") // Corrected path to match client request
 
 
 // Helper function to process VP Request
-async function generateX509VPRequest(uuid, clientMetadata, serverURL) {
+async function generateX509VPRequest(uuid, clientMetadata, serverURL, wallet_nonce, wallet_metadata) {
   const vpSession = await getVPSession(uuid);
 
   if (!vpSession) {
@@ -383,6 +391,9 @@ async function generateX509VPRequest(uuid, clientMetadata, serverURL) {
   const response_uri = `${serverURL}/direct_post/${uuid}`;
   const client_id = "dss.aegean.gr";
 
+  // console.log("wallet_nonce", wallet_nonce);
+  // console.log("wallet_metadata", wallet_metadata);
+  
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
@@ -396,7 +407,10 @@ async function generateX509VPRequest(uuid, clientMetadata, serverURL) {
     vpSession.nonce,
     vpSession.dcql_query || null,
     vpSession.transaction_data || null,
-    vpSession.response_mode // Pass response_mode from session
+    vpSession.response_mode, // Pass response_mode from session
+    undefined, // audience, to use default
+    wallet_nonce,
+    wallet_metadata
   );
 
   return { jwt: vpRequestJWT, status: 200 };

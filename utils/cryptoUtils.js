@@ -7,6 +7,7 @@ import fs from "fs";
 import { generateRefreshToken } from "./tokenUtils.js";
 import { Resolver } from "did-resolver";
 import { getResolver } from "@cef-ebsi/key-did-resolver";
+import fetch from "node-fetch";
 
 export function pemToJWK(pem, keyType) {
   let key;
@@ -121,7 +122,9 @@ export async function buildVpRequestJWT(
   dcql_query = null,
   transaction_data = null,
   response_mode = "direct_post", // Add response_mode parameter with default
-  audience = "https://self-issued.me/v2" // New audience parameter
+  audience = "https://self-issued.me/v2", // New audience parameter
+  wallet_nonce = null,
+  wallet_metadata = null
 ) {
   if(!nonce) nonce = generateNonce(16);
   const state = generateNonce(16);
@@ -145,6 +148,8 @@ export async function buildVpRequestJWT(
     iss: client_id,
     aud: audience, // Use the audience parameter
   };
+  // console.log("wallet_nonce", wallet_nonce);
+  if(wallet_nonce) jwtPayload.wallet_nonce = wallet_nonce;
 
   // Add presentation_definition if provided and no dcql_query
   if (presentation_definition && !dcql_query) {
@@ -160,6 +165,8 @@ export async function buildVpRequestJWT(
   if (transaction_data) {
     jwtPayload.transaction_data = transaction_data;
   }
+
+  let signedJwt;
 
   if (client_id_scheme === "x509_san_dns") {
     privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
@@ -179,11 +186,9 @@ export async function buildVpRequestJWT(
       x5c: [certBase64],
     };
 
-    const jwt = await new jose.SignJWT(jwtPayload)
+    signedJwt = await new jose.SignJWT(jwtPayload)
       .setProtectedHeader(header)
       .sign(await jose.importPKCS8(privateKey, "RS256"));
-
-    return jwt;
   } else if (client_id_scheme === "did") {
     // Check if this is a did:jwk identifier
     if (client_id.startsWith('did:jwk:')) {
@@ -193,12 +198,10 @@ export async function buildVpRequestJWT(
         kid: kid // This will be in the format did:jwk:<base64url-encoded-jwk>#0
       };
 
-      const jwt = await new jose.SignJWT(jwtPayload)
+      signedJwt = await new jose.SignJWT(jwtPayload)
         .setProtectedHeader(header)
         .sign(await jose.importPKCS8(privateKey, "ES256"));
-
-      return jwt;
-    } else if (client_id.startsWith('did:web:')) {
+    } else if (client_id.startsWith("did:web:")) {
       // Handle did:web case
       const signingKey = {
         kty: "EC",
@@ -222,17 +225,49 @@ export async function buildVpRequestJWT(
         kid: kid,
       };
 
-      const jwt = await new jose.SignJWT(jwtPayload)
+      signedJwt = await new jose.SignJWT(jwtPayload)
         .setProtectedHeader(header)
         .sign(privateKeyObj);
-
-      return jwt;
     } else {
       throw new Error("Unsupported DID method: " + client_id);
     }
   } else {
     throw new Error("not supported client_id_scheme:" + client_id_scheme);
   }
+
+  // If wallet_metadata with jwks is provided, encrypt the request object
+  if (wallet_metadata && wallet_metadata.jwks) {
+    console.log(
+      "Encrypting request object using wallet's public key from wallet_metadata."
+    );
+
+    const jwks = wallet_metadata.jwks;
+    // Find a key suitable for encryption
+    const encryptionKey = jwks.keys.find(
+      (k) => k.use === "enc" || k.use === undefined
+    );
+    if (!encryptionKey) {
+      throw new Error("No suitable encryption key found in wallet_metadata.jwks");
+    }
+    const publicKey = await jose.importJWK(encryptionKey);
+
+    const alg =
+      wallet_metadata.authorization_encryption_alg_values_supported?.[0] ||
+      "ECDH-ES+A256KW";
+    const enc =
+      wallet_metadata.authorization_encryption_enc_values_supported?.[0] ||
+      "A256GCM";
+
+    const encryptedRequest = await new jose.CompactEncrypt(
+      new TextEncoder().encode(signedJwt)
+    )
+      .setProtectedHeader({ alg: alg, enc: enc, typ: "oauth-authz-req+jwt" })
+      .encrypt(publicKey);
+
+    return encryptedRequest;
+  }
+  // console.log("signedJwt", signedJwt);
+  return signedJwt;
 }
 
 export async function buildPaymentVpRequestJWT(
@@ -518,5 +553,24 @@ export async function didKeyToJwks(did) {
     throw new Error("publicKeyJwk not found in didDocument verificationMethod");
   }
   return { keys: [publicKeyJwk] };
+}
+
+export async function fetchWalletMetadata(metadataUrl) {
+  if (!metadataUrl) {
+    console.log("No wallet metadata URL provided, skipping fetch.");
+    return null;
+  }
+  try {
+    const response = await fetch(metadataUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch wallet metadata: ${response.statusText}`);
+    }
+    const metadata = await response.json();
+    console.log("Fetched wallet metadata:", metadata);
+    return metadata;
+  } catch (error) {
+    console.error("Error fetching wallet metadata:", error);
+    throw error;
+  }
 }
 
