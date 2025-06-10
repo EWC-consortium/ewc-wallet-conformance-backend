@@ -217,14 +217,14 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         }
 
         // Process claims as before
-        if (!hasOnlyAllowedFields(extractedClaims, vpSession.sdsRequested)) {
+        if (vpSession.sdsRequested && !hasOnlyAllowedFields(claimsFromExtraction, vpSession.sdsRequested)) {
           return res.status(400).json({
-            error: "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(extractedClaims),
+            error: "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(claimsFromExtraction),
           });
         }
 
         vpSession.status = "success";
-        vpSession.claims = { ...extractedClaims };
+        vpSession.claims = { ...claimsFromExtraction };
         storeVPSession(sessionId, vpSession);
         return res.status(200).json({ status: "ok" });
 
@@ -270,7 +270,7 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
       }
 
-      if (!hasOnlyAllowedFields(claimsFromExtraction, vpSession.sdsRequested)) {
+      if (vpSession.sdsRequested && !hasOnlyAllowedFields(claimsFromExtraction, vpSession.sdsRequested)) {
         return res.status(400).json({
           error: "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(claimsFromExtraction),
         });
