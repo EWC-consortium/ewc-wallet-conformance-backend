@@ -55,7 +55,6 @@ didRouter.get("/generateVPRequest", async (req, res) => {
     response_uri,
     presentation_definition_sdJwt,
     privateKey,
-    "did", // this references the key format not the DID method
     clientMetadata,
     kid,
     serverURL,
@@ -67,7 +66,9 @@ didRouter.get("/generateVPRequest", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post&client_id=${client_id}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -114,7 +115,6 @@ didRouter.get("/generateVPRequestGET", async (req, res) => {
     response_uri,
     presentation_definition_sdJwt,
     privateKey,
-    "did", // this references the key format not the DID method
     clientMetadata,
     kid,
     serverURL,
@@ -126,7 +126,9 @@ didRouter.get("/generateVPRequestGET", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&client_id=${client_id}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -194,7 +196,6 @@ didRouter.get("/generateVPRequestDCQL", async (req, res) => {
     response_uri,
     null,
     privateKey,
-    "did",
     clientMetadata,
     kid,
     serverURL,
@@ -206,7 +207,9 @@ didRouter.get("/generateVPRequestDCQL", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post&client_id=${client_id}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -269,7 +272,6 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     response_uri,
     presentation_definition,
     privateKey,
-    "did",
     clientMetadata,
     kid,
     serverURL,
@@ -281,7 +283,9 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&client_id=${client_id}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -328,7 +332,6 @@ didRouter.route("/VPrequest/:id")
       response_uri,
       vpSession.presentation_definition,
       privateKey,
-      "did:jwks",
       clientMetadata,
       kid,
       serverURL,
@@ -336,6 +339,8 @@ didRouter.route("/VPrequest/:id")
       vpSession.nonce,
       vpSession.dcql_query || null,
       vpSession.transaction_data || null,
+      vpSession.response_mode,
+      undefined, // audience
       wallet_nonce,
       wallet_metadata
     );
@@ -365,14 +370,14 @@ didRouter.route("/VPrequest/:id")
       response_uri,
       vpSession.presentation_definition,
       privateKey, // Assuming privateKey is accessible in this scope
-      "did",
       clientMetadata, // Assuming clientMetadata is accessible
       kid,
       serverURL,
       "vp_token",
       vpSession.nonce,
       vpSession.dcql_query || null,
-      vpSession.transaction_data || null
+      vpSession.transaction_data || null,
+      vpSession.response_mode
     );
 
     // Respond with JWT as per OpenID4VP spec for request_uri

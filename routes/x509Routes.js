@@ -30,7 +30,7 @@ x509Router.get("/generateVPRequest", async (req, res) => {
   const nonce = generateNonce(16);
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "dss.aegean.gr"; // This should match the DNS SAN in the certificate
+  const client_id = "x509_san_dns:dss.aegean.gr"; // This should match the DNS SAN in the certificate
 
   // Store session data
   storeVPSession(uuid, {
@@ -51,7 +51,6 @@ x509Router.get("/generateVPRequest", async (req, res) => {
     response_uri,
     presentation_definition_sdJwt,
     null, // privateKey will be loaded in buildVpRequestJWT
-    "x509_san_dns",
     clientMetadata,
     null,
     serverURL,
@@ -66,7 +65,9 @@ x509Router.get("/generateVPRequest", async (req, res) => {
   // Since the /x509VPrequest/:id endpoint is a POST endpoint (as per its definition later in this file),
   // we add request_uri_method=post.
   const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post&client_id=${client_id}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
 
   // Generate QR code
   let code = qr.image(vpRequest, {
@@ -92,7 +93,7 @@ x509Router.get("/generateVPRequestGet", async (req, res) => {
   const nonce = generateNonce(16);
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "dss.aegean.gr";
+  const client_id = "x509_san_dns:dss.aegean.gr";
 
   storeVPSession(uuid, {
     uuid: uuid,
@@ -109,7 +110,9 @@ x509Router.get("/generateVPRequestGet", async (req, res) => {
 
   const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;  
   // openid4vp:// URL without request_uri_method, defaulting to GET for request_uri
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&client_id=${client_id}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -134,7 +137,7 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
   const responseMode = req.query.response_mode || "direct_post"; // Added for consistency if needed for JWT
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "dss.aegean.gr";
+  const client_id = "x509_san_dns:dss.aegean.gr";
 
   // Example DCQL query - this should be configurable
   const dcql_query =   {
@@ -174,7 +177,6 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
     response_uri,
     null, // No presentation_definition for DCQL
     null, // privateKey
-    "x509_san_dns",
     clientMetadata,
     null, // kid
     serverURL,
@@ -186,7 +188,9 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post&client_id=${client_id}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -211,7 +215,7 @@ x509Router.get("/generateVPRequestDCQLGET", async (req, res) => {
   const responseMode = req.query.response_mode || "direct_post"; // Added for consistency if needed for JWT
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "dss.aegean.gr";
+  const client_id = "x509_san_dns:dss.aegean.gr";
 
  
   const dcql_query =   {
@@ -247,7 +251,9 @@ x509Router.get("/generateVPRequestDCQLGET", async (req, res) => {
   
 
   const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&client_id=${client_id}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -273,7 +279,7 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
   const responseMode = req.query.response_mode || "direct_post"; // Added for consistency
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "dss.aegean.gr";
+  const client_id = "x509_san_dns:dss.aegean.gr";
 
   // For transaction data, we still need a presentation definition
   const presentation_definition = presentation_definition_sdJwt; 
@@ -308,7 +314,6 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
     response_uri,
     presentation_definition, 
     null, 
-    "x509_san_dns",
     clientMetadata,
     null, 
     serverURL,
@@ -320,7 +325,9 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post&client_id=${client_id}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -389,7 +396,7 @@ async function generateX509VPRequest(uuid, clientMetadata, serverURL, wallet_non
   }
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "dss.aegean.gr";
+  const client_id = "x509_san_dns:dss.aegean.gr";
 
   // console.log("wallet_nonce", wallet_nonce);
   // console.log("wallet_metadata", wallet_metadata);
@@ -399,7 +406,6 @@ async function generateX509VPRequest(uuid, clientMetadata, serverURL, wallet_non
     response_uri,
     vpSession.presentation_definition,
     null, // privateKey
-    "x509_san_dns",
     clientMetadata,
     null, // kid
     serverURL,

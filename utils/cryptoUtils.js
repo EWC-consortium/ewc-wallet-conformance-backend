@@ -113,7 +113,6 @@ export async function buildVpRequestJWT(
   redirect_uri,
   presentation_definition,
   privateKey = "",
-  client_id_scheme = "redirect_uri", // Default to "redirect_uri"
   client_metadata = {},
   kid = null, // Default to an empty object,
   serverURL,
@@ -140,7 +139,6 @@ export async function buildVpRequestJWT(
     response_type: response_type,
     response_mode: response_mode,
     client_id: client_id,
-    client_id_scheme: client_id_scheme,
     response_uri: redirect_uri,
     nonce: nonce,
     state: state,
@@ -168,7 +166,7 @@ export async function buildVpRequestJWT(
 
   let signedJwt;
 
-  if (client_id_scheme === "x509_san_dns") {
+  if (client_id.startsWith("x509_san_dns:")) {
     privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
     const certificate = fs.readFileSync(
       "./x509/client_certificate.crt",
@@ -189,7 +187,7 @@ export async function buildVpRequestJWT(
     signedJwt = await new jose.SignJWT(jwtPayload)
       .setProtectedHeader(header)
       .sign(await jose.importPKCS8(privateKey, "RS256"));
-  } else if (client_id_scheme === "did") {
+  } else if (client_id.startsWith("did:")) {
     // Check if this is a did:jwk identifier
     if (client_id.startsWith('did:jwk:')) {
       const header = {
@@ -232,7 +230,7 @@ export async function buildVpRequestJWT(
       throw new Error("Unsupported DID method: " + client_id);
     }
   } else {
-    throw new Error("not supported client_id_scheme:" + client_id_scheme);
+    throw new Error("not supported client_id scheme for client_id:" + client_id);
   }
 
   // If wallet_metadata with jwks is provided, encrypt the request object
@@ -275,7 +273,6 @@ export async function buildPaymentVpRequestJWT(
   redirect_uri,
   presentation_definition,
   privateKey = "",
-  client_id_scheme = "redirect_uri", // Default to "redirect_uri"
   client_metadata = {},
   kid = null, // Default to an empty object,
   serverURL,
@@ -315,7 +312,6 @@ export async function buildPaymentVpRequestJWT(
     response_type: response_type,
     response_mode: "direct_post",
     client_id: client_id, // this should match the dns record in the certificate (dss.aegean.gr)
-    client_id_scheme: client_id_scheme,
     response_uri: redirect_uri,
     nonce: nonce,
     state: state,
@@ -339,7 +335,7 @@ export async function buildPaymentVpRequestJWT(
     jwtPayload.presentation_definition = presentation_definition;
   }
 
-  if (client_id_scheme === "x509_san_dns") {
+  if (client_id.startsWith("x509_san_dns:")) {
     privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
     const certificate = fs.readFileSync(
       "./x509/client_certificate.crt",
@@ -362,7 +358,7 @@ export async function buildPaymentVpRequestJWT(
       .sign(await jose.importPKCS8(privateKey, "RS256"));
 
     return { jwt, base64EncodedTxData };
-  } else if (client_id_scheme.indexOf("did") >= 0) {
+  } else if (client_id.startsWith("did:")) {
     //TODO NOT COMPLETED SHOULD RETURN txDATA HASH
     const signingKey = {
       kty: "EC",
@@ -383,7 +379,6 @@ export async function buildPaymentVpRequestJWT(
       response_type: response_type,
       response_mode: "direct_post",
       client_id: client_id, // DID the did of the verifier!!!!!!
-      client_id_scheme: client_id_scheme,
       redirect_uri: redirect_uri,
       nonce: nonce,
       state: state,
@@ -412,7 +407,7 @@ export async function buildPaymentVpRequestJWT(
 
     // Conditional signing based on client_id_scheme
   } else {
-    throw new Error("not supported client_id_scheme:" + client_id_scheme);
+    throw new Error("not supported client_id scheme for client_id:" + client_id);
   }
 }
 

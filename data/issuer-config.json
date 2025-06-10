@@ -211,10 +211,12 @@
           "proof_signing_alg_values_supported": ["ES256"]
         }
       },
+      "credential_definition": {
       "type": [
           "VerifiableCredential",
           "VerifiableIdCard"
         ]
+      }
     },
 
     "VerifiablePIDSDJWT": {
