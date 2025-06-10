@@ -17,8 +17,9 @@
     
     "VerifiablePortableDocumentA1SDJWT": {
       "scope": "VerifiablePortableDocumentA1SDJWT",
-      "claims": {
-        "given_name": {
+      "claims": [
+        {
+          "path": ["given_name"],
           "display": [
             {
               "name": "Given Name",
@@ -30,7 +31,8 @@
             }
           ]
         },
-        "last_name": {
+        {
+          "path": ["last_name"],
           "display": [
             {
               "name": "Surname",
@@ -42,7 +44,7 @@
             }
           ]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
@@ -65,8 +67,9 @@
 
     "VerifiablePortableDocumentA2SDJWT": {
       "scope": "VerifiablePortableDocumentA2SDJWT",
-      "claims": {
-        "given_name": {
+      "claims": [
+        {
+          "path": ["given_name"],
           "display": [
             {
               "name": "Given Name",
@@ -78,7 +81,8 @@
             }
           ]
         },
-        "last_name": {
+        {
+          "path": ["last_name"],
           "display": [
             {
               "name": "Surname",
@@ -90,7 +94,7 @@
             }
           ]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
@@ -113,8 +117,9 @@
 
     "VerifiableIdCardJwtVc": {
       "scope": "VerifiableIdCard",
-      "claims": {
-        "given_name": {
+      "claims": [
+        {
+          "path": ["given_name"],
           "display": [
             {
               "name": "Given Name",
@@ -122,7 +127,8 @@
             }
           ]
         },
-        "family_name": {
+        {
+          "path": ["family_name"],
           "display": [
             {
               "name": "Surname",
@@ -130,7 +136,8 @@
             }
           ]
         },
-        "birth_date": {
+        {
+          "path": ["birth_date"],
           "display": [
             {
               "name": "Birth Date",
@@ -138,7 +145,8 @@
             }
           ]
         },
-        "age_over_18": {
+        {
+          "path": ["age_over_18"],
           "display": [
             {
               "name": "Age Over 18",
@@ -146,7 +154,8 @@
             }
           ]
         },
-        "issuance_date": {
+        {
+          "path": ["issuance_date"],
           "display": [
             {
               "name": "Issuance Date",
@@ -154,7 +163,8 @@
             }
           ]
         },
-        "expiry_date": {
+        {
+          "path": ["expiry_date"],
           "display": [
             {
               "name": "Expiry Date",
@@ -162,7 +172,8 @@
             }
           ]
         },
-        "issuing_authority": {
+        {
+          "path": ["issuing_authority"],
           "display": [
             {
               "name": "Issuing Authority",
@@ -170,7 +181,8 @@
             }
           ]
         },
-        "issuing_country": {
+        {
+          "path": ["issuing_country"],
           "display": [
             {
               "name": "Issuing Country",
@@ -178,7 +190,7 @@
             }
           ]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
@@ -193,18 +205,23 @@
         }
       ],
       "credential_signing_alg_values_supported": ["ES256"],
-      "format": "jwt_vc",
+      "format": "jwt_vc_json",
       "proof_types_supported": {
         "jwt": {
           "proof_signing_alg_values_supported": ["ES256"]
         }
-      }
+      },
+      "type": [
+          "VerifiableCredential",
+          "VerifiableIdCard"
+        ]
     },
 
     "VerifiablePIDSDJWT": {
       "scope": "PID",
-      "claims": {
-        "given_name": {
+      "claims": [
+        {
+          "path": ["given_name"],
           "display": [
             {
               "name": "Given Name",
@@ -212,7 +229,8 @@
             }
           ]
         },
-        "family_name": {
+        {
+          "path": ["family_name"],
           "display": [
             {
               "name": "Surname",
@@ -220,7 +238,8 @@
             }
           ]
         },
-        "birth_date": {
+        {
+          "path": ["birth_date"],
           "display": [
             {
               "name": "Birth Date",
@@ -228,7 +247,8 @@
             }
           ]
         },
-        "age_over_18": {
+        {
+          "path": ["age_over_18"],
           "display": [
             {
               "name": "Age Over 18",
@@ -236,7 +256,8 @@
             }
           ]
         },
-        "issuance_date": {
+        {
+          "path": ["issuance_date"],
           "display": [
             {
               "name": "Issuance Date",
@@ -244,7 +265,8 @@
             }
           ]
         },
-        "expiry_date": {
+        {
+          "path": ["expiry_date"],
           "display": [
             {
               "name": "Expiry Date",
@@ -252,7 +274,8 @@
             }
           ]
         },
-        "issuing_authority": {
+        {
+          "path": ["issuing_authority"],
           "display": [
             {
               "name": "Issuing Authority",
@@ -260,7 +283,8 @@
             }
           ]
         },
-        "issuing_country": {
+        {
+          "path": ["issuing_country"],
           "display": [
             {
               "name": "Issuing Country",
@@ -268,7 +292,7 @@
             }
           ]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
@@ -294,8 +318,9 @@
 
     "VerifiableePassportCredentialSDJWT": {
       "scope": "ePassportCredential",
-      "claims": {
-        "id": {
+      "claims": [
+        {
+          "path": ["id"],
           "display": [
             {
               "name": "id",
@@ -303,23 +328,26 @@
             }
           ]
         },
-        "electronicPassport": {
+        {
+          "path": ["electronicPassport"],
           "display": [
             {
               "name": "electronicPassport",
               "locale": "en-GB"
             }
           ],
-          "properties": {
-            "dataGroup1": {
+          "claims": [
+            {
+              "path": ["dataGroup1"],
               "display": [
                 {
                   "name": "dataGroup1",
                   "locale": "en-GB"
                 }
               ],
-              "properties": {
-                "birthdate": {
+              "claims": [
+                {
+                  "path": ["birthdate"],
                   "display": [
                     {
                       "name": "birthdate",
@@ -327,7 +355,8 @@
                     }
                   ]
                 },
-                "docTypeCode": {
+                {
+                  "path": ["docTypeCode"],
                   "display": [
                     {
                       "name": "docTypeCode",
@@ -335,7 +364,8 @@
                     }
                   ]
                 },
-                "expiryDate": {
+                {
+                  "path": ["expiryDate"],
                   "display": [
                     {
                       "name": "expiryDate",
@@ -343,7 +373,8 @@
                     }
                   ]
                 },
-                "genderCode": {
+                {
+                  "path": ["genderCode"],
                   "display": [
                     {
                       "name": "genderCode",
@@ -351,7 +382,8 @@
                     }
                   ]
                 },
-                "holdersName": {
+                {
+                  "path": ["holdersName"],
                   "display": [
                     {
                       "name": "holdersName",
@@ -359,7 +391,8 @@
                     }
                   ]
                 },
-                "issuerCode": {
+                {
+                  "path": ["issuerCode"],
                   "display": [
                     {
                       "name": "issuerCode",
@@ -367,7 +400,8 @@
                     }
                   ]
                 },
-                "natlText": {
+                {
+                  "path": ["natlText"],
                   "display": [
                     {
                       "name": "natlText",
@@ -375,7 +409,8 @@
                     }
                   ]
                 },
-                "passportNumberIdentifier": {
+                {
+                  "path": ["passportNumberIdentifier"],
                   "display": [
                     {
                       "name": "passportNumberIdentifier",
@@ -383,25 +418,28 @@
                     }
                   ]
                 }
-              }
+              ]
             },
-            "dataGroup15": {
+            {
+              "path": ["dataGroup15"],
               "display": [
                 {
                   "name": "dataGroup15",
                   "locale": "en-GB"
                 }
               ],
-              "properties": {
-                "activeAuthentication": {
+              "claims": [
+                {
+                  "path": ["activeAuthentication"],
                   "display": [
                     {
                       "name": "activeAuthentication",
                       "locale": "en-GB"
                     }
                   ],
-                  "properties": {
-                    "publicKeyBinaryObject": {
+                  "claims": [
+                    {
+                      "path": ["publicKeyBinaryObject"],
                       "display": [
                         {
                           "name": "publicKeyBinaryObject",
@@ -409,19 +447,21 @@
                         }
                       ]
                     }
-                  }
+                  ]
                 }
-              }
+              ]
             },
-            "dataGroup2EncodedFaceBiometrics": {
+            {
+              "path": ["dataGroup2EncodedFaceBiometrics"],
               "display": [
                 {
                   "name": "dataGroup2EncodedFaceBiometrics",
                   "locale": "en-GB"
                 }
               ],
-              "properties": {
-                "faceBiometricDataEncodedPicture": {
+              "claims": [
+                {
+                  "path": ["faceBiometricDataEncodedPicture"],
                   "display": [
                     {
                       "name": "faceBiometricDataEncodedPicture",
@@ -429,11 +469,11 @@
                     }
                   ]
                 }
-              }
+              ]
             }
-          }
+          ]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
@@ -459,8 +499,9 @@
 
     "VerifiableStudentIDSDJWT": {
       "scope": "StudentID",
-      "claims": {
-        "identifier": {
+      "claims": [
+        {
+          "path": ["identifier"],
           "display": [
             {
               "name": "Identifier",
@@ -468,7 +509,8 @@
             }
           ]
         },
-        "schacPersonalUniqueCode": {
+        {
+          "path": ["schacPersonalUniqueCode"],
           "display": [
             {
               "name": "SCHAC Personal Unique Code",
@@ -476,7 +518,8 @@
             }
           ]
         },
-        "schacPersonalUniqueID": {
+        {
+          "path": ["schacPersonalUniqueID"],
           "display": [
             {
               "name": "SCHAC Personal Unique ID",
@@ -484,7 +527,8 @@
             }
           ]
         },
-        "schacHomeOrganization": {
+        {
+          "path": ["schacHomeOrganization"],
           "display": [
             {
               "name": "SCHAC Home Organization",
@@ -492,7 +536,8 @@
             }
           ]
         },
-        "familyName": {
+        {
+          "path": ["familyName"],
           "display": [
             {
               "name": "Family Name",
@@ -500,7 +545,8 @@
             }
           ]
         },
-        "firstName": {
+        {
+          "path": ["firstName"],
           "display": [
             {
               "name": "First Name",
@@ -508,7 +554,8 @@
             }
           ]
         },
-        "displayName": {
+        {
+          "path": ["displayName"],
           "display": [
             {
               "name": "Display Name",
@@ -516,7 +563,8 @@
             }
           ]
         },
-        "dateOfBirth": {
+        {
+          "path": ["dateOfBirth"],
           "display": [
             {
               "name": "Date of Birth",
@@ -524,7 +572,8 @@
             }
           ]
         },
-        "commonName": {
+        {
+          "path": ["commonName"],
           "display": [
             {
               "name": "Common Name",
@@ -532,7 +581,8 @@
             }
           ]
         },
-        "mail": {
+        {
+          "path": ["mail"],
           "display": [
             {
               "name": "Email",
@@ -540,7 +590,8 @@
             }
           ]
         },
-        "eduPersonPrincipalName": {
+        {
+          "path": ["eduPersonPrincipalName"],
           "display": [
             {
               "name": "eduPerson Principal Name",
@@ -548,7 +599,8 @@
             }
           ]
         },
-        "eduPersonPrimaryAffiliation": {
+        {
+          "path": ["eduPersonPrimaryAffiliation"],
           "display": [
             {
               "name": "eduPerson Primary Affiliation",
@@ -556,7 +608,8 @@
             }
           ]
         },
-        "eduPersonAffiliation": {
+        {
+          "path": ["eduPersonAffiliation"],
           "display": [
             {
               "name": "eduPerson Affiliation",
@@ -564,7 +617,8 @@
             }
           ]
         },
-        "eduPersonScopedAffiliation": {
+        {
+          "path": ["eduPersonScopedAffiliation"],
           "display": [
             {
               "name": "eduPerson Scoped Affiliation",
@@ -572,7 +626,8 @@
             }
           ]
         },
-        "eduPersonAssurance": {
+        {
+          "path": ["eduPersonAssurance"],
           "display": [
             {
               "name": "eduPerson Assurance",
@@ -580,7 +635,7 @@
             }
           ]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
@@ -606,8 +661,9 @@
 
     "VerifiableFerryBoardingPassCredentialSDJWT": {
       "scope": "ferryBoardingPassCredential",
-      "claims": {
-        "identifier": {
+      "claims": [
+        {
+          "path": ["identifier"],
           "display": [
             {
               "name": "Identifier",
@@ -615,7 +671,8 @@
             }
           ]
         },
-        "ticketQR": {
+        {
+          "path": ["ticketQR"],
           "display": [
             {
               "name": "Ticket QR Code",
@@ -623,7 +680,8 @@
             }
           ]
         },
-        "ticketNumber": {
+        {
+          "path": ["ticketNumber"],
           "display": [
             {
               "name": "Ticket Number",
@@ -631,7 +689,8 @@
             }
           ]
         },
-        "ticketLet": {
+        {
+          "path": ["ticketLet"],
           "display": [
             {
               "name": "Ticket Letter",
@@ -639,7 +698,8 @@
             }
           ]
         },
-        "lastName": {
+        {
+          "path": ["lastName"],
           "display": [
             {
               "name": "Last Name",
@@ -647,7 +707,8 @@
             }
           ]
         },
-        "firstName": {
+        {
+          "path": ["firstName"],
           "display": [
             {
               "name": "First Name",
@@ -655,7 +716,8 @@
             }
           ]
         },
-        "seatType": {
+        {
+          "path": ["seatType"],
           "display": [
             {
               "name": "Seat Type",
@@ -663,7 +725,8 @@
             }
           ]
         },
-        "seatNumber": {
+        {
+          "path": ["seatNumber"],
           "display": [
             {
               "name": "Seat Number",
@@ -671,7 +734,8 @@
             }
           ]
         },
-        "departureDate": {
+        {
+          "path": ["departureDate"],
           "display": [
             {
               "name": "Departure Date",
@@ -679,7 +743,8 @@
             }
           ]
         },
-        "departureTime": {
+        {
+          "path": ["departureTime"],
           "display": [
             {
               "name": "Departure Time",
@@ -687,7 +752,8 @@
             }
           ]
         },
-        "arrivalDate": {
+        {
+          "path": ["arrivalDate"],
           "display": [
             {
               "name": "Arrival Date",
@@ -695,7 +761,8 @@
             }
           ]
         },
-        "arrivalTime": {
+        {
+          "path": ["arrivalTime"],
           "display": [
             {
               "name": "Arrival Time",
@@ -703,7 +770,8 @@
             }
           ]
         },
-        "arrivalPort": {
+        {
+          "path": ["arrivalPort"],
           "display": [
             {
               "name": "Arrival Port",
@@ -711,7 +779,8 @@
             }
           ]
         },
-        "vesselDescription": {
+        {
+          "path": ["vesselDescription"],
           "display": [
             {
               "name": "Vessel Description",
@@ -719,7 +788,7 @@
             }
           ]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
@@ -745,109 +814,142 @@
 
     "VerifiableReceipt": {
       "scope": "vReceipt",
-      "claims": {
-        "monetary_total.line_extension_amount": {
+      "claims": [
+        {
+          "path": ["monetary_total.line_extension_amount"],
           "display": [{ "name": "Line Total", "locale": "en-GB" }]
         },
-        "monetary_total.payable_amount": {
+        {
+          "path": ["monetary_total.payable_amount"],
           "display": [{ "name": "Total Payable", "locale": "en-GB" }]
         },
-        "monetary_total.tax_inclusive_amount": {
+        {
+          "path": ["monetary_total.tax_inclusive_amount"],
           "display": [{ "name": "Tax Inclusive Total", "locale": "en-GB" }]
         },
-        "tax_total.tax_subtotal.tax_amount": {
+        {
+          "path": ["tax_total.tax_subtotal.tax_amount"],
           "display": [{ "name": "Tax Subtotal Amount", "locale": "en-GB" }]
         },
-        "tax_total.tax_subtotal.tax_category.tax_scheme.name": {
+        {
+          "path": ["tax_total.tax_subtotal.tax_category.tax_scheme.name"],
           "display": [{ "name": "Tax Scheme", "locale": "en-GB" }]
         },
-        "tax_total.tax_subtotal.percent": {
+        {
+          "path": ["tax_total.tax_subtotal.percent"],
           "display": [{ "name": "Tax Percentage", "locale": "en-GB" }]
         },
-        "tax_total.tax_amount": {
+        {
+          "path": ["tax_total.tax_amount"],
           "display": [{ "name": "Total Tax Amount", "locale": "en-GB" }]
         },
-        "address.street_name": {
+        {
+          "path": ["address.street_name"],
           "display": [{ "name": "Street Name", "locale": "en-GB" }]
         },
-        "address.city_name": {
+        {
+          "path": ["address.city_name"],
           "display": [{ "name": "City", "locale": "en-GB" }]
         },
-        "address.postcode": {
+        {
+          "path": ["address.postcode"],
           "display": [{ "name": "Postal Code", "locale": "en-GB" }]
         },
-        "address.country_identifier": {
+        {
+          "path": ["address.country_identifier"],
           "display": [{ "name": "Country Code", "locale": "en-GB" }]
         },
-        "payment_means.payment_means_code": {
+        {
+          "path": ["payment_means.payment_means_code"],
           "display": [{ "name": "Payment Method", "locale": "en-GB" }]
         },
-        "payment_means.card_account.network_id": {
+        {
+          "path": ["payment_means.card_account.network_id"],
           "display": [{ "name": "Card Network", "locale": "en-GB" }]
         },
-        "payment_means.card_account.account_number_id": {
+        {
+          "path": ["payment_means.card_account.account_number_id"],
           "display": [{ "name": "Card Number", "locale": "en-GB" }]
         },
-        "item_property.item_property_name": {
+        {
+          "path": ["item_property.item_property_name"],
           "display": [{ "name": "Item Property", "locale": "en-GB" }]
         },
-        "item_property.value": {
+        {
+          "path": ["item_property.value"],
           "display": [{ "name": "Item Value", "locale": "en-GB" }]
         },
-        "purchase_receipt.id": {
+        {
+          "path": ["purchase_receipt.id"],
           "display": [{ "name": "Receipt ID", "locale": "en-GB" }]
         },
-        "purchase_receipt.issue_date": {
+        {
+          "path": ["purchase_receipt.issue_date"],
           "display": [{ "name": "Issue Date", "locale": "en-GB" }]
         },
-        "purchase_receipt.document_currency_code": {
+        {
+          "path": ["purchase_receipt.document_currency_code"],
           "display": [{ "name": "Currency", "locale": "en-GB" }]
         },
-        "purchase_receipt.legal_monetary_total": {
+        {
+          "path": ["purchase_receipt.legal_monetary_total"],
           "display": [{ "name": "Legal Monetary Total", "locale": "en-GB" }]
         },
-        "purchase_receipt.seller_supplier_party.supplier_party_id": {
+        {
+          "path": ["purchase_receipt.seller_supplier_party.supplier_party_id"],
           "display": [{ "name": "Seller ID", "locale": "en-GB" }]
         },
-        "purchase_receipt.tax_included_indicator": {
+        {
+          "path": ["purchase_receipt.tax_included_indicator"],
           "display": [{ "name": "Tax Included", "locale": "en-GB" }]
         },
-        "purchase_receipt.payment.paid_amount": {
+        {
+          "path": ["purchase_receipt.payment.paid_amount"],
           "display": [{ "name": "Paid Amount", "locale": "en-GB" }]
         },
-        "purchase_receipt.payment.authorization_id": {
+        {
+          "path": ["purchase_receipt.payment.authorization_id"],
           "display": [{ "name": "Authorization ID", "locale": "en-GB" }]
         },
-        "purchase_receipt.payment.transaction_id": {
+        {
+          "path": ["purchase_receipt.payment.transaction_id"],
           "display": [{ "name": "Transaction ID", "locale": "en-GB" }]
         },
-        "purchase_receipt.purchase_receipt_line.id": {
+        {
+          "path": ["purchase_receipt.purchase_receipt_line.id"],
           "display": [{ "name": "Line ID", "locale": "en-GB" }]
         },
-        "purchase_receipt.purchase_receipt_line.quantity": {
+        {
+          "path": ["purchase_receipt.purchase_receipt_line.quantity"],
           "display": [{ "name": "Quantity", "locale": "en-GB" }]
         },
-        "purchase_receipt.purchase_receipt_line.tax_inclusive_line_extension_amount": {
+        {
+          "path": ["purchase_receipt.purchase_receipt_line.tax_inclusive_line_extension_amount"],
           "display": [
             { "name": "Line Tax Inclusive Amount", "locale": "en-GB" }
           ]
         },
-        "purchase_receipt.purchase_receipt_line.item.commodity_classification.item_classification_code": {
+        {
+          "path": ["purchase_receipt.purchase_receipt_line.item.commodity_classification.item_classification_code"],
           "display": [{ "name": "Item Classification Code", "locale": "en-GB" }]
         },
-        "delivery.actual_delivery_date": {
+        {
+          "path": ["delivery.actual_delivery_date"],
           "display": [{ "name": "Delivery Date", "locale": "en-GB" }]
         },
-        "delivery.actual_delivery_time": {
+        {
+          "path": ["delivery.actual_delivery_time"],
           "display": [{ "name": "Delivery Time", "locale": "en-GB" }]
         },
-        "party_name.name": {
+        {
+          "path": ["party_name.name"],
           "display": [{ "name": "Business Name", "locale": "en-GB" }]
         },
-        "party_identification.id": {
+        {
+          "path": ["party_identification.id"],
           "display": [{ "name": "Business ID", "locale": "en-GB" }]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
@@ -873,8 +975,9 @@
 
     "urn:eu.europa.ec.eudi:pid:1": {
       "scope": "urn:eu.europa.ec.eudi:pid:1",
-      "claims": {
-        "given_name": {
+      "claims": [
+        {
+          "path": ["given_name"],
           "display": [
             {
               "name": "Given Name",
@@ -882,7 +985,8 @@
             }
           ]
         },
-        "family_name": {
+        {
+          "path": ["family_name"],
           "display": [
             {
               "name": "Surname",
@@ -890,7 +994,8 @@
             }
           ]
         },
-        "birth_date": {
+        {
+          "path": ["birth_date"],
           "display": [
             {
               "name": "Birth Date",
@@ -898,7 +1003,8 @@
             }
           ]
         },
-        "age_over_18": {
+        {
+          "path": ["age_over_18"],
           "display": [
             {
               "name": "Age Over 18",
@@ -906,7 +1012,8 @@
             }
           ]
         },
-        "issuance_date": {
+        {
+          "path": ["issuance_date"],
           "display": [
             {
               "name": "Issuance Date",
@@ -914,7 +1021,8 @@
             }
           ]
         },
-        "expiry_date": {
+        {
+          "path": ["expiry_date"],
           "display": [
             {
               "name": "Expiry Date",
@@ -922,7 +1030,8 @@
             }
           ]
         },
-        "issuing_authority": {
+        {
+          "path": ["issuing_authority"],
           "display": [
             {
               "name": "Issuing Authority",
@@ -930,7 +1039,8 @@
             }
           ]
         },
-        "issuing_country": {
+        {
+          "path": ["issuing_country"],
           "display": [
             {
               "name": "Issuing Country",
@@ -938,7 +1048,7 @@
             }
           ]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
@@ -965,74 +1075,85 @@
     
     "urn:eu.europa.ec.eudi:pid:1:mso_mdoc": {
       "scope": "urn:eu.europa.ec.eudi:pid:1",
-      "claims": {
-        "urn:eu.europa.ec.eudi:pid:1": {
-          "given_name": {
-            "display": [
-              {
-                "name": "Given Name",
-                "locale": "en-GB"
-              }
-            ]
-          },
-          "family_name": {
-            "display": [
-              {
-                "name": "Surname",
-                "locale": "en-GB"
-              }
-            ]
-          },
-          "birth_date": {
-            "display": [
-              {
-                "name": "Birth Date",
-                "locale": "en-GB"
-              }
-            ]
-          },
-          "age_over_18": {
-            "display": [
-              {
-                "name": "Age Over 18",
-                "locale": "en-GB"
-              }
-            ]
-          },
-          "issuance_date": {
-            "display": [
-              {
-                "name": "Issuance Date",
-                "locale": "en-GB"
-              }
-            ]
-          },
-          "expiry_date": {
-            "display": [
-              {
-                "name": "Expiry Date",
-                "locale": "en-GB"
-              }
-            ]
-          },
-          "issuing_authority": {
-            "display": [
-              {
-                "name": "Issuing Authority",
-                "locale": "en-GB"
-              }
-            ]
-          },
-          "issuing_country": {
-            "display": [
-              {
-                "name": "Issuing Country",
-                "locale": "en-GB"
-              }
-            ]
-          }
+      "claims": [
+        {
+          "path": ["urn:eu.europa.ec.eudi:pid:1"],
+          "claims": [
+            {
+              "path": ["given_name"],
+              "display": [
+                {
+                  "name": "Given Name",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            {
+              "path": ["family_name"],
+              "display": [
+                {
+                  "name": "Surname",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            {
+              "path": ["birth_date"],
+              "display": [
+                {
+                  "name": "Birth Date",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            {
+              "path": ["age_over_18"],
+              "display": [
+                {
+                  "name": "Age Over 18",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            {
+              "path": ["issuance_date"],
+              "display": [
+                {
+                  "name": "Issuance Date",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            {
+              "path": ["expiry_date"],
+              "display": [
+                {
+                  "name": "Expiry Date",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            {
+              "path": ["issuing_authority"],
+              "display": [
+                {
+                  "name": "Issuing Authority",
+                  "locale": "en-GB"
+                }
+              ]
+            },
+            {
+              "path": ["issuing_country"],
+              "display": [
+                {
+                  "name": "Issuing Country",
+                  "locale": "en-GB"
+                }
+              ]
+            }
+          ]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
@@ -1058,8 +1179,9 @@
 
     "PaymentWalletAttestation": {
       "scope": "PaymentWalletAttestation",
-      "claims": {
-        "id": {
+      "claims": [
+        {
+          "path": ["id"],
           "display": [
             {
               "name": "Identifier",
@@ -1067,15 +1189,17 @@
             }
           ]
         },
-        "fundingSource": {
+        {
+          "path": ["fundingSource"],
           "display": [
             {
               "name": "Funding Source",
               "locale": "en-GB"
             }
           ],
-          "nested_claims": {
-            "type": {
+          "claims": [
+            {
+              "path": ["type"],
               "display": [
                 {
                   "name": "Funding Source Type",
@@ -1083,7 +1207,8 @@
                 }
               ]
             },
-            "panLastFour": {
+            {
+              "path": ["panLastFour"],
               "display": [
                 {
                   "name": "PAN Last Four ",
@@ -1091,7 +1216,8 @@
                 }
               ]
             },
-            "parLastFour": {
+            {
+              "path": ["parLastFour"],
               "display": [
                 {
                   "name": "PAR Last Four",
@@ -1099,7 +1225,8 @@
                 }
               ]
             },
-            "ibanLastFour": {
+            {
+              "path": ["ibanLastFour"],
               "display": [
                 {
                   "name": "IBAN Ends In",
@@ -1107,7 +1234,8 @@
                 }
               ]
             },
-            "bic": {
+            {
+              "path": ["bic"],
               "display": [
                 {
                   "name": "Bank Identifier Code (BIC)",
@@ -1115,7 +1243,8 @@
                 }
               ]
             },
-            "sortCode": {
+            {
+              "path": ["sortCode"],
               "display": [
                 {
                   "name": "National bank sort",
@@ -1123,7 +1252,8 @@
                 }
               ]
             },
-            "currency": {
+            {
+              "path": ["currency"],
               "display": [
                 {
                   "name": "PAN Ends In",
@@ -1132,7 +1262,8 @@
               ]
             },
 
-            "iin": {
+            {
+              "path": ["iin"],
               "display": [
                 {
                   "name": "Issuer Identification Number (IIN)",
@@ -1140,7 +1271,8 @@
                 }
               ]
             },
-            "aliasId": {
+            {
+              "path": ["aliasId"],
               "display": [
                 {
                   "name": "Alias ID",
@@ -1148,7 +1280,8 @@
                 }
               ]
             },
-            "scheme": {
+            {
+              "path": ["scheme"],
               "display": [
                 {
                   "name": "Card Scheme",
@@ -1156,7 +1289,8 @@
                 }
               ]
             },
-            "icon": {
+            {
+              "path": ["icon"],
               "display": [
                 {
                   "name": "Card Icon URL",
@@ -1164,9 +1298,9 @@
                 }
               ]
             }
-          }
+          ]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
@@ -1192,16 +1326,18 @@
 
     "PhotoID": {
       "scope": "PhotoID",
-      "claims": {
-        "iso23220": {
+      "claims": [
+        {
+          "path": ["iso23220"],
           "display": [
             {
               "name": "ISO/IEC 23220-1",
               "locale": "en-GB"
             }
           ],
-          "nested_claims": {
-            "family_name_unicode": {
+          "claims": [
+            {
+              "path": ["family_name_unicode"],
               "display": [
                 {
                   "name": "Family Name",
@@ -1209,7 +1345,8 @@
                 }
               ]
             },
-            "given_name_unicode": {
+            {
+              "path": ["given_name_unicode"],
               "display": [
                 {
                   "name": "Given Name",
@@ -1217,7 +1354,8 @@
                 }
               ]
             },
-            "birth_date": {
+            {
+              "path": ["birth_date"],
               "display": [
                 {
                   "name": "Birth Date",
@@ -1225,7 +1363,8 @@
                 }
               ]
             },
-            "portrait": {
+            {
+              "path": ["portrait"],
               "display": [
                 {
                   "name": "Portrait",
@@ -1233,7 +1372,8 @@
                 }
               ]
             },
-            "issue_date": {
+            {
+              "path": ["issue_date"],
               "display": [
                 {
                   "name": "Issue Date",
@@ -1241,7 +1381,8 @@
                 }
               ]
             },
-            "expiry_date": {
+            {
+              "path": ["expiry_date"],
               "display": [
                 {
                   "name": "Expiry Date",
@@ -1249,7 +1390,8 @@
                 }
               ]
             },
-            "issuing_authority_unicode": {
+            {
+              "path": ["issuing_authority_unicode"],
               "display": [
                 {
                   "name": "Issuing Authority",
@@ -1257,7 +1399,8 @@
                 }
               ]
             },
-            "issuing_country": {
+            {
+              "path": ["issuing_country"],
               "display": [
                 {
                   "name": "Issuing Country",
@@ -1265,7 +1408,8 @@
                 }
               ]
             },
-            "sex": {
+            {
+              "path": ["sex"],
               "display": [
                 {
                   "name": "Sex (ISO/IEC 5218)",
@@ -1273,7 +1417,8 @@
                 }
               ]
             },
-            "nationality": {
+            {
+              "path": ["nationality"],
               "display": [
                 {
                   "name": "Nationality",
@@ -1281,7 +1426,8 @@
                 }
               ]
             },
-            "document_number": {
+            {
+              "path": ["document_number"],
               "display": [
                 {
                   "name": "Document Number",
@@ -1289,7 +1435,8 @@
                 }
               ]
             },
-            "name_at_birth": {
+            {
+              "path": ["name_at_birth"],
               "display": [
                 {
                   "name": "Name at Birth",
@@ -1297,7 +1444,8 @@
                 }
               ]
             },
-            "birthplace": {
+            {
+              "path": ["birthplace"],
               "display": [
                 {
                   "name": "Birthplace",
@@ -1305,7 +1453,8 @@
                 }
               ]
             },
-            "portrait_capture_date": {
+            {
+              "path": ["portrait_capture_date"],
               "display": [
                 {
                   "name": "Portrait Capture Date",
@@ -1313,7 +1462,8 @@
                 }
               ]
             },
-            "resident_address_unicode": {
+            {
+              "path": ["resident_address_unicode"],
               "display": [
                 {
                   "name": "Resident Address",
@@ -1321,7 +1471,8 @@
                 }
               ]
             },
-            "resident_city_unicode": {
+            {
+              "path": ["resident_city_unicode"],
               "display": [
                 {
                   "name": "Resident City",
@@ -1329,7 +1480,8 @@
                 }
               ]
             },
-            "resident_postal_code": {
+            {
+              "path": ["resident_postal_code"],
               "display": [
                 {
                   "name": "Resident Postal Code",
@@ -1337,7 +1489,8 @@
                 }
               ]
             },
-            "resident_country": {
+            {
+              "path": ["resident_country"],
               "display": [
                 {
                   "name": "Resident Country",
@@ -1345,7 +1498,8 @@
                 }
               ]
             },
-            "age_over_18": {
+            {
+              "path": ["age_over_18"],
               "display": [
                 {
                   "name": "Age Over 18",
@@ -1353,7 +1507,8 @@
                 }
               ]
             },
-            "age_in_years": {
+            {
+              "path": ["age_in_years"],
               "display": [
                 {
                   "name": "Age in Years",
@@ -1361,7 +1516,8 @@
                 }
               ]
             },
-            "age_birth_year": {
+            {
+              "path": ["age_birth_year"],
               "display": [
                 {
                   "name": "Birth Year",
@@ -1369,7 +1525,8 @@
                 }
               ]
             },
-            "family_name_latin1": {
+            {
+              "path": ["family_name_latin1"],
               "display": [
                 {
                   "name": "Family Name (Latin-1)",
@@ -1377,7 +1534,8 @@
                 }
               ]
             },
-            "given_name_latin1": {
+            {
+              "path": ["given_name_latin1"],
               "display": [
                 {
                   "name": "Given Name (Latin-1)",
@@ -1385,17 +1543,19 @@
                 }
               ]
             }
-          }
+          ]
         },
-        "photoid": {
+        {
+          "path": ["photoid"],
           "display": [
             {
               "name": "Photo ID",
               "locale": "en-GB"
             }
           ],
-          "nested_claims": {
-            "person_id": {
+          "claims": [
+            {
+              "path": ["person_id"],
               "display": [
                 {
                   "name": "Person ID",
@@ -1403,7 +1563,8 @@
                 }
               ]
             },
-            "birth_country": {
+            {
+              "path": ["birth_country"],
               "display": [
                 {
                   "name": "Birth Country",
@@ -1411,7 +1572,8 @@
                 }
               ]
             },
-            "birth_state": {
+            {
+              "path": ["birth_state"],
               "display": [
                 {
                   "name": "Birth State",
@@ -1419,7 +1581,8 @@
                 }
               ]
             },
-            "birth_city": {
+            {
+              "path": ["birth_city"],
               "display": [
                 {
                   "name": "Birth City",
@@ -1427,7 +1590,8 @@
                 }
               ]
             },
-            "administrative_number": {
+            {
+              "path": ["administrative_number"],
               "display": [
                 {
                   "name": "Administrative Number",
@@ -1435,7 +1599,8 @@
                 }
               ]
             },
-            "resident_street": {
+            {
+              "path": ["resident_street"],
               "display": [
                 {
                   "name": "Street",
@@ -1443,7 +1608,8 @@
                 }
               ]
             },
-            "resident_house_number": {
+            {
+              "path": ["resident_house_number"],
               "display": [
                 {
                   "name": "House Number",
@@ -1451,7 +1617,8 @@
                 }
               ]
             },
-            "travel_document_number": {
+            {
+              "path": ["travel_document_number"],
               "display": [
                 {
                   "name": "Travel Document Number",
@@ -1459,7 +1626,8 @@
                 }
               ]
             },
-            "resident_state": {
+            {
+              "path": ["resident_state"],
               "display": [
                 {
                   "name": "Resident State",
@@ -1467,17 +1635,19 @@
                 }
               ]
             }
-          }
+          ]
         },
-        "dtc": {
+        {
+          "path": ["dtc"],
           "display": [
             {
               "name": "DTC",
               "locale": "en-GB"
             }
           ],
-          "nested_claims": {
-            "dtc_version": {
+          "claims": [
+            {
+              "path": ["dtc_version"],
               "display": [
                 {
                   "name": "DTC Version",
@@ -1485,7 +1655,8 @@
                 }
               ]
             },
-            "dtc_dg1": {
+            {
+              "path": ["dtc_dg1"],
               "display": [
                 {
                   "name": "Data Group 1",
@@ -1493,7 +1664,8 @@
                 }
               ]
             },
-            "dtc_dg2": {
+            {
+              "path": ["dtc_dg2"],
               "display": [
                 {
                   "name": "Data Group 2",
@@ -1501,7 +1673,8 @@
                 }
               ]
             },
-            "dtc_dg3": {
+            {
+              "path": ["dtc_dg3"],
               "display": [
                 {
                   "name": "Data Group 3",
@@ -1509,7 +1682,8 @@
                 }
               ]
             },
-            "dtc_dg4": {
+            {
+              "path": ["dtc_dg4"],
               "display": [
                 {
                   "name": "Data Group 4",
@@ -1517,7 +1691,8 @@
                 }
               ]
             },
-            "dtc_dg5": {
+            {
+              "path": ["dtc_dg5"],
               "display": [
                 {
                   "name": "Data Group 5",
@@ -1525,7 +1700,8 @@
                 }
               ]
             },
-            "dtc_dg6": {
+            {
+              "path": ["dtc_dg6"],
               "display": [
                 {
                   "name": "Data Group 6",
@@ -1533,7 +1709,8 @@
                 }
               ]
             },
-            "dtc_dg7": {
+            {
+              "path": ["dtc_dg7"],
               "display": [
                 {
                   "name": "Data Group 7",
@@ -1541,7 +1718,8 @@
                 }
               ]
             },
-            "dtc_dg8": {
+            {
+              "path": ["dtc_dg8"],
               "display": [
                 {
                   "name": "Data Group 8",
@@ -1549,7 +1727,8 @@
                 }
               ]
             },
-            "dtc_dg9": {
+            {
+              "path": ["dtc_dg9"],
               "display": [
                 {
                   "name": "Data Group 9",
@@ -1557,7 +1736,8 @@
                 }
               ]
             },
-            "dtc_dg10": {
+            {
+              "path": ["dtc_dg10"],
               "display": [
                 {
                   "name": "Data Group 10",
@@ -1565,7 +1745,8 @@
                 }
               ]
             },
-            "dtc_dg11": {
+            {
+              "path": ["dtc_dg11"],
               "display": [
                 {
                   "name": "Data Group 11",
@@ -1573,7 +1754,8 @@
                 }
               ]
             },
-            "dtc_dg12": {
+            {
+              "path": ["dtc_dg12"],
               "display": [
                 {
                   "name": "Data Group 12",
@@ -1581,7 +1763,8 @@
                 }
               ]
             },
-            "dtc_dg13": {
+            {
+              "path": ["dtc_dg13"],
               "display": [
                 {
                   "name": "Data Group 13",
@@ -1589,7 +1772,8 @@
                 }
               ]
             },
-            "dtc_dg14": {
+            {
+              "path": ["dtc_dg14"],
               "display": [
                 {
                   "name": "Data Group 14",
@@ -1597,7 +1781,8 @@
                 }
               ]
             },
-            "dtc_dg15": {
+            {
+              "path": ["dtc_dg15"],
               "display": [
                 {
                   "name": "Data Group 15",
@@ -1605,7 +1790,8 @@
                 }
               ]
             },
-            "dtc_dg16": {
+            {
+              "path": ["dtc_dg16"],
               "display": [
                 {
                   "name": "Data Group 16",
@@ -1613,7 +1799,8 @@
                 }
               ]
             },
-            "dtc_sod": {
+            {
+              "path": ["dtc_sod"],
               "display": [
                 {
                   "name": "Security Object Document (SOD)",
@@ -1621,7 +1808,8 @@
                 }
               ]
             },
-            "dg_content_info": {
+            {
+              "path": ["dg_content_info"],
               "display": [
                 {
                   "name": "Content Info",
@@ -1629,9 +1817,10 @@
                 }
               ]
             }
-          }
+          ]
         },
-        "iss": {
+        {
+          "path": ["iss"],
           "display": [
             {
               "name": "Issuer (URI)",
@@ -1639,7 +1828,8 @@
             }
           ]
         },
-        "iat": {
+        {
+          "path": ["iat"],
           "display": [
             {
               "name": "Issued At (Unix Timestamp)",
@@ -1647,7 +1837,8 @@
             }
           ]
         },
-        "exp": {
+        {
+          "path": ["exp"],
           "display": [
             {
               "name": "Expiration Time (Unix Timestamp)",
@@ -1655,7 +1846,8 @@
             }
           ]
         },
-        "vct": {
+        {
+          "path": ["vct"],
           "display": [
             {
               "name": "Credential Type",
@@ -1663,7 +1855,7 @@
             }
           ]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
@@ -1689,8 +1881,9 @@
 
     "PCD": {
       "scope": "PCD",
-      "claims": {
-        "surname": {
+      "claims": [
+        {
+          "path": ["surname"],
           "display": [
             {
               "name": "Family Name",
@@ -1698,7 +1891,8 @@
             }
           ]
         },
-        "given_name": {
+        {
+          "path": ["given_name"],
           "display": [
             {
               "name": "Given Name",
@@ -1706,7 +1900,8 @@
             }
           ]
         },
-        "phone": {
+        {
+          "path": ["phone"],
           "display": [
             {
               "name": "Phone Number",
@@ -1715,7 +1910,8 @@
             }
           ]
         },
-        "email_address": {
+        {
+          "path": ["email_address"],
           "display": [
             {
               "name": "Email Address",
@@ -1723,7 +1919,8 @@
             }
           ]
         },
-        "city_address": {
+        {
+          "path": ["city_address"],
           "display": [
             {
               "name": "City Address",
@@ -1731,7 +1928,8 @@
             }
           ]
         },
-        "street_address": {
+        {
+          "path": ["street_address"],
           "display": [
             {
               "name": "Street Address",
@@ -1739,7 +1937,8 @@
             }
           ]
         },
-        "country_address": {
+        {
+          "path": ["country_address"],
           "display": [
             {
               "name": "Country Address",
@@ -1747,7 +1946,7 @@
             }
           ]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {
@@ -1773,8 +1972,9 @@
 
     "LoyaltyCard": {
       "scope": "LoyaltyCard",
-      "claims": {
-        "customer.first_name": {
+      "claims": [
+        {
+          "path": ["customer.first_name"],
           "display": [
             {
               "name": "First Name",
@@ -1782,7 +1982,8 @@
             }
           ]
         },
-        "customer.last_name": {
+        {
+          "path": ["customer.last_name"],
           "display": [
             {
               "name": "Last Name",
@@ -1790,7 +1991,8 @@
             }
           ]
         },
-        "customer.nationality": {
+        {
+          "path": ["customer.nationality"],
           "display": [
             {
               "name": "Nationality",
@@ -1798,7 +2000,8 @@
             }
           ]
         },
-        "customer.address": {
+        {
+          "path": ["customer.address"],
           "display": [
             {
               "name": "Address",
@@ -1806,7 +2009,8 @@
             }
           ]
         },
-        "customer.city": {
+        {
+          "path": ["customer.city"],
           "display": [
             {
               "name": "City",
@@ -1814,7 +2018,8 @@
             }
           ]
         },
-        "customer.zip_code": {
+        {
+          "path": ["customer.zip_code"],
           "display": [
             {
               "name": "ZIP Code",
@@ -1822,7 +2027,8 @@
             }
           ]
         },
-        "customer.phone": {
+        {
+          "path": ["customer.phone"],
           "display": [
             {
               "name": "Phone Number",
@@ -1830,7 +2036,8 @@
             }
           ]
         },
-        "customer.mobile": {
+        {
+          "path": ["customer.mobile"],
           "display": [
             {
               "name": "Mobile Number",
@@ -1838,7 +2045,8 @@
             }
           ]
         },
-        "customer.birth_date": {
+        {
+          "path": ["customer.birth_date"],
           "display": [
             {
               "name": "Date of Birth",
@@ -1846,7 +2054,8 @@
             }
           ]
         },
-        "customer.email": {
+        {
+          "path": ["customer.email"],
           "display": [
             {
               "name": "Email Address",
@@ -1854,7 +2063,8 @@
             }
           ]
         },
-        "loyalty_card.id": {
+        {
+          "path": ["loyalty_card.id"],
           "display": [
             {
               "name": "Loyalty Card ID",
@@ -1862,7 +2072,8 @@
             }
           ]
         },
-        "loyalty_card.issue_date": {
+        {
+          "path": ["loyalty_card.issue_date"],
           "display": [
             {
               "name": "Issue Date",
@@ -1870,7 +2081,8 @@
             }
           ]
         },
-        "organization.name": {
+        {
+          "path": ["organization.name"],
           "display": [
             {
               "name": "Organization Name",
@@ -1878,7 +2090,8 @@
             }
           ]
         },
-        "organization.id": {
+        {
+          "path": ["organization.id"],
           "display": [
             {
               "name": "Organization ID",
@@ -1886,7 +2099,8 @@
             }
           ]
         },
-        "organization.country": {
+        {
+          "path": ["organization.country"],
           "display": [
             {
               "name": "Organization Country",
@@ -1894,7 +2108,8 @@
             }
           ]
         },
-        "credential.type": {
+        {
+          "path": ["credential.type"],
           "display": [
             {
               "name": "Credential Type",
@@ -1902,7 +2117,8 @@
             }
           ]
         },
-        "credential.issuer": {
+        {
+          "path": ["credential.issuer"],
           "display": [
             {
               "name": "Issuer",
@@ -1910,7 +2126,8 @@
             }
           ]
         },
-        "credential.issuance_date": {
+        {
+          "path": ["credential.issuance_date"],
           "display": [
             {
               "name": "Issuance Date",
@@ -1918,7 +2135,8 @@
             }
           ]
         },
-        "credential.expiry_date": {
+        {
+          "path": ["credential.expiry_date"],
           "display": [
             {
               "name": "Expiry Date",
@@ -1926,7 +2144,7 @@
             }
           ]
         }
-      },
+      ],
       "cryptographic_binding_methods_supported": ["jwk"],
       "display": [
         {

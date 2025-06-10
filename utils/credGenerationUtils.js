@@ -236,7 +236,7 @@ export async function handleVcSdJwtFormat(
   const expiryDate = new Date(now);
   expiryDate.setMonth(now.getMonth() + 6);
 
-  if (format === "jwt_vc") {
+  if (format === "jwt_vc_json") {
     console.log("Issuing a jwt_vc format credential");
     const vcPayload = {
       "@context": ["https://www.w3.org/2018/credentials/v1"],
@@ -266,8 +266,8 @@ export async function handleVcSdJwtFormat(
 
     const credential = jwt.sign(jwtPayload, privateKeyForSigning, signOptions);
     return credential;
-  } else if (format === "vc+sd-jwt") {
-    console.log("Issuing a vc+sd-jwt format credential");
+  } else if (format === "dc+sd-jwt") {
+    console.log("Issuing a dc+sd-jwt format credential");
     const sdjwt = new SDJwtVcInstance({
       signer,
       verifier,
