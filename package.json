@@ -5,8 +5,8 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "SERVER_URL=https://0019-2a02-587-8703-400-aae4-b9f7-dabd-d176.ngrok-free.app   node server.js"
+    "test": "mocha tests/**/*.js",
+    "dev": "SERVER_URL=https://23aa-195-251-129-149.ngrok-free.app node server.js"
   },
   "author": "",
   "license": "ISC",
@@ -35,6 +35,7 @@
     "key-did-resolver": "^4.0.0",
     "multicodec": "^3.2.1",
     "multiformats": "^13.3.1",
+    "node-fetch": "^3.3.2",
     "node-forge": "^1.3.1",
     "node-jose": "^2.2.0",
     "pem-jwk": "^2.0.0",
@@ -43,5 +44,8 @@
     "uuid": "^9.0.1",
     "waltid-sd-jwt": "^1.2311200231.0",
     "zlib": "^1.0.5"
+  },
+  "devDependencies": {
+    "mocha": "^11.5.0"
   }
 }

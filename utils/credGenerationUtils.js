@@ -54,20 +54,7 @@ try {
 const defaultSigningKid = issuerConfigValues.default_signing_kid || "aegean#authentication-key";
 
 
-// Helper functions for mDL generation
 
-// Convert PEM to DER ArrayBuffer (Node.js)
-// function pemToDerArrayBufferNode(pem) { ... }
-
-// Convert JWK to a COSE Key Map structure (simplified)
-// Note: @m-doc/mdl might offer a utility like coseFromJwk which should be preferred
-// REMOVED jwkToCoseKeyMap
-
-// REMOVED generateRandomBytesSyncForMdl
-
-// REMOVED sha256HasherForMdl
-
-// REMOVED createMdlSignerForKey
 
 // Maps claims from existing payload to mDL format
 // This is a simplified mapper and needs to be extended for different VCTs
@@ -181,15 +168,6 @@ export async function handleVcSdJwtFormat(
   });
   const holderJWKS = decodedWithHeader.header;
 
-  const sdjwt = new SDJwtVcInstance({
-    signer,
-    verifier,
-    signAlg: "ES256",
-    hasher: digest,
-    hashAlg: "sha-256",
-    saltGenerator: generateSalt,
-  });
-
   const credType = vct;
   let credPayload = {};
 
@@ -203,6 +181,7 @@ export async function handleVcSdJwtFormat(
 
   // Determine credential payload based on type
   switch (credType) {
+    case "VerifiableIdCardJwtVc":
     case "VerifiablePIDSDJWT":
     case "urn:eu.europa.ec.eudi:pid:1":
       credPayload = getPIDSDJWTData();
@@ -253,35 +232,67 @@ export async function handleVcSdJwtFormat(
     cnf = { jwk: await didKeyToJwks(holderJWKS.kid) };
   }
 
-  // Prepare issuance headers
   const now = new Date();
   const expiryDate = new Date(now);
   expiryDate.setMonth(now.getMonth() + 6);
-  // Issue credential
-  const credential = await sdjwt.issue(
-    {
+
+  if (format === "jwt_vc_json") {
+    console.log("Issuing a jwt_vc format credential");
+    const vcPayload = {
+      "@context": ["https://www.w3.org/2018/credentials/v1"],
+      type: ["VerifiableCredential", vct],
+      credentialSubject: credPayload.claims,
+      issuer: serverURL,
+      issuanceDate: now.toISOString(),
+      expirationDate: expiryDate.toISOString(),
+    };
+
+    const jwtPayload = {
       iss: serverURL,
-      iat: Math.floor(Date.now() / 1000),
-      nbf: Math.floor(Date.now() / 1000),
+      iat: Math.floor(now.getTime() / 1000),
+      nbf: Math.floor(now.getTime() / 1000),
       exp: Math.floor(expiryDate.getTime() / 1000),
-      vct: credType,
-      ...credPayload.claims,
-      cnf,
-    },
-    credPayload.disclosureFrame,
-    headerOptions
-  );
+      vc: vcPayload,
+      cnf: cnf,
+    };
 
-  // console.log("Credential issued: ", credential);
+    const privateKeyForSigning =
+      effectiveSignatureType === "x509" ? privateKeyPemX509 : privateKey;
 
-  if (format === "vc+sd-jwt") {
+    const signOptions = {
+      algorithm: "ES256",
+      ...headerOptions,
+    };
+
+    const credential = jwt.sign(jwtPayload, privateKeyForSigning, signOptions);
+    return credential;
+  } else if (format === "dc+sd-jwt") {
+    console.log("Issuing a dc+sd-jwt format credential");
+    const sdjwt = new SDJwtVcInstance({
+      signer,
+      verifier,
+      signAlg: "ES256",
+      hasher: digest,
+      hashAlg: "sha-256",
+      saltGenerator: generateSalt,
+    });
+    // Issue credential
+    const credential = await sdjwt.issue(
+      {
+        iss: serverURL,
+        iat: Math.floor(Date.now() / 1000),
+        nbf: Math.floor(Date.now() / 1000),
+        exp: Math.floor(expiryDate.getTime() / 1000),
+        vct: credType,
+        ...credPayload.claims,
+        cnf,
+      },
+      credPayload.disclosureFrame,
+      headerOptions
+    );
     console.log("Credential issued: ", credential);
     return credential;
-    // format: "vc+sd-jwt",
-    // c_nonce: generateNonce(),
-    // c_nonce_expires_in: 86400,
-  }
-  if (format === "mDL" || format === "mdl") {
+  } else if (format === "mDL" || format === "mdl") {
     console.log("Attempting to generate mDL credential using @auth0/mdl...");
     try {
       const mDLClaimsMapped = mapClaimsToMdl(credPayload.claims, vct);
@@ -327,7 +338,7 @@ export async function handleVcSdJwtFormat(
       // Wrap signed document in MDoc and encode
       const mdoc = new MDoc([document]);
       const encodedMdoc = mdoc.encode();
-      
+
       // Debug: Examine the raw CBOR bytes
       console.log("=== CBOR Debug Information ===");
       console.log(`CBOR byte length: ${encodedMdoc.length}`);
@@ -344,36 +355,26 @@ export async function handleVcSdJwtFormat(
       } catch (e) {
         console.error("Error examining mdoc structure:", e);
       }
-      
-      // // Support different encoding formats for wallet compatibility testing
-      // const encodingFormat = process.env.MDL_ENCODING_FORMAT || "base64url"; // Options: "hex", "base64url", "base64"
-      
-      let encodedMobileDocument;
-      // switch (encodingFormat) {
-      //   case "hex":
-      //     encodedMobileDocument = Buffer.from(encodedMdoc).toString("hex");
-      //     console.log("mDL Credential generated with @auth0/mdl (hex):", encodedMobileDocument.substring(0,100) + "...");
-      //     break;
-        // case "base64":
-          // encodedMobileDocument = Buffer.from(encodedMdoc).toString("base64");
-        //   console.log("mDL Credential generated with @auth0/mdl (base64):", encodedMobileDocument.substring(0,100) + "...");
-        //   break;
-        // case "base64url":
-        // default:
-          encodedMobileDocument = Buffer.from(encodedMdoc).toString("base64url");
-          console.log("mDL Credential generated with @auth0/mdl (base64url):", encodedMobileDocument.substring(0,100) + "...");
-          // break;
-      // }
-      
-      // console.log(`Using encoding format: ${encodingFormat}`);
-      console.log("=== End CBOR Debug ===");
-      
-      return encodedMobileDocument;
 
+      let encodedMobileDocument = Buffer.from(encodedMdoc).toString(
+        "base64url"
+      );
+      console.log(
+        "mDL Credential generated with @auth0/mdl (base64url):",
+        encodedMobileDocument.substring(0, 100) + "..."
+      );
+
+      console.log("=== End CBOR Debug ===");
+
+      return encodedMobileDocument;
     } catch (error) {
       console.error("Error generating mDL credential with @auth0/mdl:", error);
-      throw new Error(`Failed to generate mDL with @auth0/mdl: ${error.message}`);
+      throw new Error(
+        `Failed to generate mDL with @auth0/mdl: ${error.message}`
+      );
     }
+  } else {
+    throw new Error(`Unsupported format: ${format}`);
   }
 }
 
@@ -427,6 +428,7 @@ export async function handleVcSdJwtFormatDeferred(sessionObject, serverURL) {
 
   // Determine credential payload based on type
   switch (credType) {
+    case "VerifiableIdCardJwtVc":
     case "VerifiablePIDSDJWT":
     case "urn:eu.europa.ec.eudi:pid:1":
       credPayload = getPIDSDJWTData();

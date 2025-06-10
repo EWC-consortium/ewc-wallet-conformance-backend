@@ -34,6 +34,7 @@ import {
   deleteNonce,
 } from "../services/cacheServiceRedis.js";
 
+import * as jose from "jose";
 import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 import {
   createSignerVerifier,
@@ -43,7 +44,6 @@ import {
   pemToBase64Der,
 } from "../utils/sdjwtUtils.js";
 import jwt from "jsonwebtoken";
-import jwkToPem from "jwk-to-pem";
 
 import {
   handleVcSdJwtFormat,
@@ -320,7 +320,32 @@ sharedRouter.post("/credential", async (req, res) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1]; // Split "Bearer" and the token
   const requestBody = req.body;
+
+  const proofJwt = requestBody.proof.jwt;
   // const format = requestBody.format; // this is not part of ID2. the format should be fetched form the
+
+  //TODO: check if the token is valid and if it is a valid token for this issuer
+
+
+  let flowType = "pre-auth";
+  // Session object retrieval (this logic is similar to what's now in the nonce check)
+  const preAuthsessionKey = await getSessionKeyFromAccessToken(token);
+  let sessionObject; // This will be the main session object for the rest of the function
+  if (preAuthsessionKey) {
+    sessionObject = await getPreAuthSession(preAuthsessionKey);
+    if (!sessionObject)
+      sessionObject = await getCodeFlowSession(preAuthsessionKey);
+  }
+  if (!sessionObject) {
+    // If not found in pre-auth, try code flow
+    const codeSessionKey = await getSessionAccessToken(token);
+    if (codeSessionKey) {
+      sessionObject = await getCodeFlowSession(codeSessionKey);
+      flowType = "code";
+    }
+  }
+
+
 
   // Update according to spec section 8.2 - Credential identifiers
   const credentialIdentifier = requestBody.credential_identifier;
@@ -396,7 +421,6 @@ sharedRouter.post("/credential", async (req, res) => {
           credConfig.proof_types_supported.jwt
             .proof_signing_alg_values_supported;
         if (supportedAlgs && supportedAlgs.length > 0) {
-          const proofJwt = requestBody.proof.jwt;
           const decodedProofHeader = jwt.decode(proofJwt, {
             complete: true,
           })?.header;
@@ -429,6 +453,8 @@ sharedRouter.post("/credential", async (req, res) => {
           // --- Start Full Signature and Claim Verification ---
           let publicKeyForProof; // This will hold the JWK for verification
 
+
+          //TODO add support for did:web and did:jwk
           if (decodedProofHeader.jwk) {
             publicKeyForProof = decodedProofHeader.jwk;
           } else if (
@@ -452,9 +478,90 @@ sharedRouter.post("/credential", async (req, res) => {
                   "Failed to resolve public key from proof JWT kid (did:key).",
               });
             }
+          } else if (
+            decodedProofHeader.kid &&
+            decodedProofHeader.kid.startsWith("did:jwk:")
+          ) {
+            try {
+              const didJwk = decodedProofHeader.kid;
+              const jwkPart = didJwk.substring("did:jwk:".length);
+              const jwkString = Buffer.from(jwkPart, "base64url").toString(
+                "utf8"
+              );
+              publicKeyForProof = JSON.parse(jwkString);
+              console.log("Successfully resolved did:jwk to JWK.");
+            } catch (error) {
+              console.error("Error resolving did:jwk to JWK:", error);
+              return res.status(400).json({
+                error: "invalid_proof",
+                error_description:
+                  "Failed to resolve public key from proof JWT kid (did:jwk).",
+              });
+            }
+          } else if (
+            decodedProofHeader.kid &&
+            decodedProofHeader.kid.startsWith("did:web:")
+          ) {
+            try {
+              const didWeb = decodedProofHeader.kid;
+              const [did, keyFragment] = didWeb.split("#");
+              if (!keyFragment) {
+                throw new Error(
+                  "kid does not contain a key identifier fragment (e.g., #key-1)"
+                );
+              }
+
+              let didUrlPart = did.substring("did:web:".length);
+              didUrlPart = decodeURIComponent(didUrlPart);
+
+              const didParts = didUrlPart.split(":");
+              const domain = didParts.shift();
+              const path = didParts.join("/");
+
+              let didDocUrl;
+              if (path) {
+                didDocUrl = `https://${domain}/${path}/did.json`;
+              } else {
+                didDocUrl = `https://${domain}/.well-known/did.json`;
+              }
+
+              console.log(
+                `Resolving did:web by fetching DID document from: ${didDocUrl}`
+              );
+              const response = await fetch(didDocUrl);
+              if (!response.ok) {
+                throw new Error(
+                  `Failed to fetch DID document, status: ${response.status}`
+                );
+              }
+              const didDocument = await response.json();
+
+              const verificationMethod = didDocument.verificationMethod?.find(
+                (vm) =>
+                  vm.id === didWeb ||
+                  (didDocument.id && didDocument.id + vm.id === didWeb)
+              );
+
+              if (!verificationMethod || !verificationMethod.publicKeyJwk) {
+                throw new Error(
+                  `Public key with id '${didWeb}' not found in DID document.`
+                );
+              }
+
+              publicKeyForProof = verificationMethod.publicKeyJwk;
+              console.log(
+                `Successfully resolved did:web and found public key for kid: ${didWeb}`
+              );
+            } catch (error) {
+              console.error("Error resolving did:web:", error);
+              return res.status(400).json({
+                error: "invalid_proof",
+                error_description: `Failed to resolve public key from proof JWT kid (did:web): ${error.message}`,
+              });
+            }
           } else {
             console.log(
-              "Proof JWT header does not contain jwk or a resolvable did:key kid."
+              "Proof JWT header does not contain jwk or a resolvable DID kid (did:key, did:jwk, did:web)."
             );
             return res.status(400).json({
               error: "invalid_proof",
@@ -482,10 +589,10 @@ sharedRouter.post("/credential", async (req, res) => {
             // or ensure your version of jsonwebtoken handles JWK directly for verification.
             // For simplicity, let's assume direct JWK verification is possible or you have a utility for it.
             // A common pattern is to use a library like 'jose' for robust JWK handling.
- 
+
             proofPayload = jwt.verify(
               proofJwt,
-              publicKeyToPem(publicKeyForProof),
+              await publicKeyToPem(publicKeyForProof),
               {
                 // publicKeyToPem is a placeholder for a required utility
                 algorithms: [decodedProofHeader.alg], // Ensure only the validated alg is used
@@ -501,7 +608,7 @@ sharedRouter.post("/credential", async (req, res) => {
           }
 
           // Verify claims
-          if (!proofPayload.iss) {
+          if (!proofPayload.iss && flowType == "code") {
             console.log("Proof JWT missing 'iss' claim.");
             return res.status(400).json({
               error: "invalid_proof",
@@ -566,21 +673,7 @@ sharedRouter.post("/credential", async (req, res) => {
 
   let payload = {};
 
-  // Session object retrieval (this logic is similar to what's now in the nonce check)
-  const preAuthsessionKey = await getSessionKeyFromAccessToken(token);
-  let sessionObject; // This will be the main session object for the rest of the function
-  if (preAuthsessionKey) {
-    sessionObject = await getPreAuthSession(preAuthsessionKey);
-    if (!sessionObject)
-      sessionObject = await getCodeFlowSession(preAuthsessionKey);
-  }
-  if (!sessionObject) {
-    // If not found in pre-auth, try code flow
-    const codeSessionKey = await getSessionAccessToken(token);
-    if (codeSessionKey) {
-      sessionObject = await getCodeFlowSession(codeSessionKey);
-    }
-  }
+
 
   // It is important that the `sessionObject` used from here on is the same one whose c_nonce was validated.
   // The nonce check block now fetches `sessionForNonceCheck`. We should ensure `sessionObject` here is consistent.
@@ -621,10 +714,25 @@ sharedRouter.post("/credential", async (req, res) => {
     // Immediate issuance flow
 
     requestBody.vct = requestedCredentialType[0];
-    let format = "vc+sd-jwt";
-    if (requestedCredentialType[0].indexOf("mdoc") >= 0) {
+
+    const issuerConfig = loadIssuerConfig();
+    const credConfig =
+      issuerConfig.credential_configurations_supported[
+        effectiveConfigurationId
+      ];
+
+    if (!credConfig) {
+      return res.status(400).json({
+        error: "invalid_credential_request",
+        error_description: `Credential configuration ID '${effectiveConfigurationId}' not found.`,
+      });
+    }
+    
+    let format = credConfig.format;
+    if (format === "mso_mdoc") {
       format = "mdl";
     }
+
     try {
       const credential = await handleVcSdJwtFormat(
         requestBody,
@@ -778,14 +886,14 @@ function getPersonaPart(inputString) {
   return parts[1] || null;
 }
 
-const publicKeyToPem = (jwk) => {
+export const publicKeyToPem = async (jwk) => {
   if (!jwk) {
     throw new Error("JWK is undefined or null.");
   }
-  // The jwk-to-pem library expects the JWK itself.
-  // It handles different key types (RSA, EC, etc.) internally.
   try {
-    return jwkToPem(jwk);
+    const publicKey = await jose.importJWK(jwk);
+    const pem = await jose.exportSPKI(publicKey);
+    return pem;
   } catch (err) {
     console.error("Error converting JWK to PEM:", err);
     console.error("Problematic JWK:", JSON.stringify(jwk));

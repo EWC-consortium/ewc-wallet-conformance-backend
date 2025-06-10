@@ -30,6 +30,7 @@ didRouter.get("/generateVPRequest", async (req, res) => {
   const responseMode = req.query.response_mode || "direct_post";
   const nonce = generateNonce(16);
 
+  
   const response_uri = `${serverURL}/direct_post/${uuid}`;
   let controller = serverURL;
   if (process.env.PROXY_PATH) {
@@ -54,7 +55,6 @@ didRouter.get("/generateVPRequest", async (req, res) => {
     response_uri,
     presentation_definition_sdJwt,
     privateKey,
-    "did", // this references the key format not the DID method
     clientMetadata,
     kid,
     serverURL,
@@ -66,7 +66,9 @@ didRouter.get("/generateVPRequest", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -113,7 +115,6 @@ didRouter.get("/generateVPRequestGET", async (req, res) => {
     response_uri,
     presentation_definition_sdJwt,
     privateKey,
-    "did", // this references the key format not the DID method
     clientMetadata,
     kid,
     serverURL,
@@ -125,7 +126,9 @@ didRouter.get("/generateVPRequestGET", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -193,7 +196,6 @@ didRouter.get("/generateVPRequestDCQL", async (req, res) => {
     response_uri,
     null,
     privateKey,
-    "did",
     clientMetadata,
     kid,
     serverURL,
@@ -205,7 +207,9 @@ didRouter.get("/generateVPRequestDCQL", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -259,7 +263,8 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     presentation_definition: presentation_definition,
     nonce: nonce,
     transaction_data: [base64UrlEncodedTxData],
-    response_mode: responseMode
+    response_mode: responseMode,
+    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt)
   });
 
   const vpRequestJWT = await buildVpRequestJWT(
@@ -267,7 +272,6 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     response_uri,
     presentation_definition,
     privateKey,
-    "did",
     clientMetadata,
     kid,
     serverURL,
@@ -279,7 +283,9 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -302,7 +308,12 @@ didRouter.route("/VPrequest/:id")
   .post(async (req, res) => {
     const uuid = req.params.id;
     const vpSession = await getVPSession(uuid);
-    
+    // As per OpenID4VP spec, wallet can post wallet_nonce and wallet_metadata
+    const { wallet_nonce, wallet_metadata } = req.body;
+    if (wallet_nonce || wallet_metadata) {
+      console.log(`Received from wallet: wallet_nonce=${wallet_nonce}, wallet_metadata=${wallet_metadata}`);
+    }
+
     if (!vpSession) {
       return res.status(400).json({ error: "Invalid session ID" });
     }
@@ -321,14 +332,17 @@ didRouter.route("/VPrequest/:id")
       response_uri,
       vpSession.presentation_definition,
       privateKey,
-      "did:jwks",
       clientMetadata,
       kid,
       serverURL,
       "vp_token",
       vpSession.nonce,
       vpSession.dcql_query || null,
-      vpSession.transaction_data || null
+      vpSession.transaction_data || null,
+      vpSession.response_mode,
+      undefined, // audience
+      wallet_nonce,
+      wallet_metadata
     );
 
     // Respond with JWT as per OpenID4VP spec for request_uri
@@ -356,14 +370,14 @@ didRouter.route("/VPrequest/:id")
       response_uri,
       vpSession.presentation_definition,
       privateKey, // Assuming privateKey is accessible in this scope
-      "did",
       clientMetadata, // Assuming clientMetadata is accessible
       kid,
       serverURL,
       "vp_token",
       vpSession.nonce,
       vpSession.dcql_query || null,
-      vpSession.transaction_data || null
+      vpSession.transaction_data || null,
+      vpSession.response_mode
     );
 
     // Respond with JWT as per OpenID4VP spec for request_uri

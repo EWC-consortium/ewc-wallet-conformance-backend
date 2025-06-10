@@ -56,7 +56,6 @@ didJwkRouter.get("/generateVPRequest", async (req, res) => {
     response_uri,
     presentation_definition_sdJwt,
     privateKey,
-    "did",
     clientMetadata,
     kid,
     serverURL,
@@ -68,7 +67,9 @@ didJwkRouter.get("/generateVPRequest", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -108,7 +109,9 @@ didJwkRouter.get("/generateVPRequestGET", async (req, res) => {
 
   
   const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -172,7 +175,6 @@ didJwkRouter.get("/generateVPRequestDCQL", async (req, res) => {
     response_uri,
     null,
     privateKey,
-    "did",
     clientMetadata,
     kid,
     serverURL,
@@ -184,7 +186,9 @@ didJwkRouter.get("/generateVPRequestDCQL", async (req, res) => {
   );
 
   const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -244,7 +248,9 @@ didJwkRouter.get("/generateVPRequestDCQLGET", async (req, res) => {
   });
 
   const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -293,7 +299,8 @@ didJwkRouter.get("/generateVPRequestTransaction", async (req, res) => {
     presentation_definition: presentation_definition,
     nonce: nonce,
     transaction_data: [base64UrlEncodedTxData],
-    response_mode: responseMode
+    response_mode: responseMode,
+    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt)
   });
 
   const vpRequestJWT = await buildVpRequestJWT(
@@ -301,19 +308,20 @@ didJwkRouter.get("/generateVPRequestTransaction", async (req, res) => {
     response_uri,
     presentation_definition,
     privateKey,
-    "did",
     clientMetadata,
     kid,
     serverURL,
     "vp_token",
     nonce,
-    null,
+    null, // No DCQL query when using transaction data with PD
     [base64UrlEncodedTxData],
     responseMode
   );
 
   const requestUri = `${serverURL}/did-jwk/didJwkVPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&request_uri_method=post`;
+  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
+    requestUri
+  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -334,64 +342,73 @@ didJwkRouter.get("/generateVPRequestTransaction", async (req, res) => {
 // Request URI endpoint (POST method)
 didJwkRouter.route("/didJwkVPrequest/:id")
   .post(async (req, res) => {
+    console.log("POST request received");
     const uuid = req.params.id;
-    const vpSession = await getVPSession(uuid);
-    
-    if (!vpSession) {
-      return res.status(400).json({ error: "Invalid session ID" });
+    // As per OpenID4VP spec, wallet can post wallet_nonce and wallet_metadata
+    const { wallet_nonce, wallet_metadata } = req.body;
+    if (wallet_nonce || wallet_metadata) {
+      console.log(`Received from wallet: wallet_nonce=${wallet_nonce}, wallet_metadata=${wallet_metadata}`);
     }
 
-    const response_uri = `${serverURL}/direct_post/${uuid}`;
-    const client_id = didJwkIdentifier;
-    const kid = `${didJwkIdentifier}#0`;
-
-    const vpRequestJWT = await buildVpRequestJWT(
-      client_id,
-      response_uri,
-      vpSession.presentation_definition,
+    const result = await generateDidJwkVPRequest(
+      uuid,
       privateKey,
-      "did",
       clientMetadata,
-      kid,
       serverURL,
-      "vp_token",
-      vpSession.nonce,
-      vpSession.dcql_query || null,
-      vpSession.transaction_data || null,
-      vpSession.response_mode
+      wallet_nonce,
+      wallet_metadata
     );
 
-    res.type("text/plain").send(vpRequestJWT);
+    if (result.error) {
+      return res.status(result.status).json({ error: result.error });
+    }
+
+    res.type("application/oauth-authz-req+jwt").send(result.jwt);
   })
   .get(async (req, res) => {
+    console.log("GET request received");
     const uuid = req.params.id;
-    const vpSession = await getVPSession(uuid);
-    
-    if (!vpSession) {
-      return res.status(400).json({ error: "Invalid session ID" });
+    const result = await generateDidJwkVPRequest(uuid, privateKey, clientMetadata, serverURL);
+
+    if (result.error) {
+      return res.status(result.status).json({ error: result.error });
     }
-
-    const response_uri = `${serverURL}/direct_post/${uuid}`;
-    const client_id = didJwkIdentifier;
-    const kid = `${didJwkIdentifier}#0`;
-
-    const vpRequestJWT = await buildVpRequestJWT(
-      client_id,
-      response_uri,
-      vpSession.presentation_definition,
-      privateKey,
-      "did",
-      clientMetadata,
-      kid,
-      serverURL,
-      "vp_token",
-      vpSession.nonce,
-      vpSession.dcql_query || null,
-      vpSession.transaction_data || null,
-      vpSession.response_mode
-    );
-
-    res.type("text/plain").send(vpRequestJWT);
+    res.type("application/oauth-authz-req+jwt").send(result.jwt);
   });
 
-export default didJwkRouter; 
+
+// Helper function to process VP Request
+async function generateDidJwkVPRequest(uuid, privateKey, clientMetadata, serverURL, wallet_nonce, wallet_metadata) {
+  const vpSession = await getVPSession(uuid);
+
+  if (!vpSession) {
+    return { error: "Invalid session ID", status: 400 };
+  }
+
+  const response_uri = `${serverURL}/direct_post/${uuid}`;
+  const client_id = didJwkIdentifier;
+  const kid = `${didJwkIdentifier}#0`;
+
+  const vpRequestJWT = await buildVpRequestJWT(
+    client_id,
+    response_uri,
+    vpSession.presentation_definition,
+    privateKey,
+    clientMetadata,
+    kid,
+    serverURL,
+    "vp_token",
+    vpSession.nonce,
+    vpSession.dcql_query || null,
+    vpSession.transaction_data || null,
+    vpSession.response_mode, // Pass response_mode from session
+    undefined, // audience
+    wallet_nonce,
+    wallet_metadata
+  );
+
+  return { jwt: vpRequestJWT, status: 200 };
+}
+
+
+export default didJwkRouter;
