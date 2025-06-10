@@ -159,44 +159,76 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
     }
   } else {
     // Non-PEX flow (e.g., for DCQL) where presentation_submission is not provided.
-    // The vp_token is expected to be a self-contained SD-JWT or JWT-VP.
     console.log("Processing with non-PEX flow (no presentation_submission).");
     try {
-      if (vpToken.includes("~")) {
-        // Handle SD-JWT VP
-        const decodedSdJwt = await decodeSdJwt(vpToken, digest);
-        if (decodedSdJwt.kbJwt) {
-          keybindJwt = decodedSdJwt.kbJwt;
-        }
-        const vpClaims = await getClaims(
-          decodedSdJwt.jwt.payload,
-          decodedSdJwt.disclosures,
-          digest
-        );
-        if (vpClaims.vp && Array.isArray(vpClaims.vp.verifiableCredential)) {
-          extractedClaims.push(...vpClaims.vp.verifiableCredential); // Push each VC object
-        } else {
-          extractedClaims.push(vpClaims); // Assume vp_token is a single VC
+      const tokensToProcess = [];
+      if (typeof vpToken === 'object' && vpToken !== null && !Array.isArray(vpToken)) {
+        // This is the expected DCQL case. vpToken is an object like { cmwallet: "..." }
+        tokensToProcess.push(...Object.values(vpToken));
+      } else if (typeof vpToken === 'string') {
+        // Fallback for single token or stringified JSON
+        try {
+          const parsed = JSON.parse(vpToken);
+          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            tokensToProcess.push(...Object.values(parsed));
+          } else {
+            tokensToProcess.push(vpToken);
+          }
+        } catch (e) {
+          tokensToProcess.push(vpToken); // Not JSON, treat as raw token.
         }
       } else {
-        // Handle standard JWT VP
-        const decodedVp = await decodeJwtVC(vpToken);
-        const payload = decodedVp ? decodedVp.payload : null;
-        if (
-          payload &&
-          payload.vp &&
-          Array.isArray(payload.vp.verifiableCredential)
-        ) {
-          for (const vcJwt of payload.vp.verifiableCredential) {
-            const decodedVc = await decodeJwtVC(vcJwt);
-            if (decodedVc && decodedVc.payload) {
-              extractedClaims.push(decodedVc.payload);
+        throw new Error("Unsupported vp_token format for non-PEX flow.");
+      }
+
+      for (const token of tokensToProcess) {
+        if (typeof token !== 'string') continue;
+
+        try {
+          if (token.includes("~")) { // Heuristic for SD-JWT
+            const decodedSdJwt = await decodeSdJwt(token, digest);
+            if (decodedSdJwt.kbJwt) {
+              keybindJwt = decodedSdJwt.kbJwt;
+            }
+            const claims = await getClaims(decodedSdJwt.jwt.payload, decodedSdJwt.disclosures, digest);
+
+            if (claims.vp && Array.isArray(claims.vp.verifiableCredential)) {
+              for (const vcJwt of claims.vp.verifiableCredential) {
+                if (typeof vcJwt !== 'string') continue;
+                if (vcJwt.includes("~")) {
+                  const decodedVc = await decodeSdJwt(vcJwt, digest);
+                  const vcClaims = await getClaims(decodedVc.jwt.payload, decodedVc.disclosures, digest);
+                  extractedClaims.push(vcClaims);
+                } else {
+                  const decodedVc = await decodeJwtVC(vcJwt);
+                  if (decodedVc && decodedVc.payload) {
+                    extractedClaims.push(decodedVc.payload);
+                  }
+                }
+              }
+            } else {
+              extractedClaims.push(claims); // single VC
+            }
+          } else { // Handle standard JWT
+            const decodedJwt = await decodeJwtVC(token);
+            const payload = decodedJwt ? decodedJwt.payload : null;
+            if (payload) {
+              if (payload.vp && Array.isArray(payload.vp.verifiableCredential)) {
+                for (const vcJwt of payload.vp.verifiableCredential) {
+                  const decodedVc = await decodeJwtVC(vcJwt);
+                  if (decodedVc && decodedVc.payload) {
+                    extractedClaims.push(decodedVc.payload);
+                  }
+                }
+              } else {
+                extractedClaims.push(payload); // single VC
+              }
+            } else {
+               console.warn("Could not decode non-SD-JWT, skipping:", token);
             }
           }
-        } else if (payload) {
-          extractedClaims.push(payload); // Assume vp_token is a single VC
-        } else {
-          throw new Error("Invalid JWT VP token: could not decode.");
+        } catch (e) {
+          console.error("Error processing token inside non-PEX response, skipping.", e);
         }
       }
     } catch (e) {
