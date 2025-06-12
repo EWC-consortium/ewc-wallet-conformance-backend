@@ -142,6 +142,20 @@ export async function handleVcSdJwtFormat(
         kid: defaultSigningKid,
         alg: "ES256" // alg is also typically included with kid for clarity, though not strictly required by RFC7515 if kid is enough for resolution
       };
+    } else if (effectiveSignatureType === "did:web") {
+      console.log("did:web signature type selected.");
+      const proxyPath = process.env.PROXY_PATH || null;
+      let controller = serverURL;
+      if (proxyPath) {
+        controller = serverURL.replace("/"+proxyPath,"") + ":" + proxyPath;
+      }
+      controller = controller.replace("https://","").replace("http://","");
+      const kid = `did:web:${controller}#keys-1`;
+      console.log(`Using KID: ${kid} for did:web signing.`);
+      joseHeader = { 
+        kid: kid,
+        alg: "ES256"
+      };
     } else {
       // Fallback or default if signatureType is something else (e.g., a generic 'jwk' without specific instruction)
       // For now, defaulting to KID if not explicitly 'jwk' for direct embedding.
