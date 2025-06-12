@@ -243,7 +243,8 @@ export async function handleVcSdJwtFormat(
   // Handle holder binding
   let cnf = { jwk: holderJWKS.jwk };
   if (!cnf.jwk) {
-    cnf = { jwk: await didKeyToJwks(holderJWKS.kid) };
+    const keys = await didKeyToJwks(holderJWKS.kid);
+    cnf = keys.keys[0];
   }
 
   const now = new Date();
