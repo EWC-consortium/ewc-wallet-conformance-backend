@@ -244,7 +244,7 @@ export async function handleVcSdJwtFormat(
   let cnf = { jwk: holderJWKS.jwk };
   if (!cnf.jwk) {
     const keys = await didKeyToJwks(holderJWKS.kid);
-    cnf = keys.keys[0];
+    cnf = {"jwk":keys.keys[0]};
   }
 
   const now = new Date();
