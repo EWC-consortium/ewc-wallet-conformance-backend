@@ -204,7 +204,9 @@ export async function handleVcSdJwtFormat(
       credPayload = getEPassportSDJWTData();
       break;
     case "VerifiableStudentIDSDJWT":
-      credPayload = getStudentIDSDJWTData();
+      credPayload = sessionObject
+        ? getStudentIDSDJWTData(sessionObject.credentialPayload, null)
+        : getVReceiptSDgetStudentIDSDJWTDataJWTData();
       break;
     case "ferryBoardingPassCredential":
     case "VerifiableFerryBoardingPassCredentialSDJWT":
@@ -244,7 +246,7 @@ export async function handleVcSdJwtFormat(
   let cnf = { jwk: holderJWKS.jwk };
   if (!cnf.jwk) {
     const keys = await didKeyToJwks(holderJWKS.kid);
-    cnf = {"jwk":keys.keys[0]};
+    cnf = {jwk: keys.keys[0]};
   }
 
   const now = new Date();
@@ -331,7 +333,7 @@ export async function handleVcSdJwtFormat(
         console.log("Using JWK for mDL signing with @auth0/mdl.");
         // Convert PEM to JWK for @auth0/mdl
         issuerPrivateKeyForSign = pemToJWK(privateKey, "private");
-        issuerCertificateForSign = publicKeyPem; // Certificate stays as PEM
+        issuerCertificateForSign = certificatePemX509; // Certificate stays as PEM
       }
 
       // Create and sign document using @auth0/mdl API

@@ -281,7 +281,7 @@ didJwkRouter.get("/generateVPRequestTransaction", async (req, res) => {
   const presentation_definition = presentation_definition_sdJwt;
   const credentialIds = presentation_definition.input_descriptors.map(descriptor => descriptor.id);
   const transactionDataObj = {
-    type: "identity_verification",
+    type: "qes_authorization",
     credential_ids: credentialIds,
     transaction_data_hashes_alg: ["sha-256"],
     // Transaction-specific data

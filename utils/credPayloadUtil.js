@@ -372,7 +372,7 @@ export const getPIDSDJWTData = (decodedHeaderSubjectDID) => {
   return { claims, disclosureFrame };
 };
 
-export const getStudentIDSDJWTData = (decodedHeaderSubjectDID) => {
+export const getStudentIDSDJWTData = (credentialPayload, decodedHeaderSubjectDID) => {
   const claims = {
     id: decodedHeaderSubjectDID || uuidv4(),
     identifier: "hanna@aegean.gr",
@@ -395,6 +395,34 @@ export const getStudentIDSDJWTData = (decodedHeaderSubjectDID) => {
       "https://wiki.refeds.org/display/ASS/REFEDS+Assurance+Framework+ver+1.0",
     ],
   };
+
+  if (credentialPayload) {
+    claims.firstName = credentialPayload.given_name || claims.firstName;
+    claims.familyName = credentialPayload.family_name || claims.familyName;
+    claims.mail = credentialPayload.email || claims.mail;
+    claims.identifier = credentialPayload.email || claims.identifier;
+    claims.eduPersonPrincipalName =
+      credentialPayload.eduPersonPrincipalName ||
+      credentialPayload.email ||
+      claims.eduPersonPrincipalName;
+    claims.schacHomeOrganization =
+      credentialPayload.schacHomeOrganization || claims.schacHomeOrganization;
+    claims.schacPersonalUniqueID =
+      credentialPayload.eduPersonUniqueId ||
+      credentialPayload.email ||
+      claims.schacPersonalUniqueID;
+
+    const cn =
+      credentialPayload.cn ||
+      (credentialPayload.given_name && credentialPayload.family_name
+        ? `${credentialPayload.given_name} ${credentialPayload.family_name}`
+        : null);
+
+    if (cn) {
+      claims.displayName = cn;
+      claims.commonName = cn;
+    }
+  }
 
   const disclosureFrame = {
     _sd: [
@@ -773,6 +801,13 @@ export const createPaymentWalletAttestationPayload = (serverURL) => {
       // "credentialSubject.fundingSource.aliasId", // Alias ID
       // "credentialSubject.fundingSource.scheme", // Card Scheme
       // "credentialSubject.fundingSource.icon", // Card Icon URL
+      "parLastFour",
+      "panLastFour",
+      "iin",
+      "aliasId",
+      "scheme",
+      "icon",
+      "currency",
       "accounts", // Account Identifier
       "account_holder_id", // Account Holder ID
     ],
