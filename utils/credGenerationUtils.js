@@ -352,28 +352,29 @@ export async function handleVcSdJwtFormat(
           alg: 'ES256',
         });
 
-      // Wrap signed document in MDoc and encode
-      const mdoc = new MDoc([document]);
-      const encodedMdoc = mdoc.encode();
+      // According to VCI spec, we should return the IssuerSigned structure,
+      // not the whole DeviceResponse/MDoc.
+      const issuerSigned = document.issuerSigned;
+      const encodedIssuerSigned = issuerSigned.encode();
 
       // Debug: Examine the raw CBOR bytes
       console.log("=== CBOR Debug Information ===");
-      console.log(`CBOR byte length: ${encodedMdoc.length}`);
-      console.log(`First 20 bytes (hex): ${Buffer.from(encodedMdoc.slice(0, 20)).toString('hex')}`);
-      console.log(`First 20 bytes (decimal): [${Array.from(encodedMdoc.slice(0, 20)).join(', ')}]`);
+      console.log(`CBOR byte length: ${encodedIssuerSigned.length}`);
+      console.log(`First 20 bytes (hex): ${Buffer.from(encodedIssuerSigned.slice(0, 20)).toString('hex')}`);
+      console.log(`First 20 bytes (decimal): [${Array.from(encodedIssuerSigned.slice(0, 20)).join(', ')}]`);
       
       // Check if it's valid CBOR by trying to parse it
       try {
         // Let's see what the raw mdoc structure looks like
-        console.log("Raw mdoc type:", typeof encodedMdoc);
-        console.log("Raw mdoc constructor:", encodedMdoc.constructor.name);
-        console.log("Is Buffer?", Buffer.isBuffer(encodedMdoc));
-        console.log("Is Uint8Array?", encodedMdoc instanceof Uint8Array);
+        console.log("Raw mdoc type:", typeof encodedIssuerSigned);
+        console.log("Raw mdoc constructor:", encodedIssuerSigned.constructor.name);
+        console.log("Is Buffer?", Buffer.isBuffer(encodedIssuerSigned));
+        console.log("Is Uint8Array?", encodedIssuerSigned instanceof Uint8Array);
       } catch (e) {
         console.error("Error examining mdoc structure:", e);
       }
 
-      let encodedMobileDocument = Buffer.from(encodedMdoc).toString(
+      let encodedMobileDocument = Buffer.from(encodedIssuerSigned).toString(
         "base64url"
       );
       console.log(
