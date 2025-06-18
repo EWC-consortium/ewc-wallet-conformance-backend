@@ -251,7 +251,23 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     // Transaction-specific data
     purpose: "Verification of identity",
     timestamp: new Date().toISOString(),
-    transaction_id: uuidv4()
+    transaction_id: uuidv4(),
+    "documentDigests": [
+      {
+       "hash": "sTOgwOm+474gFj0q0x1iSNspKqbcse4IeiqlDg/HWuI=",
+       "label": "Example Contract",
+       "hashAlgorithmOID": "2.16.840.1.101.3.4.2.1",
+       "documentLocations": [
+        {
+         "uri": "https://protected.rp.example/contract-01.pdf?token=HS9naJKWwp901hBcK348IUHiuH8374",
+         "method": {
+         "type": "public"
+         }
+        },
+       ],
+       "dtbsr": "VYDl4oTeJ5TmIPCXKdTX1MSWRLI9CKYcyMRz6xlaGg"
+      }
+     ]
   };
   const base64UrlEncodedTxData = Buffer.from(JSON.stringify(transactionDataObj))
     .toString('base64url');

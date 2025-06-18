@@ -354,6 +354,7 @@ export async function handleVcSdJwtFormat(
 
       // According to VCI spec, we should return the IssuerSigned structure,
       // not the whole DeviceResponse/MDoc.
+      // https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html#appendix-A.2.4
       const issuerSigned = document.issuerSigned;
       const encodedIssuerSigned = issuerSigned.encode();
 

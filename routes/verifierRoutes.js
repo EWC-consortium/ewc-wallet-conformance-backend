@@ -29,6 +29,8 @@ import redirectUriRouter from "./redirectUriRoutes.js";
 import x509Router from "./x509Routes.js";
 import didRouter from "./didRoutes.js";
 import didJwkRouter from "./didJwkRoutes.js";
+import { Verifier, getSessionTranscriptBytes,DeviceResponse } from '@auth0/mdl';
+import base64url from "base64url";
 
 const verifierRouter = express.Router();
 
@@ -113,7 +115,11 @@ let sessions = [];
 let sessionHistory = new TimedArray(30000); //cache data for 30sec
 let verificationResultsHistory = new TimedArray(30000); //cache data for 30sec
 
-
+// This should be replaced with the actual trusted root certificate(s) for the mDL issuers.
+const trustedCerts = [fs.readFileSync(
+  "./x509EC/client_certificate.crt",
+  "utf8"
+)]; 
 
 /* *****************************************  
       AUTHIORIZATION REQUESTS
@@ -163,6 +169,57 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     if (!vpSession) {
       console.warn(`Session ID ${sessionId} not found.`);
       return res.status(400).json({ error: `Session ID ${sessionId} not found.` });
+    }
+
+    const isMdoc = vpSession.presentation_definition && vpSession.presentation_definition.format && vpSession.presentation_definition.format.mso_mdoc;
+
+    if (isMdoc) {
+      console.log(("mDL verification...."))
+      try {
+        const vpToken = req.body["vp_token"];
+        if (!vpToken) {
+          return res.status(400).json({ error: "No vp_token found in the request body." });
+        }
+
+        const encodedDeviceResponse = base64url.toBuffer(vpToken);
+        const decoded = DeviceResponse.decode(encodedDeviceResponse);
+        const holderNonce = decoded.handover.sessionTranscript[0]; // first array element
+        const verifierNonce = vpSession.nonce;
+
+        const sessionTranscript = getSessionTranscriptBytes(
+          { client_id: clientId, response_uri: responseUri, nonce: verifierNonce },
+          holderNonce
+        );
+
+
+
+        const verifier = new Verifier(trustedCerts);
+        const mdoc = await verifier.verify(encodedDeviceResponse, {
+            // ephemeralReaderKey is for NFC/BLE flows and not available here.
+            encodedSessionTranscript: sessionTranscript,
+        });
+
+        const claims = mdoc.getIssuerNameSpace('org.iso.18013.5.1');
+
+        if (vpSession.sdsRequested && !hasOnlyAllowedFields([claims], vpSession.sdsRequested)) {
+          console.log("Mdoc claims do not match what was requested.");
+          return res.status(400).json({
+            error: "Mdoc claims do not match what was requested.",
+            requested: vpSession.sdsRequested,
+            received: claims
+          });
+        }
+
+        vpSession.status = "success";
+        vpSession.claims = claims;
+        storeVPSession(sessionId, vpSession);
+        console.log(`vp session ${sessionId} status is success for mdoc`);
+        return res.status(200).json({ status: "ok" });
+
+      } catch (error) {
+        console.error("Error processing mdoc response:", error);
+        return res.status(400).json({ error: `Mdoc verification failed: ${error.message}` });
+      }
     }
 
     // Handle direct_post.jwt response mode
