@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "mocha tests/**/*.js",
-    "dev": "SERVER_URL=https://2733-94-65-230-166.ngrok-free.app node server.js"
+    "dev": "SERVER_URL=https://3ea2-2a02-587-8707-a300-e82a-d7f5-5f52-e2de.ngrok-free.app node server.js"
   },
   "author": "",
   "license": "ISC",
@@ -23,6 +23,7 @@
     "@sd-jwt/sd-jwt-vc": "^0.7.2",
     "base64url": "^3.0.1",
     "bs58": "^6.0.0",
+    "cbor-x": "^1.6.0",
     "did-resolver": "^4.1.0",
     "express": "^4.21.2",
     "express-openapi-validator": "^5.3.7",

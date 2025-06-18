@@ -29,8 +29,14 @@ import redirectUriRouter from "./redirectUriRoutes.js";
 import x509Router from "./x509Routes.js";
 import didRouter from "./didRoutes.js";
 import didJwkRouter from "./didJwkRoutes.js";
-import { Verifier, getSessionTranscriptBytes,DeviceResponse } from '@auth0/mdl';
+import { Verifier, DeviceResponse } from '@auth0/mdl';
 import base64url from "base64url";
+import { encode as encodeCbor } from 'cbor-x';
+
+const getSessionTranscriptBytes = (
+  oid4vpData,
+  mdocGeneratedNonce,
+) => encodeCbor(['OIDC4VPHandover', oid4vpData.client_id, oid4vpData.response_uri, mdocGeneratedNonce, oid4vpData.nonce]);
 
 const verifierRouter = express.Router();
 
@@ -187,7 +193,7 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         const verifierNonce = vpSession.nonce;
 
         const sessionTranscript = getSessionTranscriptBytes(
-          { client_id: clientId, response_uri: responseUri, nonce: verifierNonce },
+          { client_id: vpSession.client_id, response_uri: vpSession.response_uri, nonce: verifierNonce },
           holderNonce
         );
 
