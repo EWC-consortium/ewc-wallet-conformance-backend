@@ -17,45 +17,26 @@
       "constraints": {
         "fields": [
           {
-            "path": ["$.family_name", "$.vc.credentialSubject.family_name"]
+            "path": ["$.'urn:eu.europa.ec.eudi:pid:1'.family_name"]
           },
           {
-            "path": ["$.given_name", "$.vc.credentialSubject.given_name"]
+            "path": ["$.'urn:eu.europa.ec.eudi:pid:1'.given_name"]
           },
           {
-            "path": ["$.birth_date", "$.vc.credentialSubject.birth_date"]
+            "path": ["$.'urn:eu.europa.ec.eudi:pid:1'.birth_date"]
           },
           {
-            "path": ["$.issue_date", "$.vc.credentialSubject.issue_date"]
+            "path": ["$.'urn:eu.europa.ec.eudi:pid:1'.issuance_date"]
           },
           {
-            "path": ["$.expiry_date", "$.vc.credentialSubject.expiry_date"]
+            "path": ["$.'urn:eu.europa.ec.eudi:pid:1'.expiry_date"]
           },
           {
-            "path": ["$.issuing_country", "$.vc.credentialSubject.issuing_country"]
-          },
-          {
-            "path": ["$.issuing_authority", "$.vc.credentialSubject.issuing_authority"]
-          },
-          {
-            "path": ["$.document_number", "$.vc.credentialSubject.document_number"]
-          },
-          {
-            "path": ["$.driving_privileges", "$.vc.credentialSubject.driving_privileges"]
-          },
-          {
-            "path": ["$.portrait", "$.vc.credentialSubject.portrait"]
-          },
-          {
-            "path": ["$.vct", "$.vc.vct"],
-            "filter": {
-              "type": "string",
-              "const": "org.iso.18013.5.1.mDL"
-            },
-            "purpose": "To request a credential of type org.iso.18013.5.1.mDL (Mobile Driver's License)."
+            "path": ["$.'urn:eu.europa.ec.eudi:pid:1'.issuing_country"]
           }
         ]
       }
     }
-  ]
+  ],
+  "doc_type": "urn:eu.europa.ec.eudi:pid:1"
 } 

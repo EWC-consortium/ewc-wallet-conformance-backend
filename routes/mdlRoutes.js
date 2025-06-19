@@ -122,7 +122,7 @@ mdlRouter.route("/VPrequest/:id") // Corrected path to match client requests
     const vpRequestJWT = await buildVpRequestJWT(
       client_id,
       response_uri,
-      vpSession.presentation_definition_mdl,
+      vpSession.presentation_definition,
       null, // privateKey
       clientMetadata,
       null, // kid
