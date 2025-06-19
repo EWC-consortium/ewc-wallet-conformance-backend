@@ -38,6 +38,7 @@ router.get(["/offer-tx-code"], async (req, res) => {
   const credentialType = req.query.credentialType
     ? req.query.credentialType
     : "VerifiablePortableDocumentA2SDJWT";
+  const signatureType = req.query.signatureType;
 
   let existingPreAuthSession = await getPreAuthSession(uuid);
   if (!existingPreAuthSession) {
@@ -47,7 +48,8 @@ router.get(["/offer-tx-code"], async (req, res) => {
       persona: null,
       accessToken: null,
       flowType: "pre-auth",
-      isHaip:true
+      isHaip: false,
+      signatureType: signatureType
     });
   }
   
@@ -104,6 +106,7 @@ router.get(["/offer-no-code"], async (req, res) => {
   const credentialType = req.query.credentialType
     ? req.query.credentialType
     : "VerifiablePortableDocumentA2SDJWT";
+  const signatureType = req.query.signatureType;
 
   let existingPreAuthSession = await getPreAuthSession(uuid);
   if (!existingPreAuthSession) {
@@ -113,7 +116,8 @@ router.get(["/offer-no-code"], async (req, res) => {
       persona: null,
       accessToken: null,
       flowType: "pre-auth",
-      isHaip: true
+      isHaip: false,
+      signatureType: signatureType
     });
   }
   let encodedCredentialOfferUri = encodeURIComponent(`${serverURL}/credential-offer-no-code/${uuid}?type=${credentialType}`)
@@ -176,10 +180,26 @@ router.post(["/offer-no-code"], async (req, res) => {
 /**
  * pre-authorised flow no transaction code request endpoint
  */
-router.get(["/credential-offer-no-code/:id"], (req, res) => {
+router.get(["/credential-offer-no-code/:id"], async(req, res) => {
   const credentialType = req.query.type
     ? req.query.type
     : "VerifiablePortableDocumentA2SDJWT";
+
+  // const uuid = req.params.id;
+  // let existingPreAuthSession = await getPreAuthSession(uuid);
+  // if (!existingPreAuthSession) {
+    
+  //   storePreAuthSession(uuid, {
+  //     status: "pending",
+  //     resulut: null,
+  //     persona: null,
+  //     accessToken: null,
+  //     isHaip: true,
+  //     flowType: "pre-auth",
+  //     scope: credentialType
+  //   })
+  // }
+    
   res.json({
     credential_issuer: serverURL,
     credential_configuration_ids: [credentialType],

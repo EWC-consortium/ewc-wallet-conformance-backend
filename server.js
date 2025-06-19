@@ -14,6 +14,8 @@ import educationalRouter from "./routes/educationalRoutes.js";
 import sharedRouter from "./routes/sharedIssuanceFlows.js";
 import batchRouter from "./routes/batchRequestRoutes.js";
 import receiptRouter from "./routes/receiptsRoutes.js";
+import mdlRouter from "./routes/mdlRoutes.js";
+import x509Router from "./routes/x509Routes.js";
 import bodyParser from "body-parser"; // Body parser middleware
 
 import * as OpenApiValidator from "express-openapi-validator";
@@ -60,6 +62,7 @@ app.use("/", paymentRouter);
 app.use("/", sharedRouter);
 app.use("/", batchRouter);
 app.use("/", receiptRouter);
+app.use("/mdl", mdlRouter);
 
 // Error handler for validation errors
 app.use((err, req, res, next) => {

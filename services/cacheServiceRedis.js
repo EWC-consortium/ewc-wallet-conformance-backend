@@ -46,7 +46,7 @@ export async function getPreAuthSession(sessionKey) {
     const key = `pre-auth-sessions:${sessionKey}`;
     const result = await client.get(key);
     if (result) {
-      console.log("Session retrieved:", JSON.parse(result));
+      // console.log("Session retrieved:", JSON.parse(result));
       return JSON.parse(result);
     } else {
       console.log("Session not found for key:", key);
@@ -94,7 +94,7 @@ export async function getCodeFlowSession(sessionKey) {
     const key = `code-flow-sessions:${sessionKey}`;
     const result = await client.get(key);
     if (result) {
-      console.log("Session retrieved:", JSON.parse(result));
+      // console.log("Session retrieved:", JSON.parse(result));
       return JSON.parse(result);
     } else {
       console.log("Session not found for key:", key);
@@ -194,7 +194,7 @@ export async function getVPSession(sessionKey) {
     const key = `vp-sessions:${sessionKey}`;
     const result = await client.get(key);
     if (result) {
-      console.log("VP Session retrieved:", JSON.parse(result));
+      // console.log("VP Session retrieved:", JSON.parse(result));
       return JSON.parse(result);
     } else {
       console.log("Session not found for key:", key);
@@ -202,6 +202,45 @@ export async function getVPSession(sessionKey) {
     }
   } catch (err) {
     console.error("Error retrieving session:", err);
+  }
+}
+
+// Function to store a nonce in Redis cache
+export async function storeNonce(nonce, ttlInSeconds = 300) {
+  try {
+    const key = `nonces:${nonce}`;
+    await client.setEx(key, ttlInSeconds, "1"); // Store with expiration, value doesn't matter for nonce
+    console.log(`Nonce stored under key: ${key} with TTL: ${ttlInSeconds}s`);
+  } catch (err) {
+    console.error("Error storing nonce:", err);
+  }
+}
+
+// Function to check if a nonce exists in Redis cache
+export async function checkNonce(nonce) {
+  try {
+    const key = `nonces:${nonce}`;
+    const result = await client.exists(key);
+    const exists = result === 1;
+    console.log(`Nonce ${nonce} ${exists ? 'found' : 'not found'} in cache`);
+    return exists;
+  } catch (err) {
+    console.error("Error checking nonce:", err);
+    return false;
+  }
+}
+
+// Function to delete a nonce from Redis cache
+export async function deleteNonce(nonce) {
+  try {
+    const key = `nonces:${nonce}`;
+    const result = await client.del(key);
+    const deleted = result === 1;
+    console.log(`Nonce ${nonce} ${deleted ? 'deleted' : 'not found for deletion'} from cache`);
+    return deleted;
+  } catch (err) {
+    console.error("Error deleting nonce:", err);
+    return false;
   }
 }
 

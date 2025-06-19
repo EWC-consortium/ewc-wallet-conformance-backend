@@ -2,7 +2,7 @@ import express from "express";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
-import { extractClaimsFromRequest } from "../utils/vpHeplers.js";
+import { extractClaimsFromRequest, validatePoP, validateWUA } from "../utils/vpHeplers.js";
 import { digest } from "@sd-jwt/crypto-nodejs";
 import crypto from "crypto";
 import { extractClaims } from "../utils/sdjwtUtils.js";
@@ -122,7 +122,7 @@ paymentRouter.post("/generatePaymentRequest", async (req, res) => {
 
   let client_id = "dss.aegean.gr";
 
-  // let client_id = serverURL.replace("https://","") 
+  // let client_id = serverURL.replace("https://","")
   let request_uri = `${serverURL}/payment-request/${uuid}`;
   let vpRequest =
     "openid4vp://?client_id=" +
@@ -179,15 +179,15 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
     },
   };
 
-  const clientId = "dss.aegean.gr" // serverURL.replace("https://","") // ; //TODO this should match the server url (without http stuff)
+  const clientId = "dss.aegean.gr"; // serverURL.replace("https://","") // ; //TODO this should match the server url (without http stuff)
   // check session, if it doesn't exist this should fail
   let session = await getVPSession(uuid);
   if (!session) {
-    session = await getCodeFlowSession(uuid)
-    if(!session) return res.send(404);
+    session = await getCodeFlowSession(uuid);
+    if (!session) return res.send(404);
   }
 
-  const presentation_definition = presentation_definition_pwa //presentation_definition_pwa_stdId 
+  const presentation_definition = presentation_definition_pwa; //presentation_definition_pwa_stdId
 
   const hash = crypto.createHash("sha256");
   hash.update(JSON.stringify(presentation_definition));
@@ -223,66 +223,83 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
 paymentRouter.post("/payment_direct_post/:id", async (req, res) => {
   try {
     console.log("payment_direct_post VP is below!");
-    const transaction_data_hashes = req.body.transaction_data_hashes;
-    const transaction_data_hashes_alg = req.body.transaction_data_hashes_alg;
+    // FETCH headers
+    // OAuth-Client-Attestation: <wallet-unit-attestation-jwt>
+    // OAuth-Client-Attestation-PoP: <wallet-unit-attestation-pop-jwt></wallet-unit-attestation-pop-jwt>
+    const oauthClientAttestation = req.get("OAuth-Client-Attestation");
+    const oauthClientAttestationPoP = req.get("OAuth-Client-Attestation-PoP");
+     
+
     const { sessionId, extractedClaims, keybindJwt } =
       await extractClaimsFromRequest(req, digest, true);
 
     const session = await getVPSession(sessionId);
 
-    console.log(extractedClaims);
-    console.log("keybindJwt -4");
-    console.log(keybindJwt);
-    let sdHash = keybindJwt.payload.sd_hash;
+    // console.log(extractedClaims);
+    // console.log("keybindJwt -4");
+    // console.log(keybindJwt);
+    // let sdHash = keybindJwt.payload.sd_hash;
     let transactionDataHashesArray = keybindJwt.payload.transaction_data_hashes;
-    let xtDataHashAlg = keybindJwt.payload.transaction_data_hashes_alg;
+    // let xtDataHashAlg = keybindJwt.payload.transaction_data_hashes_alg;
 
-    /*
-      to be sent to the merchant:
+ 
+    //STEP 1. Validate the VP Token as described in OpenID4VP [4] for the IETF SD-JWT VC credential format.
+    // - validating the key binding JWT, as a PWA is always bound to a key ==>  the VP token validation is covered in : extractClaimsFromRequest
+    // - checking that the timestamp (iat) in the key binding JWT is close (e.g. ±5 minutes) to receiving the input from the user (two-party model) or intermediary (three-party model), respectively
+    const currentTimestamp = Math.floor(Date.now() / 1000);  
+    const tokenTimestamp = keybindJwt.payload.iat;  
+    const fiveMinutesInSeconds = 5 * 60;  
+    if (Math.abs(currentTimestamp - tokenTimestamp) > fiveMinutesInSeconds) {
+      return res.status(422).json({ error: 'Keyebinding JWT has expired' });
+    }
+
+    //STEP 2. Validate the transaction_data
+    // -  original base64url encoded transaction_data string ===
+    // the same hash value when hashed with the given function as the hash contained in transaction_data_hashes in the key binding JWT.
+    const txData = session.txData; // base64EncodedTxData
+    const hash = crypto.createHash("sha256").update(txData).digest("hex");
+    if( !transactionDataHashesArray.includes(hash)){
+      return res.status(422).json({ error: 'TxData Hashes Do not Match' });
+    }
+
+    // STEP 3. Validate the suitability of the PWA
+    // The PWA is submitted inside the vpToken and is validated as part 
+    // of the extractClaimsFromRequest call
+    // - Ensure that the PWA was issued by a suitable entity, most likely the issuer should be the same entity as verifier.
+    const pwaPayload = extractedClaims.find(item => item.vct === "PaymentWalletAttestation");
+    console.log("PWA issued by " + pwaPayload.iss)
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session Not Found' });
+    }
+     // - Ensure that the PWA is valid for the funding source (card or account) in question (including non-revoked).
+     // this is a check that the bank will exectue... 
+
+    // STEP 4. In addition to the above, the verifier may want to validate the user’s Wallet Unit Attestation.
+    // See EWC RFC 004 [10] for further details.
+    const popValidationResults = await validatePoP(oauthClientAttestation, oauthClientAttestationPoP)
+    if( !popValidationResults){
+      return  res.status(422).json({ error: 'PoP Validation failed' });
+    }
+
+    const wuaValidationResults = await validateWUA(oauthClientAttestation, oauthClientAttestationPoP)
+    if( !wuaValidationResults){
+      return res.status(422).json({ error: 'PoP Validation failed' });
+    }
+
+
+
+    // STEP 5. send to bank to process 
+   /*
+      to be sent to the bank:
       {
           “payment_wallet_attestation”: “<VP Token>”,
           “wallet_unit_attestation”: “<WUA>~<KB JWT>”,
           “transaction_data_hashes_alg”: [“sha-256”],
           “transaction_data”: “Base64URL({….})”
       }
-
-
     */
 
-
-
-    //Validate the transaction_data
-    //1. Validate that the original base64url encoded transaction_data string results
-    // in the same hash value when hashed with the given function as the hash contained
-    // in transaction_data_hashes in the key binding JWT.
-    const txData = session.txData;
-    // Convert Base64URL to Standard Base64
-    const base64String = txData.replace(/-/g, "+").replace(/_/g, "/");
-    // Add padding if missing
-    const paddedBase64String = base64String.padEnd(
-      base64String.length + ((4 - (base64String.length % 4)) % 4),
-      "="
-    );
-    // Step 3: Decode the Base64 string into binary
-    const decodedData = Buffer.from(paddedBase64String, "base64");
-    // Step 4: Hash the decoded binary data using SHA-256
-    const hash = crypto.createHash("sha256").update(decodedData).digest();
-    console.log(hash);
-    const hashBase64Url = hash
-      .toString("base64") // Convert to Base64
-      .replace(/\+/g, "-") // Replace '+' with '-'
-      .replace(/\//g, "_") // Replace '/' with '_'
-      .replace(/=+$/, ""); // Remove padding '='
-
-    console.log("SHA-256 Base64URL-encoded Hash:", hashBase64Url);
-
-    console.log(transactionDataHashesArray[0]);
-
-    //2.
-
-    if (!session) {
-      return res.sendStatus(404); //session not found
-    }
 
     session.status = "success";
     storeVPSession(sessionId, session);

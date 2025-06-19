@@ -1,0 +1,42 @@
+{
+  "id": "d49ee616-0e8d-4698-aff5-2a8a2362652e",
+  "name": "mdl-proof",
+  "format": {
+    "mso_mdoc": {
+      "alg": ["ES256", "ES384"]
+    }
+  },
+  "input_descriptors": [
+    {
+      "id": "a571ea49-9d69-4235-8692-3d7ddf2253a9",
+      "format": {
+        "mso_mdoc": {
+          "alg": ["ES256", "ES384"]
+        }
+      },
+      "constraints": {
+        "fields": [
+          {
+            "path": ["$.'urn:eu.europa.ec.eudi:pid:1'.family_name"]
+          },
+          {
+            "path": ["$.'urn:eu.europa.ec.eudi:pid:1'.given_name"]
+          },
+          {
+            "path": ["$.'urn:eu.europa.ec.eudi:pid:1'.birth_date"]
+          },
+          {
+            "path": ["$.'urn:eu.europa.ec.eudi:pid:1'.issuance_date"]
+          },
+          {
+            "path": ["$.'urn:eu.europa.ec.eudi:pid:1'.expiry_date"]
+          },
+          {
+            "path": ["$.'urn:eu.europa.ec.eudi:pid:1'.issuing_country"]
+          }
+        ]
+      }
+    }
+  ],
+  "doc_type": "urn:eu.europa.ec.eudi:pid:1"
+} 
