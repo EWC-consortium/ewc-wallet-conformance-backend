@@ -31,6 +31,7 @@ import {
 
 import cryptoModule from "crypto";
 import { Buffer } from "buffer";
+import { encode } from "cbor-x";
 
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
@@ -352,27 +353,28 @@ export async function handleVcSdJwtFormat(
           alg: 'ES256',
         });
 
-      const mdoc = new MDoc([document]);
-      const encodedMdoc = mdoc.encode();
+      const issuerSigned = document.issuerSigned;
+      const cborIssuerSigned = encode(issuerSigned);
+
 
       // Debug: Examine the raw CBOR bytes
       console.log("=== CBOR Debug Information ===");
-      console.log(`CBOR byte length: ${encodedMdoc.length}`);
-      console.log(`First 20 bytes (hex): ${Buffer.from(encodedMdoc.slice(0, 20)).toString('hex')}`);
-      console.log(`First 20 bytes (decimal): [${Array.from(encodedMdoc.slice(0, 20)).join(', ')}]`);
+      console.log(`CBOR byte length: ${cborIssuerSigned.length}`);
+      console.log(`First 20 bytes (hex): ${Buffer.from(cborIssuerSigned.slice(0, 20)).toString('hex')}`);
+      console.log(`First 20 bytes (decimal): [${Array.from(cborIssuerSigned.slice(0, 20)).join(', ')}]`);
       
       // Check if it's valid CBOR by trying to parse it
       try {
         // Let's see what the raw mdoc structure looks like
-        console.log("Raw mdoc type:", typeof encodedMdoc);
-        console.log("Raw mdoc constructor:", encodedMdoc.constructor.name);
-        console.log("Is Buffer?", Buffer.isBuffer(encodedMdoc));
-        console.log("Is Uint8Array?", encodedMdoc instanceof Uint8Array);
+        console.log("Raw mdoc type:", typeof cborIssuerSigned);
+        console.log("Raw mdoc constructor:", cborIssuerSigned.constructor.name);
+        console.log("Is Buffer?", Buffer.isBuffer(cborIssuerSigned));
+        console.log("Is Uint8Array?", cborIssuerSigned instanceof Uint8Array);
       } catch (e) {
         console.error("Error examining mdoc structure:", e);
       }
 
-      let encodedMobileDocument = Buffer.from(encodedMdoc).toString(
+      let encodedMobileDocument = Buffer.from(cborIssuerSigned).toString(
         "base64url"
       );
       console.log(
