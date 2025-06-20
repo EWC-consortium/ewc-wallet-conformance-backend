@@ -535,6 +535,11 @@ sharedRouter.post("/credential", async (req, res) => {
                 );
               }
               const didDocument = await response.json();
+              if (!didDocument) {
+                throw new Error(
+                  `Failed to parse DID document or DID document is null for URL: ${didDocUrl}`
+                );
+              }
 
               const verificationMethod = didDocument.verificationMethod?.find(
                 (vm) =>

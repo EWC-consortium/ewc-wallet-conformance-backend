@@ -583,17 +583,73 @@ const base64urlDecode = (input) => {
 };
 
 export async function didKeyToJwks(did) {
-  // getResolver will return an object with a key/value pair of { "key": resolver } where resolver is a function used by the generic DID resolver.
-  const keyResolver = getResolver();
-  const didResolver = new Resolver(keyResolver);
-  const doc = await didResolver.resolve(did);
-  // console.log(doc.didDocument.verificationMethod[0].publicKeyJwk); // Log the specific public key
+  if (did.startsWith("did:key:")) {
+    const keyDidResolver = getResolver();
+    const didResolver = new Resolver(keyDidResolver);
 
-  const publicKeyJwk = doc.didDocument.verificationMethod[0]?.publicKeyJwk;
-  if (!publicKeyJwk) {
-    throw new Error("publicKeyJwk not found in didDocument verificationMethod");
+    const didDocument = await didResolver.resolve(did);
+    const jwks = {
+      keys: didDocument.verificationMethod.map((vm) => {
+        const jwk = vm.publicKeyJwk;
+        jwk.kid = vm.id;
+        return jwk;
+      }),
+    };
+    return jwks;
+  } else if (did.startsWith("did:web:")) {
+    // Handling did:web
+    try {
+      const [didPart] = did.split("#"); // we don't need the fragment for fetching did.json
+      
+      let didUrlPart = didPart.substring("did:web:".length);
+      didUrlPart = decodeURIComponent(didUrlPart);
+
+      const didParts = didUrlPart.split(":");
+      const domain = didParts.shift();
+      const path = didParts.join("/");
+
+      let didDocUrl;
+      if (path) {
+        didDocUrl = `https://${domain}/${path}/did.json`;
+      } else {
+        didDocUrl = `https://${domain}/.well-known/did.json`;
+      }
+
+      const response = await fetch(didDocUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch DID document: ${response.statusText}`);
+      }
+      const didDocument = await response.json();
+
+      if (!didDocument || !didDocument.verificationMethod) {
+        // Handle cases where the document is empty or doesn't have verification methods
+        console.error("Invalid DID Document for:", did);
+        throw new Error("Invalid DID Document structure.");
+      }
+      
+      const jwks = {
+        keys: didDocument.verificationMethod.map((vm) => {
+          const jwk = vm.publicKeyJwk;
+          jwk.kid = vm.id;
+          return jwk;
+        }),
+      };
+      return jwks;
+    } catch (e) {
+      console.error("Error resolving did:web", e);
+      throw e;
+    }
+  } else if (did.startsWith("did:jwk:")) {
+    try {
+      const jwkPart = did.substring("did:jwk:".length);
+      const jwk = JSON.parse(Buffer.from(jwkPart, "base64url").toString());
+      return { keys: [jwk] };
+    } catch (e) {
+      console.error("Error parsing did:jwk", e);
+      throw e;
+    }
   }
-  return { keys: [publicKeyJwk] };
+  return null;
 }
 
 export async function fetchWalletMetadata(metadataUrl) {
