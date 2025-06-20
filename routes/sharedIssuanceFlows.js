@@ -454,7 +454,7 @@ sharedRouter.post("/credential", async (req, res) => {
           let publicKeyForProof; // This will hold the JWK for verification
 
 
-          //TODO add support for did:web and did:jwk
+          
           if (decodedProofHeader.jwk) {
             publicKeyForProof = decodedProofHeader.jwk;
           } else if (
@@ -535,6 +535,12 @@ sharedRouter.post("/credential", async (req, res) => {
                 );
               }
               const didDocument = await response.json();
+
+              if (!didDocument) {
+                throw new Error(
+                  `Failed to parse DID document or DID document is null for URL: ${didDocUrl}`
+                );
+              }
 
               const verificationMethod = didDocument.verificationMethod?.find(
                 (vm) =>
