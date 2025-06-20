@@ -180,7 +180,7 @@ export async function buildVpRequestJWT(
 
     const header = {
       alg: "RS256",
-      typ: "JWT",
+      typ: "oauth-authz-req+jwt",
       x5c: [certBase64],
     };
 
@@ -192,7 +192,7 @@ export async function buildVpRequestJWT(
     if (client_id.startsWith('did:jwk:')) {
       const header = {
         alg: "ES256",
-        typ: "JWT",
+        typ: "oauth-authz-req+jwt",
         kid: kid // This will be in the format did:jwk:<base64url-encoded-jwk>#0
       };
 
@@ -219,7 +219,7 @@ export async function buildVpRequestJWT(
       // JWT header
       const header = {
         alg: signingKey.alg || "ES256",
-        typ: "JWT",
+        typ: "oauth-authz-req+jwt",
         kid: kid,
       };
 
@@ -349,7 +349,7 @@ export async function buildPaymentVpRequestJWT(
 
     const header = {
       alg: "RS256",
-      typ: "JWT",
+      typ: "oauth-authz-req+jwt",
       x5c: [certBase64],
     };
 
@@ -395,7 +395,7 @@ export async function buildPaymentVpRequestJWT(
     // JWT header
     const header = {
       alg: signingKey.alg || "ES256",
-      typ: "JWT",
+      typ: "oauth-authz-req+jwt",
       kid: kid,
     };
 
@@ -448,7 +448,7 @@ export async function jarOAutTokenResponse(
   // JWT header
   const header = {
     alg: signingKey.alg || "ES256",
-    typ: "JWT",
+    typ: "oauth-authz-req+jwt",
     kid: "aegean#authentication-key", //kid,
   };
 
