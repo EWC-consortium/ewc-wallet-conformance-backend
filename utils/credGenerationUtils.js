@@ -60,21 +60,27 @@ const defaultSigningKid = issuerConfigValues.default_signing_kid || "aegean#auth
 // Maps claims from existing payload to mDL format
 // This is a simplified mapper and needs to be extended for different VCTs
 function mapClaimsToMdl(claims, vct) {
-  const mdlClaims = {};
-  // Standard mDL claims (ISO 18013-5) often go into 'org.iso.18013.5.1' namespace
-  // Mapping common claims:
-  if (claims.family_name) mdlClaims.family_name = claims.family_name;
-  if (claims.given_name) mdlClaims.given_name = claims.given_name;
-  
+  const mdlClaims = { ...claims }; // Start by copying all claims
+
   // mDL uses 'birth_date', SD-JWT might use 'birthdate'
-  if (claims.birthdate) mdlClaims.birth_date = claims.birthdate; 
-  else if (claims.birth_date) mdlClaims.birth_date = claims.birth_date;
+  if (claims.birthdate) {
+    mdlClaims.birth_date = claims.birthdate;
+    delete mdlClaims.birthdate; // remove original to avoid duplication
+  } else if (claims.birth_date) {
+    mdlClaims.birth_date = claims.birth_date;
+  }
 
   // mDL 'issue_date' and 'expiry_date' for the document itself
-  if (claims.issuance_date) mdlClaims.issue_date = claims.issuance_date; // Map PID's issuance_date
-  else if (claims.issue_date) mdlClaims.issue_date = claims.issue_date;
+  if (claims.issuance_date) {
+    mdlClaims.issue_date = claims.issuance_date; // Map PID's issuance_date
+    delete mdlClaims.issuance_date;
+  } else if (claims.issue_date) {
+    mdlClaims.issue_date = claims.issue_date;
+  }
 
-  if (claims.expiry_date) mdlClaims.expiry_date = claims.expiry_date; // Map PID's expiry_date
+  if (claims.expiry_date) {
+    mdlClaims.expiry_date = claims.expiry_date; // Map PID's expiry_date
+  }
 
   // Placeholder for other claims and VCT specific mappings
   // For example, for a driver's license (mDL docType):
@@ -85,8 +91,12 @@ function mapClaimsToMdl(claims, vct) {
   //   mdlClaims.issuing_country = claims.issuing_country;
   // }
 
-  if (claims.unique_id && (vct === "VerifiablePIDSDJWT" || vct === "urn:eu.europa.ec.eudi:pid:1")){
-      mdlClaims.unique_identifier = claims.unique_id; // Example mapping for PID
+  if (
+    claims.unique_id &&
+    (vct === "VerifiablePIDSDJWT" || vct === "urn:eu.europa.ec.eudi:pid:1")
+  ) {
+    mdlClaims.unique_identifier = claims.unique_id; // Example mapping for PID
+    delete mdlClaims.unique_id;
   }
 
   // Add more specific mappings based on vct and mDL data element definitions
@@ -337,6 +347,9 @@ export async function handleVcSdJwtFormat(
         issuerCertificateForSign = certificatePemX509; // Certificate stays as PEM
       }
 
+
+      console.log("mDLClaimsMapped", mDLClaimsMapped);
+
       // Create and sign document using @auth0/mdl API
       const document = await new Document(DOC_TYPE_MDL)
         .addIssuerNameSpace(DEFAULT_MDL_NAMESPACE, mDLClaimsMapped)
@@ -353,8 +366,9 @@ export async function handleVcSdJwtFormat(
           alg: 'ES256',
         });
 
-      const issuerSigned = document.issuerSigned;
-      const cborIssuerSigned = encode(issuerSigned);
+      // The document must be wrapped in an MDoc before encoding.
+      const mdoc = new MDoc([document]);
+      const cborIssuerSigned = mdoc.encode();
 
 
       // Debug: Examine the raw CBOR bytes
