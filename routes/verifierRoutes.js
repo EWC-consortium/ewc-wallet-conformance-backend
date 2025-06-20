@@ -43,7 +43,7 @@ const verifierRouter = express.Router();
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 const proxyPath = process.env.PROXY_PATH || null;
 
-const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
+const privateKey = fs.readFileSync("./encryption-private.pem", "utf-8");
 const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
 
 const presentation_definition_sdJwt = JSON.parse(
@@ -177,6 +177,14 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       return res.status(400).json({ error: `Session ID ${sessionId} not found.` });
     }
 
+    // Reconstruct client_id for audience validation
+    let controller = serverURL;
+    if (process.env.PROXY_PATH) {
+      controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
+    }
+    controller = controller.replace("https://", "");
+    const expectedAudience = `decentralized_identifier:did:web:${controller}`;
+
     const isMdoc = vpSession.presentation_definition && vpSession.presentation_definition.format && vpSession.presentation_definition.format.mso_mdoc;
 
     if (isMdoc) {
@@ -241,23 +249,29 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     let claimsFromExtraction;
     let jwtFromKeybind;
 
-    if (vpSession. response_mode === 'direct_post.jwt') {
-      const jwtResponse = req.body;
+    if (vpSession.response_mode === 'direct_post.jwt') {
+      const jweToken = req.body;
       try {
-        // Verify the JWT signature
-        const decodedJWT = jwt.verify(jwtResponse, publicKeyPem, { algorithms: ['ES256'] });
+        // Decrypt the JWE response
+        const decryptedPayload = await decryptJWE(jweToken, privateKey);
         
-        // Extract VP token from the JWT payload
-        const vpToken = decodedJWT.vp_token;
+        // Extract VP token from the decrypted payload
+        const vpToken = decryptedPayload.vp_token;
         if (!vpToken) {
-          return res.status(400).json({ error: "No VP token in JWT response" });
+          return res.status(400).json({ error: "No VP token in JWE response" });
         }
 
-        // Process the VP token as before
+        // Process the VP token
         const result = await extractClaimsFromRequest({ body: { vp_token: vpToken } }, digest);
         claimsFromExtraction = result.extractedClaims;
         jwtFromKeybind = result.keybindJwt;
 
+
+        // Verify audience
+        if (jwtFromKeybind && jwtFromKeybind.payload.aud !== expectedAudience) {
+            console.log(`error audience does not match. Expected ${expectedAudience}, but got ${jwtFromKeybind.payload.aud}`);
+            return res.status(400).json({ error: "Audience mismatch" });
+        }
 
         // Verify nonce
         let submittedNonce;
@@ -292,8 +306,8 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         return res.status(200).json({ status: "ok" });
 
       } catch (error) {
-        console.error("Error processing JWT response:", error);
-        return res.status(400).json({ error: "Invalid JWT response" });
+        console.error("Error processing JWE response:", error);
+        return res.status(400).json({ error: "Invalid JWE response" });
       }
     } 
     // Handle regular direct_post response mode
@@ -309,6 +323,12 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         return res.status(400).json({ error: error.message });
       }
       const vpToken = req.body["vp_token"];
+
+      // Verify audience from key-binding JWT
+      if (jwtFromKeybind && jwtFromKeybind.payload && jwtFromKeybind.payload.aud !== expectedAudience) {
+        console.log(`error audience does not match. Expected ${expectedAudience}, but got ${jwtFromKeybind.payload.aud}`);
+        return res.status(400).json({ error: "Audience mismatch" });
+      }
 
       // Verify nonce
       let submittedNonce;

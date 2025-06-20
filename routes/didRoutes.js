@@ -5,16 +5,36 @@ import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import { generateNonce, buildVpRequestJWT, didKeyToJwks } from "../utils/cryptoUtils.js";
 import { getVPSession, storeVPSession } from "../services/cacheServiceRedis.js";
-import { getSDsFromPresentationDef } from "../utils/vpHeplers.js";
 import fs from "fs";
+import * as jose from "jose";
 
 const didRouter = express.Router();
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 
-// Load presentation definitions
-const presentation_definition_sdJwt = JSON.parse(
-  fs.readFileSync("./data/presentation_definition_pid.json", "utf-8")
-);
+// DCQL query for PID
+const dcql_query_pid = {
+  "credentials": [
+    {
+      "id": "pid_credential",
+      "format": "dc+sd-jwt",
+      "meta": {
+        "vct_values": [
+          "urn:eu.europa.ec.eudi:pid:1"
+        ]
+      },
+      "claims": [
+        { "path": ["$.given_name"] },
+        { "path": ["$.family_name"] },
+        { "path": ["$.birth_date"] },
+        { "path": ["$.age_over_18"] },
+        { "path": ["$.issuance_date"] },
+        { "path": ["$.expiry_date"] },
+        { "path": ["$.issuing_authority"] },
+        { "path": ["$.issuing_country"] }
+      ]
+    }
+  ]
+};
 
 // Load client metadata
 const clientMetadata = JSON.parse(
@@ -24,7 +44,7 @@ const clientMetadata = JSON.parse(
 // Load DID private key
 const privateKey = fs.readFileSync("./didjwks/did_private_pkcs8.key", "utf8");
 
-// Standard VP Request with presentation_definition
+// Standard VP Request with DCQL
 didRouter.get("/generateVPRequest", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const responseMode = req.query.response_mode || "direct_post";
@@ -37,32 +57,53 @@ didRouter.get("/generateVPRequest", async (req, res) => {
     controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
   }
   controller = controller.replace("https://", "");
-  const client_id = `did:web:${controller}`;
+  const client_id = `decentralized_identifier:did:web:${controller}`;
   const kid = `did:web:${controller}#keys-1`;
+
+  // Create a sample verifier attestation
+  const attestationPayload = {
+      iss: client_id,
+      sub: client_id,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      attestation: {
+          "policy_uri": `${serverURL}/policy.html`,
+          "tos_uri": `${serverURL}/tos.html`,
+          "logo_uri": `${serverURL}/logo.png`
+      }
+  };
+  const privateKeyObj = await jose.importPKCS8(privateKey, "ES256");
+  const attestationJwt = await new jose.SignJWT(attestationPayload)
+      .setProtectedHeader({ alg: 'ES256', kid: kid, typ: 'jwt' })
+      .sign(privateKeyObj);
+  const verifier_attestations = [attestationJwt];
 
   storeVPSession(uuid, {
     uuid: uuid,
     status: "pending",
     claims: null,
-    presentation_definition: presentation_definition_sdJwt,
+    dcql_query: dcql_query_pid,
     nonce: nonce,
-    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt),
-    response_mode: responseMode
+    response_mode: responseMode,
+    verifier_attestations: verifier_attestations
   });
 
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
-    presentation_definition_sdJwt,
     privateKey,
     clientMetadata,
     kid,
     serverURL,
     "vp_token",
     nonce,
+    dcql_query_pid,
+    null,
+    responseMode,
+    undefined,
     null,
     null,
-    responseMode
+    verifier_attestations
   );
 
   const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
@@ -97,119 +138,59 @@ didRouter.get("/generateVPRequestGET", async (req, res) => {
     controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
   }
   controller = controller.replace("https://", "");
-  const client_id = `did:web:${controller}`;
+  const client_id = `decentralized_identifier:did:web:${controller}`;
   const kid = `did:web:${controller}#keys-1`;
+
+  // Create a sample verifier attestation
+  const attestationPayload = {
+    iss: client_id,
+    sub: client_id,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    attestation: {
+        "policy_uri": `${serverURL}/policy.html`,
+        "tos_uri": `${serverURL}/tos.html`,
+        "logo_uri": `${serverURL}/logo.png`
+    }
+  };
+  const privateKeyObj = await jose.importPKCS8(privateKey, "ES256");
+  const attestationJwt = await new jose.SignJWT(attestationPayload)
+      .setProtectedHeader({ alg: 'ES256', kid: kid, typ: 'jwt' })
+      .sign(privateKeyObj);
+  const verifier_attestations = [attestationJwt];
 
   storeVPSession(uuid, {
     uuid: uuid,
     status: "pending",
     claims: null,
-    presentation_definition: presentation_definition_sdJwt,
+    dcql_query: dcql_query_pid,
     nonce: nonce,
-    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt),
-    response_mode: responseMode
+    response_mode: responseMode,
+    verifier_attestations: verifier_attestations
   });
 
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
-    presentation_definition_sdJwt,
     privateKey,
     clientMetadata,
     kid,
     serverURL,
     "vp_token",
     nonce,
+    dcql_query_pid,
+    null,
+    responseMode,
+    undefined,
     null,
     null,
-    responseMode
+    verifier_attestations
   );
 
   const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
   const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
     requestUri
   )}&client_id=${encodeURIComponent(client_id)}`;
-
-  let code = qr.image(vpRequest, {
-    type: "png",
-    ec_level: "M",
-    size: 20,
-    margin: 10,
-  });
-  let mediaType = "PNG";
-  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
-  
-  res.json({
-    qr: encodedQR,
-    deepLink: vpRequest,
-    sessionId: uuid,
-  });
-});
-
-// DCQL Query endpoint
-didRouter.get("/generateVPRequestDCQL", async (req, res) => {
-  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const nonce = generateNonce(16);
-  const responseMode = req.query.response_mode || "direct_post";
-
-  const response_uri = `${serverURL}/direct_post/${uuid}`;
-  let controller = serverURL;
-  if (process.env.PROXY_PATH) {
-    controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
-  }
-  controller = controller.replace("https://", "");
-  const client_id = `did:web:${controller}`;
-  const kid = `did:web:${controller}#keys-1`;
-
-  const dcql_query =   {
-    "credentials": [
-      {
-        "id": "cmwallet",
-        "format": "dc+sd-jwt",
-        "meta": {
-          "vct_values": [
-            "urn:eu.europa.ec.eudi:pid:1"
-          ]
-        },
-        "claims": [
-          {
-            "path": [
-              "family_name"
-            ]
-          }
-        ]
-      }
-    ]
-  }
-
-  storeVPSession(uuid, {
-    uuid: uuid,
-    status: "pending",
-    claims: null,
-    dcql_query: dcql_query,
-    nonce: nonce,
-    response_mode: responseMode
-  });
-
-  const vpRequestJWT = await buildVpRequestJWT(
-    client_id,
-    response_uri,
-    null,
-    privateKey,
-    clientMetadata,
-    kid,
-    serverURL,
-    "vp_token",
-    nonce,
-    dcql_query,
-    null,
-    responseMode
-  );
-
-  const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
-    requestUri
-  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
 
   let code = qr.image(vpRequest, {
     type: "png",
@@ -239,11 +220,28 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
   }
   controller = controller.replace("https://", "");
-  const client_id = `did:web:${controller}`;
+  const client_id = `decentralized_identifier:did:web:${controller}`;
   const kid = `did:web:${controller}#keys-1`;
 
-  const presentation_definition = presentation_definition_sdJwt;
-  const credentialIds = presentation_definition.input_descriptors.map(descriptor => descriptor.id);
+  // Create a sample verifier attestation
+  const attestationPayload = {
+    iss: client_id,
+    sub: client_id,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    attestation: {
+        "policy_uri": `${serverURL}/policy.html`,
+        "tos_uri": `${serverURL}/tos.html`,
+        "logo_uri": `${serverURL}/logo.png`
+    }
+  };
+  const privateKeyObj = await jose.importPKCS8(privateKey, "ES256");
+  const attestationJwt = await new jose.SignJWT(attestationPayload)
+      .setProtectedHeader({ alg: 'ES256', kid: kid, typ: 'jwt' })
+      .sign(privateKeyObj);
+  const verifier_attestations = [attestationJwt];
+
+  const credentialIds = dcql_query_pid.credentials.map(cred => cred.id);
   const transactionDataObj = {
     type: "qes_authorization",
     credential_ids: credentialIds,
@@ -276,26 +274,29 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     uuid: uuid,
     status: "pending",
     claims: null,
-    presentation_definition: presentation_definition,
+    dcql_query: dcql_query_pid,
     nonce: nonce,
     transaction_data: [base64UrlEncodedTxData],
     response_mode: responseMode,
-    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt)
+    verifier_attestations: verifier_attestations
   });
 
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
-    presentation_definition,
     privateKey,
     clientMetadata,
     kid,
     serverURL,
     "vp_token",
     nonce,
-    null,
+    dcql_query_pid,
     [base64UrlEncodedTxData],
-    responseMode
+    responseMode,
+    undefined,
+    null,
+    null,
+    verifier_attestations
   );
 
   const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
@@ -340,13 +341,12 @@ didRouter.route("/VPrequest/:id")
       controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
     }
     controller = controller.replace("https://", "");
-    const client_id = `did:web:${controller}`;
+    const client_id = `decentralized_identifier:did:web:${controller}`;
     const kid = `did:web:${controller}#keys-1`;
 
     const vpRequestJWT = await buildVpRequestJWT(
       client_id,
       response_uri,
-      vpSession.presentation_definition,
       privateKey,
       clientMetadata,
       kid,
@@ -358,7 +358,8 @@ didRouter.route("/VPrequest/:id")
       vpSession.response_mode,
       undefined, // audience
       wallet_nonce,
-      wallet_metadata
+      wallet_metadata,
+      vpSession.verifier_attestations || null
     );
 
     // Respond with JWT as per OpenID4VP spec for request_uri
@@ -378,22 +379,25 @@ didRouter.route("/VPrequest/:id")
       controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
     }
     controller = controller.replace("https://", "");
-    const client_id = `did:web:${controller}`;
+    const client_id = `decentralized_identifier:did:web:${controller}`;
     const kid = `did:web:${controller}#keys-1`;
 
     const vpRequestJWT = await buildVpRequestJWT(
       client_id,
       response_uri,
-      vpSession.presentation_definition,
-      privateKey, // Assuming privateKey is accessible in this scope
-      clientMetadata, // Assuming clientMetadata is accessible
+      privateKey,
+      clientMetadata,
       kid,
       serverURL,
       "vp_token",
       vpSession.nonce,
       vpSession.dcql_query || null,
       vpSession.transaction_data || null,
-      vpSession.response_mode
+      vpSession.response_mode,
+      undefined,
+      null,
+      null,
+      vpSession.verifier_attestations || null
     );
 
     // Respond with JWT as per OpenID4VP spec for request_uri

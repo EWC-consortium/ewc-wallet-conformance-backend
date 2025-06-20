@@ -28,6 +28,9 @@ const apiSpec = path.join(process.cwd(), "openapi.yaml");
 const app = express();
 const port = 3000;
 
+app.use(express.static("public"));
+app.use(express.text({ type: "application/jwe" }));
+
 // Middleware to parse URL-encoded bodies
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 // Middleware for post bodies

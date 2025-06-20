@@ -111,7 +111,6 @@ export function buildVpRequestJSON(
 export async function buildVpRequestJWT(
   client_id,
   redirect_uri,
-  presentation_definition,
   privateKey = "",
   client_metadata = {},
   kid = null, // Default to an empty object,
@@ -123,7 +122,8 @@ export async function buildVpRequestJWT(
   response_mode = "direct_post", // Add response_mode parameter with default
   audience = "https://self-issued.me/v2", // New audience parameter
   wallet_nonce = null,
-  wallet_metadata = null
+  wallet_metadata = null,
+  verifier_attestations = null
 ) {
   if(!nonce) nonce = generateNonce(16);
   const state = generateNonce(16);
@@ -143,16 +143,10 @@ export async function buildVpRequestJWT(
     nonce: nonce,
     state: state,
     client_metadata: client_metadata,
-    iss: client_id,
     aud: audience, // Use the audience parameter
   };
   // console.log("wallet_nonce", wallet_nonce);
   if(wallet_nonce) jwtPayload.wallet_nonce = wallet_nonce;
-
-  // Add presentation_definition if provided and no dcql_query
-  if (presentation_definition && !dcql_query) {
-    jwtPayload.presentation_definition = presentation_definition;
-  }
 
   // Add dcql_query if provided
   if (dcql_query) {
@@ -164,7 +158,30 @@ export async function buildVpRequestJWT(
     jwtPayload.transaction_data = transaction_data;
   }
 
+  if (verifier_attestations) {
+    jwtPayload.verifier_attestations = verifier_attestations;
+  }
+
   let signedJwt;
+
+  // Determine signing algorithm based on wallet metadata
+  let signingAlg = 'ES256'; // Default algorithm
+  if (client_id.startsWith("x509_san_dns:")) {
+    signingAlg = 'RS256';
+  }
+
+  const verifierSupportedAlgs = ['ES256', 'ES384', 'RS256'];
+
+  if (wallet_metadata && wallet_metadata.request_object_signing_alg_values_supported) {
+    const walletSupportedAlgs = wallet_metadata.request_object_signing_alg_values_supported;
+    const commonAlg = walletSupportedAlgs.find(alg => verifierSupportedAlgs.includes(alg));
+
+    if (commonAlg) {
+      signingAlg = commonAlg;
+    } else {
+      console.warn("No common signing algorithm found. Defaulting to", signingAlg);
+    }
+  }
 
   if (client_id.startsWith("x509_san_dns:")) {
     privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
@@ -179,27 +196,27 @@ export async function buildVpRequestJWT(
       .replace(/\s+/g, "");
 
     const header = {
-      alg: "RS256",
+      alg: signingAlg,
       typ: "JWT",
       x5c: [certBase64],
     };
 
     signedJwt = await new jose.SignJWT(jwtPayload)
       .setProtectedHeader(header)
-      .sign(await jose.importPKCS8(privateKey, "RS256"));
-  } else if (client_id.startsWith("did:")) {
-    // Check if this is a did:jwk identifier
-    if (client_id.startsWith('did:jwk:')) {
+      .sign(await jose.importPKCS8(privateKey, signingAlg));
+  } else if (client_id.startsWith("decentralized_identifier:")) {
+    const did_part = client_id.substring("decentralized_identifier:".length);
+    if (did_part.startsWith('did:jwk:')) {
       const header = {
-        alg: "ES256",
+        alg: signingAlg,
         typ: "JWT",
-        kid: kid // This will be in the format did:jwk:<base64url-encoded-jwk>#0
+        kid: kid 
       };
 
       signedJwt = await new jose.SignJWT(jwtPayload)
         .setProtectedHeader(header)
-        .sign(await jose.importPKCS8(privateKey, "ES256"));
-    } else if (client_id.startsWith("did:web:")) {
+        .sign(await jose.importPKCS8(privateKey, signingAlg));
+    } else if (did_part.startsWith("did:web:")) {
       // Handle did:web case
       const signingKey = {
         kty: "EC",
@@ -213,12 +230,12 @@ export async function buildVpRequestJWT(
       // Convert the private key to a KeyLike object
       const privateKeyObj = await jose.importPKCS8(
         privateKey,
-        signingKey.alg || "ES256"
+        signingAlg
       );
 
       // JWT header
       const header = {
-        alg: signingKey.alg || "ES256",
+        alg: signingAlg,
         typ: "JWT",
         kid: kid,
       };
@@ -230,7 +247,7 @@ export async function buildVpRequestJWT(
       throw new Error("Unsupported DID method: " + client_id);
     }
   } else {
-    throw new Error("not supported client_id scheme for client_id:" + client_id);
+    throw new Error("not supported client_id prefix for client_id:" + client_id);
   }
 
   // If wallet_metadata with jwks is provided, encrypt the request object
@@ -316,7 +333,6 @@ export async function buildPaymentVpRequestJWT(
     nonce: nonce,
     state: state,
     client_metadata: client_metadata, //
-    iss: client_id,//serverURL,
     aud: "https://self-issued.me/v2",
     scope: "openid",
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 1, // Token expiration time (1 days)
@@ -335,6 +351,25 @@ export async function buildPaymentVpRequestJWT(
     jwtPayload.presentation_definition = presentation_definition;
   }
 
+  // Determine signing algorithm based on wallet metadata
+  let signingAlg = 'ES256'; // Default algorithm
+  if (client_id.startsWith("x509_san_dns:")) {
+    signingAlg = 'RS256';
+  }
+
+  const verifierSupportedAlgs = ['ES256', 'ES384', 'RS256'];
+
+  if (wallet_metadata && wallet_metadata.request_object_signing_alg_values_supported) {
+    const walletSupportedAlgs = wallet_metadata.request_object_signing_alg_values_supported;
+    const commonAlg = walletSupportedAlgs.find(alg => verifierSupportedAlgs.includes(alg));
+
+    if (commonAlg) {
+      signingAlg = commonAlg;
+    } else {
+      console.warn("No common signing algorithm found. Defaulting to", signingAlg);
+    }
+  }
+
   if (client_id.startsWith("x509_san_dns:")) {
     privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
     const certificate = fs.readFileSync(
@@ -348,66 +383,81 @@ export async function buildPaymentVpRequestJWT(
       .replace(/\s+/g, "");
 
     const header = {
-      alg: "RS256",
+      alg: signingAlg,
       typ: "JWT",
       x5c: [certBase64],
     };
 
     const jwt = await new jose.SignJWT(jwtPayload)
       .setProtectedHeader(header)
-      .sign(await jose.importPKCS8(privateKey, "RS256"));
+      .sign(await jose.importPKCS8(privateKey, signingAlg));
 
     return { jwt, base64EncodedTxData };
-  } else if (client_id.startsWith("did:")) {
-    //TODO NOT COMPLETED SHOULD RETURN txDATA HASH
-    const signingKey = {
-      kty: "EC",
-      x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
-      y: "SfFShWAUGEnNx24V2b5G1jrhJNHmMwtgROBOi9OKJLc",
-      crv: "P-256",
-      use: "sig",
-      kid: kid,
-    };
+  } else if (client_id.startsWith("decentralized_identifier:")) {
+    const did_part = client_id.substring("decentralized_identifier:".length);
+    if (did_part.startsWith('did:jwk:')) {
+      const header = {
+        alg: signingAlg,
+        typ: "JWT",
+        kid: kid 
+      };
 
-    // Convert the private key to a KeyLike object
-    const privateKeyObj = await jose.importPKCS8(
-      privateKey,
-      signingKey.alg || "ES256"
-    );
+      const jwt = await new jose.SignJWT(jwtPayload)
+        .setProtectedHeader(header)
+        .sign(await jose.importPKCS8(privateKey, signingAlg));
 
-    const jwtPayload = {
-      response_type: response_type,
-      response_mode: "direct_post",
-      client_id: client_id, // DID the did of the verifier!!!!!!
-      redirect_uri: redirect_uri,
-      nonce: nonce,
-      state: state,
-      client_metadata: client_metadata,
-    };
-    if (presentation_definition) {
-      jwtPayload.presentation_definition = presentation_definition;
+      return jwt;
+    } else if (did_part.startsWith("did:web:")) {
+      // Handle did:web case
+      const signingKey = {
+        kty: "EC",
+        x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
+        y: "SfFShWAUGEnNx24V2b5G1jrhJNHmMwtgROBOi9OKJLc",
+        crv: "P-256",
+        use: "sig",
+        kid: kid,
+      };
+
+      // Convert the private key to a KeyLike object
+      const privateKeyObj = await jose.importPKCS8(
+        privateKey,
+        signingKey.alg || "ES256"
+      );
+
+      const jwtPayload = {
+        response_type: response_type,
+        response_mode: "direct_post",
+        client_id: client_id, // DID the did of the verifier!!!!!!
+        redirect_uri: redirect_uri,
+        nonce: nonce,
+        state: state,
+        client_metadata: client_metadata,
+      };
+      if (presentation_definition) {
+        jwtPayload.presentation_definition = presentation_definition;
+      }
+      if (response_type.indexOf("id_token") >= 0) {
+        jwtPayload["id_token_type"] = "subject_signed";
+        jwtPayload["scope"] = "openid";
+      }
+
+      // JWT header
+      const header = {
+        alg: signingKey.alg || "ES256",
+        typ: "JWT",
+        kid: kid,
+      };
+
+      const jwt = await new jose.SignJWT(jwtPayload)
+        .setProtectedHeader(header)
+        .sign(privateKeyObj);
+
+      return jwt;
+    } else {
+      throw new Error("Unsupported DID method: " + client_id);
     }
-    if (response_type.indexOf("id_token") >= 0) {
-      jwtPayload["id_token_type"] = "subject_signed";
-      jwtPayload["scope"] = "openid";
-    }
-
-    // JWT header
-    const header = {
-      alg: signingKey.alg || "ES256",
-      typ: "JWT",
-      kid: kid,
-    };
-
-    const jwt = await new jose.SignJWT(jwtPayload)
-      .setProtectedHeader(header)
-      .sign(privateKeyObj);
-
-    return jwt;
-
-    // Conditional signing based on client_id_scheme
   } else {
-    throw new Error("not supported client_id scheme for client_id:" + client_id);
+    throw new Error("not supported client_id prefix for client_id:" + client_id);
   }
 }
 
@@ -467,19 +517,15 @@ export async function jarOAutTokenResponse(
 
 export async function decryptJWE(jweToken, privateKeyPEM) {
   try {
-    const privateKey = crypto.createPrivateKey(privateKeyPEM);
+    const privateKey = await jose.importPKCS8(privateKeyPEM, "ES256");
 
     // Decrypt the JWE using the private key
-    const decryptedPayload = await jose.jwtDecrypt(jweToken, privateKey);
-    // console.log(decryptedPayload);
-    let presentation_submission =
-      decryptedPayload.payload.presentation_submission;
-    let disclosures = parseVP(decryptedPayload.payload.vp_token);
-    console.log(`diclosures in the VP found`);
-    console.log(disclosures);
-    return disclosures;
+    const { plaintext, protectedHeader } = await jose.compactDecrypt(jweToken, privateKey);
+    const decryptedPayload = JSON.parse(new TextDecoder().decode(plaintext));
+    
+    return decryptedPayload;
   } catch (error) {
-    console.error("Error decrypting JWE:", error.message);
+    console.error("Error decrypting JWE:", error);
     throw error;
   }
 }
