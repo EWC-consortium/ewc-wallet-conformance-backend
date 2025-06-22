@@ -587,7 +587,12 @@ export async function didKeyToJwks(did) {
     const keyDidResolver = getResolver();
     const didResolver = new Resolver(keyDidResolver);
 
-    const didDocument = await didResolver.resolve(did);
+    const resolutionResult = await didResolver.resolve(did);
+    const didDocument = resolutionResult.didDocument;
+    if (!didDocument || !didDocument.verificationMethod) {
+      console.error("Invalid DID Document for:", did);
+      throw new Error("Invalid DID Document structure.");
+    }
     const jwks = {
       keys: didDocument.verificationMethod.map((vm) => {
         const jwk = vm.publicKeyJwk;
