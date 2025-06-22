@@ -238,6 +238,7 @@ export async function handleVcSdJwtFormat(
       credPayload = getGenericSDJWTData();
       break;
     case "eu.europa.ec.eudi.photoid.1":
+    case "PhotoID":
       credPayload = createPhotoIDAttestationPayload(issuerName);
       break;
     case "eu.europa.ec.eudi.pcd.1":
