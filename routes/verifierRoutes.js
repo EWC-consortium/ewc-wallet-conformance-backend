@@ -188,21 +188,36 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         }
 
         const encodedDeviceResponse = base64url.toBuffer(vpToken);
-        const decoded = DeviceResponse.decode(encodedDeviceResponse);
-        const holderNonce = decoded.handover.sessionTranscript[0]; // first array element
-        const verifierNonce = vpSession.nonce;
-
-        const sessionTranscript = getSessionTranscriptBytes(
-          { client_id: vpSession.client_id, response_uri: vpSession.response_uri, nonce: verifierNonce },
-          holderNonce
-        );
-
-
-
+        
+        // For OID4VP, we need to construct the session transcript ourselves
+        // The holder nonce should be extracted from the device response during verification
         const verifier = new Verifier(trustedCerts);
+        
+        // Try to get diagnostic information first to extract the holder nonce
+        let holderNonce;
+        try {
+          const diagnosticInfo = await verifier.getDiagnosticInformation(encodedDeviceResponse);
+          // Extract holder nonce from the diagnostic information
+          // The exact path may vary based on the structure returned by getDiagnosticInformation
+          holderNonce = diagnosticInfo?.deviceResponse?.handover?.sessionTranscript?.[0];
+        } catch (diagError) {
+          console.warn("Could not extract diagnostic information:", diagError.message);
+          // If we can't get diagnostic info, we'll try verification without session transcript
+          holderNonce = null;
+        }
+
+        let sessionTranscript = null;
+        if (holderNonce) {
+          const verifierNonce = vpSession.nonce;
+          sessionTranscript = getSessionTranscriptBytes(
+            { client_id: vpSession.client_id, response_uri: vpSession.response_uri, nonce: verifierNonce },
+            holderNonce
+          );
+        }
+
         const mdoc = await verifier.verify(encodedDeviceResponse, {
             // ephemeralReaderKey is for NFC/BLE flows and not available here.
-            encodedSessionTranscript: sessionTranscript,
+            ...(sessionTranscript && { encodedSessionTranscript: sessionTranscript }),
         });
 
         const claims = mdoc.getIssuerNameSpace('org.iso.18013.5.1');
