@@ -104,11 +104,14 @@ redirectUriRouter.get("/generateVPRequestDCQL", async (req, res) => {
           ]
         },
         "claims": [
-          {
-            "path": [
-              "family_name"
-            ]
-          }
+          { "path": ["family_name"] },
+          { "path": ["given_name"] },
+          { "path": ["birth_date"] },
+          { "path": ["age_over_18"] },
+          { "path": ["issuance_date"] },
+          { "path": ["expiry_date"] },
+          { "path": ["issuing_authority"] },
+          { "path": ["issuing_country"] }
         ]
       }
     ]

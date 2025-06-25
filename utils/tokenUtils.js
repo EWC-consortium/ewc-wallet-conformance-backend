@@ -70,7 +70,12 @@ export function buildVPbyValue(
 
   let vpRequest = "openid4vp://?";
   vpRequest += `client_id=${encodeURIComponent(client_id)}`;
-  vpRequest += `&client_id_scheme=${encodeURIComponent(client_id_scheme)}`;
+  
+  // Only add client_id_scheme if it's not decentralized_identifier (which is implicit for DIDs)
+  if (client_id_scheme && client_id_scheme !== "decentralized_identifier") {
+    vpRequest += `&client_id_scheme=${encodeURIComponent(client_id_scheme)}`;
+  }
+  
   vpRequest += `&response_type=${encodeURIComponent(response_type)}`;
   vpRequest += `&response_mode=${encodeURIComponent(response_mode)}`;
   vpRequest += `&response_uri=${encodeURIComponent(response_uri)}`;

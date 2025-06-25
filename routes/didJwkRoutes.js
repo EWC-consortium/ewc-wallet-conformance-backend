@@ -25,14 +25,14 @@ const dcql_query_pid = {
         ]
       },
       "claims": [
-        { "path": ["$.given_name"] },
-        { "path": ["$.family_name"] },
-        { "path": ["$.birth_date"] },
-        { "path": ["$.age_over_18"] },
-        { "path": ["$.issuance_date"] },
-        { "path": ["$.expiry_date"] },
-        { "path": ["$.issuing_authority"] },
-        { "path": ["$.issuing_country"] }
+        { "path": ["given_name"] },
+        { "path": ["family_name"] },
+        { "path": ["birth_date"] },
+        { "path": ["age_over_18"] },
+        { "path": ["issuance_date"] },
+        { "path": ["expiry_date"] },
+        { "path": ["issuing_authority"] },
+        { "path": ["issuing_country"] }
       ]
     }
   ]
