@@ -11,7 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@auth0/mdl": "^2.1.0",
+    "@auth0/mdl": "^2.0.0",
     "@cef-ebsi/key-did-resolver": "^2.0.5",
     "@ceramicnetwork/key-did-resolver": "^0.2.2",
     "@digitalbazaar/did-method-key": "^5.2.0",
@@ -48,6 +48,7 @@
     "zlib": "^1.0.5"
   },
   "devDependencies": {
-    "mocha": "^11.5.0"
+    "mocha": "^11.5.0",
+    "supertest": "^7.1.1"
   }
 }
