@@ -372,6 +372,42 @@ export const getPIDSDJWTData = (decodedHeaderSubjectDID) => {
   return { claims, disclosureFrame };
 };
 
+export const getPIDSDJWTDataMsoMdoc = (decodedHeaderSubjectDID) => {
+  const issuanceDate = new Date();
+  const expiryDate = new Date();
+  expiryDate.setFullYear(issuanceDate.getFullYear() + 1);
+
+  const claims = {
+    "urn:eu.europa.ec.eudi:pid:1": {
+      given_name: "Hanna",
+      family_name: "Matkalainen",
+      birth_date: "2005-07-01",
+      age_over_18: true,
+      issuance_date: issuanceDate.toISOString().split("T")[0],
+      expiry_date: expiryDate.toISOString().split("T")[0],
+      issuing_authority: "UAegean Test Issuer",
+      issuing_country: "FI",
+    },
+  };
+
+  const disclosureFrame = {
+    "urn:eu.europa.ec.eudi:pid:1": {
+      _sd: [
+        "given_name",
+        "family_name",
+        "birth_date",
+        "age_over_18",
+        "expiry_date",
+        "issuance_date",
+        "issuing_authority",
+        "issuing_country",
+      ],
+    },
+  };
+
+  return { claims, disclosureFrame };
+};
+
 export const getStudentIDSDJWTData = (credentialPayload, decodedHeaderSubjectDID) => {
   const claims = {
     id: decodedHeaderSubjectDID || uuidv4(),

@@ -29,7 +29,7 @@ import redirectUriRouter from "./redirectUriRoutes.js";
 import x509Router from "./x509Routes.js";
 import didRouter from "./didRoutes.js";
 import didJwkRouter from "./didJwkRoutes.js";
-import { Verifier, DeviceResponse } from '@auth0/mdl';
+import { verifyMdlToken, validateMdlClaims } from "../utils/mdlVerification.js";
 import base64url from "base64url";
 import { encode as encodeCbor } from 'cbor-x';
 
@@ -180,66 +180,53 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     const isMdoc = vpSession.presentation_definition && vpSession.presentation_definition.format && vpSession.presentation_definition.format.mso_mdoc;
 
     if (isMdoc) {
-      console.log(("mDL verification...."))
+      console.log("mDL verification using custom cbor-x decoder...");
       try {
         const vpToken = req.body["vp_token"];
         if (!vpToken) {
           return res.status(400).json({ error: "No vp_token found in the request body." });
         }
 
-        const encodedDeviceResponse = base64url.toBuffer(vpToken);
-        
-        // For OID4VP, we need to construct the session transcript ourselves
-        // The holder nonce should be extracted from the device response during verification
-        const verifier = new Verifier(trustedCerts);
-        
-        // Try to get diagnostic information first to extract the holder nonce
-        let holderNonce;
-        try {
-          const diagnosticInfo = await verifier.getDiagnosticInformation(encodedDeviceResponse);
-          // Extract holder nonce from the diagnostic information
-          // The exact path may vary based on the structure returned by getDiagnosticInformation
-          holderNonce = diagnosticInfo?.deviceResponse?.handover?.sessionTranscript?.[0];
-        } catch (diagError) {
-          console.warn("Could not extract diagnostic information:", diagError.message);
-          // If we can't get diagnostic info, we'll try verification without session transcript
-          holderNonce = null;
-        }
+        // Use our custom verification logic
+        const verificationOptions = {
+          requestedFields: vpSession.sdsRequested, // Apply selective disclosure if requested
+          validateStructure: true,
+          includeMetadata: true
+        };
 
-        let sessionTranscript = null;
-        if (holderNonce) {
-          const verifierNonce = vpSession.nonce;
-          sessionTranscript = getSessionTranscriptBytes(
-            { client_id: vpSession.client_id, response_uri: vpSession.response_uri, nonce: verifierNonce },
-            holderNonce
-          );
-        }
+        const mdocResult = await verifyMdlToken(vpToken, verificationOptions);
 
-        const mdoc = await verifier.verify(encodedDeviceResponse, {
-            // ephemeralReaderKey is for NFC/BLE flows and not available here.
-            ...(sessionTranscript && { encodedSessionTranscript: sessionTranscript }),
-        });
-
-        const claims = mdoc.getIssuerNameSpace('org.iso.18013.5.1');
-
-        if (vpSession.sdsRequested && !hasOnlyAllowedFields([claims], vpSession.sdsRequested)) {
-          console.log("Mdoc claims do not match what was requested.");
-          return res.status(400).json({
-            error: "Mdoc claims do not match what was requested.",
-            requested: vpSession.sdsRequested,
-            received: claims
+        if (!mdocResult.success) {
+          console.error("mDL verification failed:", mdocResult.error);
+          return res.status(400).json({ 
+            error: `mDL verification failed: ${mdocResult.error}`,
+            details: mdocResult.details 
           });
         }
 
+        const claims = mdocResult.claims;
+
+        // Validate that extracted claims match what was requested
+        if (vpSession.sdsRequested && !validateMdlClaims(claims, vpSession.sdsRequested)) {
+          console.log("mDL claims do not match what was requested.");
+          return res.status(400).json({
+            error: "mDL claims do not match what was requested.",
+            requested: vpSession.sdsRequested,
+            received: Object.keys(claims)
+          });
+        }
+
+
         vpSession.status = "success";
         vpSession.claims = claims;
+        vpSession.mdlMetadata = mdocResult.metadata; // Store metadata for debugging
         storeVPSession(sessionId, vpSession);
-        console.log(`vp session ${sessionId} status is success for mdoc`);
+        
         return res.status(200).json({ status: "ok" });
 
       } catch (error) {
-        console.error("Error processing mdoc response:", error);
-        return res.status(400).json({ error: `Mdoc verification failed: ${error.message}` });
+        console.error("Error processing mDL response:", error);
+        return res.status(400).json({ error: `mDL verification failed: ${error.message}` });
       }
     }
 

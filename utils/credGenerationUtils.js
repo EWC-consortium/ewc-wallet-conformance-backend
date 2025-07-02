@@ -21,8 +21,11 @@ import {
   createPhotoIDAttestationPayload,
   getFerryBoardingPassSDJWTData,
   createPCDAttestationPayload,
+  getPIDSDJWTDataMsoMdoc,
   getLoyaltyCardSDJWTDataWithPayload,
 } from "../utils/credPayloadUtil.js";
+
+import issuerConfig from "../data/issuer-config.json" assert { type: "json" };
 
 import {
   MDoc,
@@ -54,58 +57,57 @@ try {
 }
 const defaultSigningKid = issuerConfigValues.default_signing_kid || "aegean#authentication-key";
 
+// const issuerConfig = require("../data/issuer-config.json");
 
-
-
-// Maps claims from existing payload to mDL format
+// Maps claims from existing payload to mso_mdoc format
 // This is a simplified mapper and needs to be extended for different VCTs
-function mapClaimsToMdl(claims, vct) {
-  const mdlClaims = { ...claims }; // Start by copying all claims
+function mapClaimsToMsoMdoc(claims, vct) {
+  const msoMdocClaims = { ...claims }; // Start by copying all claims
 
   // mDL uses 'birth_date', SD-JWT might use 'birthdate'
   if (claims.birthdate) {
-    mdlClaims.birth_date = claims.birthdate;
-    delete mdlClaims.birthdate; // remove original to avoid duplication
+    msoMdocClaims.birth_date = claims.birthdate;
+    delete msoMdocClaims.birthdate; // remove original to avoid duplication
   } else if (claims.birth_date) {
-    mdlClaims.birth_date = claims.birth_date;
+    msoMdocClaims.birth_date = claims.birth_date;
   }
 
   // mDL 'issue_date' and 'expiry_date' for the document itself
   if (claims.issuance_date) {
-    mdlClaims.issue_date = claims.issuance_date; // Map PID's issuance_date
-    delete mdlClaims.issuance_date;
+    msoMdocClaims.issue_date = claims.issuance_date; // Map PID's issuance_date
+    delete msoMdocClaims.issuance_date;
   } else if (claims.issue_date) {
-    mdlClaims.issue_date = claims.issue_date;
+    msoMdocClaims.issue_date = claims.issue_date;
   }
 
   if (claims.expiry_date) {
-    mdlClaims.expiry_date = claims.expiry_date; // Map PID's expiry_date
+    msoMdocClaims.expiry_date = claims.expiry_date; // Map PID's expiry_date
   }
 
   // Placeholder for other claims and VCT specific mappings
   // For example, for a driver's license (mDL docType):
   // if (vct === 'some_driver_license_vct') {
-  //   mdlClaims.driving_privileges = claims.driving_privileges;
-  //   mdlClaims.portrait = claims.portrait; // Needs to be bytes
-  //   mdlClaims.document_number = claims.document_number;
-  //   mdlClaims.issuing_country = claims.issuing_country;
+  //   msoMdocClaims.driving_privileges = claims.driving_privileges;
+  //   msoMdocClaims.portrait = claims.portrait; // Needs to be bytes
+  //   msoMdocClaims.document_number = claims.document_number;
+  //   msoMdocClaims.issuing_country = claims.issuing_country;
   // }
 
   if (
     claims.unique_id &&
     (vct === "VerifiablePIDSDJWT" || vct === "urn:eu.europa.ec.eudi:pid:1")
   ) {
-    mdlClaims.unique_identifier = claims.unique_id; // Example mapping for PID
-    delete mdlClaims.unique_id;
+    msoMdocClaims.unique_identifier = claims.unique_id; // Example mapping for PID
+    delete msoMdocClaims.unique_id;
   }
 
   // Add more specific mappings based on vct and mDL data element definitions
-  // console.log("Mapped mDL claims:", mdlClaims);
-  return mdlClaims;
+  // console.log("Mapped mDL claims:", msoMdocClaims);
+  return msoMdocClaims;
 }
 
 const DOC_TYPE_MDL = "org.iso.18013.5.1.mDL";
-const DEFAULT_MDL_NAMESPACE = "org.iso.18013.5.1";
+//const DEFAULT_MDL_NAMESPACE = "org.iso.18013.5.1";
 
 export async function handleVcSdJwtFormat(
   requestBody,
@@ -242,8 +244,11 @@ export async function handleVcSdJwtFormat(
       credPayload = createPhotoIDAttestationPayload(issuerName);
       break;
     case "eu.europa.ec.eudi.pcd.1":
-    case "urn:eu.europa.ec.eudi:pid:1:mso_mdoc":
       credPayload = createPCDAttestationPayload(issuerName);
+      break;
+    case "urn:eu.europa.ec.eudi:pid:1:mso_mdoc":
+      // TODO update this for mso_mdoc
+      credPayload = getPIDSDJWTDataMsoMdoc();
       break;
     case "LoyaltyCard":
       credPayload = getLoyaltyCardSDJWTDataWithPayload(
@@ -324,18 +329,41 @@ export async function handleVcSdJwtFormat(
   } else if (format === "mDL" || format === "mdl") {
     console.log("Attempting to generate mDL credential using @auth0/mdl...");
     try {
-      const mDLClaimsMapped = mapClaimsToMdl(credPayload.claims, vct);
+     
+      // const devicePublicKeyJwk = cnf.jwk;
+      const credentialConfiguration =
+        issuerConfig.credential_configurations_supported[vct];
+      if (!credentialConfiguration) {
+        throw new Error(`Configuration not found for VCT: ${vct}`);
+      }
+
+      // // Determine signature type for mDL
+      // const currentEffectiveSignatureType =
+      // (sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509") || sessionObject.signatureType === "x509"
+      // ? "x509"
+      // : "jwk";
+      const docType = credentialConfiguration.doctype;
+      if (!docType) {
+        throw new Error(`'doctype' not defined for VCT: ${vct}`);
+      }
+      const namespace = docType;
+
+      //    // Prepare signing arguments based on signature type
+     
+      const claims =credPayload
+      /*
+      
+    */      
+      const msoMdocClaims = claims.claims[namespace];
+      if (!msoMdocClaims) {
+        throw new Error(`Claims not found under namespace '${namespace}' for VCT: ${vct}`);
+      }
+
+      const mDLClaimsMapped = mapClaimsToMsoMdoc(msoMdocClaims, vct);
+
+    
       const devicePublicKeyJwk = cnf.jwk;
-
-      // Determine signature type for mDL
-      const currentEffectiveSignatureType =
-        (sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509") || sessionObject.signatureType === "x509"
-        ? "x509"
-        : "jwk";
-
-      // Prepare signing arguments based on signature type
       let issuerPrivateKeyForSign, issuerCertificateForSign;
-
       if (currentEffectiveSignatureType === "x509") {
         console.log("Using X.509 for mDL signing with @auth0/mdl.");
         // Convert PEM to JWK for @auth0/mdl
@@ -344,17 +372,20 @@ export async function handleVcSdJwtFormat(
       } else { // "jwk"
         console.log("Using JWK for mDL signing with @auth0/mdl.");
         // Convert PEM to JWK for @auth0/mdl
-        issuerPrivateKeyForSign = pemToJWK(privateKey, "private");
+        issuerPrivateKeyForSign = pemToJWK(privateKeyPemX509, "private");
         issuerCertificateForSign = certificatePemX509; // Certificate stays as PEM
       }
 
-
-      console.log("mDLClaimsMapped", mDLClaimsMapped);
-
-      // Create and sign document using @auth0/mdl API
+      
+/*
+ // Create and sign document using @auth0/mdl API
       const document = await new Document(DOC_TYPE_MDL)
         .addIssuerNameSpace(DEFAULT_MDL_NAMESPACE, mDLClaimsMapped)
         .useDigestAlgorithm('SHA-256')
+*/
+      const document = await new Document(docType)
+        .addIssuerNameSpace(namespace, mDLClaimsMapped)
+        .useDigestAlgorithm("SHA-256")
         .addValidityInfo({
           signed: new Date(),
           validFrom: new Date(), // Add validFrom as shown in documentation

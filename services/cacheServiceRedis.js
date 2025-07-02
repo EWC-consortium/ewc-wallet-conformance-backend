@@ -3,7 +3,7 @@ import redis from "redis";
 //
 const redis_url = process.env.REDIS ? process.env.REDIS : "localhost:6379";
 // Create a Redis client
-const client = redis.createClient({
+export const client = redis.createClient({
   url: `redis://${redis_url}`,
 });
 

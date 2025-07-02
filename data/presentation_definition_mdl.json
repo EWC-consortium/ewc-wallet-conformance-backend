@@ -17,17 +17,14 @@
       "constraints": {
         "fields": [
           {
-            "path": ["$['org.iso.18013.5.1']['surname']"]
+            "path": ["$['urn:eu.europa.ec.eudi:pid:1']['family_name']"]
           },
           {
-            "path": ["$['org.iso.18013.5.1']['given_name']"]
-          },
-          {
-            "path": ["$['org.iso.18013.5.1']['phone']"]
+            "path": ["$['urn:eu.europa.ec.eudi:pid:1']['given_name']"]
           }
         ]
       }
     }
   ],
-  "doc_type": "org.iso.18013.5.1.mDL"
+  "doc_type": "urn:eu.europa.ec.eudi:pid:1"
 } 
