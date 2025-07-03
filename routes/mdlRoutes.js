@@ -24,6 +24,10 @@ const clientMetadata = JSON.parse(
   fs.readFileSync("./data/verifier-config.json", "utf-8")
 );
 
+const clientMetadataMDL = JSON.parse(
+  fs.readFileSync("./data/verifier-config-mdl.json", "utf-8")
+);
+
 // Standard VP Request with presentation_definition
 mdlRouter.get("/generateVPRequest", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
@@ -223,7 +227,7 @@ mdlRouter
 
     const result = await generateX509MDLVPRequest(
       uuid,
-      clientMetadata,
+      clientMetadataMDL,
       serverURL
     );
 
