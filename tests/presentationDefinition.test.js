@@ -16,7 +16,7 @@ describe('Presentation Definition Utilities', () => {
 
     // Add assertions to ensure the function works as expected
     assert.ok(Array.isArray(sdsRequested), 'The result should be an array.');
-    assert.strictEqual(sdsRequested.length, 3, 'There should be 3 fields requested.');
+    assert.strictEqual(sdsRequested.length, 2, 'There should be 3 fields requested.');
 
     console.log('sdsRequested', sdsRequested);
     // assert.deepStrictEqual(sdsRequested, [

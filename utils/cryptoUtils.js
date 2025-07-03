@@ -129,7 +129,7 @@ export async function buildVpRequestJWT(
   const state = generateNonce(16);
 
   // Validate response_mode
-  const allowedResponseModes = ["direct_post", "direct_post.jwt"];
+  const allowedResponseModes = ["direct_post", "direct_post.jwt", "dc_api.jwt", "dc_api"];
   if (!allowedResponseModes.includes(response_mode)) {
     throw new Error(`Invalid response_mode. Must be one of: ${allowedResponseModes.join(", ")}`);
   }
@@ -139,13 +139,18 @@ export async function buildVpRequestJWT(
     response_type: response_type,
     response_mode: response_mode,
     client_id: client_id,
-    response_uri: redirect_uri,
+    
     nonce: nonce,
     state: state,
     client_metadata: client_metadata,
     iss: client_id,
     aud: audience, // Use the audience parameter
   };
+
+  if(response_mode !== "dc_api.jwt" && response_mode !== "dc_api") {
+    jwtPayload.response_uri = redirect_uri;
+  }
+
   // console.log("wallet_nonce", wallet_nonce);
   if(wallet_nonce) jwtPayload.wallet_nonce = wallet_nonce;
 

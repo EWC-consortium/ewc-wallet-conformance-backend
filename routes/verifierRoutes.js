@@ -194,6 +194,8 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           includeMetadata: true
         };
 
+        // TODO
+        const documentType=null//vpSession.vct
         const mdocResult = await verifyMdlToken(vpToken, verificationOptions);
 
         if (!mdocResult.success) {

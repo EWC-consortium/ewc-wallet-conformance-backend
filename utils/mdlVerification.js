@@ -12,7 +12,7 @@ import base64url from 'base64url';
  * @param {boolean} options.includeMetadata - Whether to include metadata in response (default: true)
  * @returns {Object} Verification result
  */
-export async function verifyMdlToken(vpTokenBase64, options = {}) {
+export async function verifyMdlToken(vpTokenBase64, options = {}, documentType = "urn:eu.europa.ec.eudi:pid:1") {
   const {
     requestedFields = null,
     validateStructure = true,
@@ -47,7 +47,7 @@ export async function verifyMdlToken(vpTokenBase64, options = {}) {
     // Step 5: Extract claims from issuerSigned nameSpaces
     const allClaims = {};
     if (document.issuerSigned?.nameSpaces) {
-      const isoNamespace = document.issuerSigned.nameSpaces['org.iso.18013.5.1'];
+      const isoNamespace = document.issuerSigned.nameSpaces[documentType];
       if (isoNamespace && Array.isArray(isoNamespace)) {
         isoNamespace.forEach(element => {
           try {

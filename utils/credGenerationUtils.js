@@ -359,11 +359,15 @@ export async function handleVcSdJwtFormat(
         throw new Error(`Claims not found under namespace '${namespace}' for VCT: ${vct}`);
       }
 
-      const mDLClaimsMapped = mapClaimsToMsoMdoc(msoMdocClaims, vct);
+      const currentEffectiveSignatureType =
+      (sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509") || sessionObject.signatureType === "x509"
+      ? "x509"
+      : "jwk";
 
-    
+      const mDLClaimsMapped = mapClaimsToMsoMdoc(msoMdocClaims, vct);
       const devicePublicKeyJwk = cnf.jwk;
       let issuerPrivateKeyForSign, issuerCertificateForSign;
+      
       if (currentEffectiveSignatureType === "x509") {
         console.log("Using X.509 for mDL signing with @auth0/mdl.");
         // Convert PEM to JWK for @auth0/mdl

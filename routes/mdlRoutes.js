@@ -133,7 +133,6 @@ mdlRouter
         response_mode: responseMode,
       });
       console.log(`New session created for UUID: ${uuid}`);
-      
     }
 
     const result = await generateX509MDLVPRequest(
@@ -149,6 +148,96 @@ mdlRouter
     // with content type application/oauth-authz-req+jwt
     console.log("result.jwt", result.jwt);
     res.type("application/oauth-authz-req+jwt").send(result.jwt);
+  });
+
+mdlRouter
+  .route("/VPrequest/dcapi/:id?") // Corrected path to match client requests
+  // only get for now I guess
+  // .post(express.urlencoded({ extended: true }), async (req, res) => {
+  //   console.log("POST request received");
+  //   const uuid = req.params.id;
+  //   // As per OpenID4VP spec, wallet can post wallet_nonce and wallet_metadata
+  //   const { wallet_nonce, wallet_metadata } = req.body;
+  //   if (wallet_nonce || wallet_metadata) {
+  //     console.log(
+  //       `Received from wallet: wallet_nonce=${wallet_nonce}, wallet_metadata=${wallet_metadata}`
+  //     );
+  //   }
+
+  //   const result = await generateX509MDLVPRequest(
+  //     uuid,
+  //     clientMetadata,
+  //     serverURL,
+  //     wallet_nonce,
+  //     wallet_metadata
+  //   );
+
+  //   if (result.error) {
+  //     return res.status(result.status).json({ error: result.error });
+  //   }
+  //   // For POST, the content type might differ based on wallet expectations
+  //   // or specific protocol steps not detailed here.
+  //   // Assuming JWT is expected directly for now.
+  //   res.type("application/oauth-authz-req+jwt").send(result.jwt);
+  // })
+  .get(async (req, res) => {
+    // Added GET handler
+    console.log("GET request received for mDL using dcql dc api");
+    let uuid = req.params.id;
+    const dcql_query = {
+      credentials: [
+        {
+          claims: [
+            {
+              path: ["org.iso.18013.5.1", "family_name"],
+            },
+            {
+              path: ["org.iso.18013.5.1", "given_name"],
+            },
+            {
+              path: ["org.iso.18013.5.1", "age_over_21"],
+            },
+          ],
+          format: "mso_mdoc",
+          id: "cred1",
+          meta: {
+            doctype_value: "org.iso.18013.5.1.mDL",
+          },
+        },
+      ],
+    };
+
+    const responseMode =  "dc_api.jwt";
+    const nonce = generateNonce(16);
+
+    storeVPSession(uuid, {
+      uuid: uuid,
+      status: "pending",
+      claims: null,
+      nonce: nonce,
+      dcql_query:dcql_query,
+      sdsRequested: getSDsFromPresentationDef(presentation_definition_mdl),
+      response_mode: responseMode,
+    });
+    console.log(`New session created for UUID: ${uuid}`);
+
+    const result = await generateX509MDLVPRequest(
+      uuid,
+      clientMetadata,
+      serverURL
+    );
+
+    if (result.error) {
+      return res.status(result.status).json({ error: result.error });
+    }
+    // As per OpenID4VP, the request_uri should return the request object (JWT)
+    // with content type application/oauth-authz-req+jwt
+    console.log("result.jwt", result.jwt);
+    res.json({
+      request: result.jwt,                 // the signed Request Object
+      expected_origins: ["https://dss.aegean.gr"], // REQUIRED for signed over DC-API
+      response_mode: "dc_api.jwt"          // echoes what the wallet must return
+    });
   });
 
 async function generateX509MDLVPRequest(

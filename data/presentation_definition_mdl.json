@@ -8,7 +8,7 @@
   },
   "input_descriptors": [
     {
-      "id": "a571ea49-9d69-4235-8692-3d7ddf2253a9",
+      "id": "urn:eu.europa.ec.eudi:pid:1",
       "format": {
         "mso_mdoc": {
           "alg": ["ES256", "ES384"]
