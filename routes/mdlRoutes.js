@@ -213,21 +213,26 @@ mdlRouter
 
     const responseMode =  "dc_api.jwt";
     const nonce = generateNonce(16);
+    const state = generateNonce(16);
 
     storeVPSession(uuid, {
       uuid: uuid,
       status: "pending",
       claims: null,
       nonce: nonce,
+      state: state,
       dcql_query:dcql_query,
       sdsRequested: getSDsFromPresentationDef(presentation_definition_mdl),
       response_mode: responseMode,
     });
     console.log(`New session created for UUID: ${uuid}`);
 
+const clientMetadata =  clientMetadataMDL;
+
+
     const result = await generateX509MDLVPRequest(
       uuid,
-      clientMetadataMDL,
+      clientMetadata,
       serverURL
     );
 
@@ -240,7 +245,7 @@ mdlRouter
     res.json({
       request: result.jwt,                 // the signed Request Object
       expected_origins: ["https://dss.aegean.gr"], // REQUIRED for signed over DC-API
-      response_mode: "dc_api.jwt"          // echoes what the wallet must return
+      response_mode:  responseMode  //dc_api.jwt         // echoes what the wallet must return
     });
   });
 
@@ -249,7 +254,8 @@ async function generateX509MDLVPRequest(
   clientMetadata,
   serverURL,
   wallet_nonce,
-  wallet_metadata
+  wallet_metadata,
+ 
 ) {
   const vpSession = await getVPSession(uuid);
 
@@ -273,9 +279,10 @@ async function generateX509MDLVPRequest(
     vpSession.dcql_query || null,
     vpSession.transaction_data || null,
     vpSession.response_mode, // Pass response_mode from session
-    undefined, // audience, to use default
+     "https://self-issued.me/v2", // audience should be client_id for Digital Credentials API
     wallet_nonce,
-    wallet_metadata
+    wallet_metadata,
+    vpSession.state // Pass state from session
   );
   return { jwt: vpRequestJWT, status: 200 };
 }

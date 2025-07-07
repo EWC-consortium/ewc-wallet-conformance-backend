@@ -123,10 +123,11 @@ export async function buildVpRequestJWT(
   response_mode = "direct_post", // Add response_mode parameter with default
   audience = "https://self-issued.me/v2", // New audience parameter
   wallet_nonce = null,
-  wallet_metadata = null
+  wallet_metadata = null,
+  state = null // Add state parameter
 ) {
   if(!nonce) nonce = generateNonce(16);
-  const state = generateNonce(16);
+  if(!state) state = generateNonce(16); // Only generate if not provided
 
   // Validate response_mode
   const allowedResponseModes = ["direct_post", "direct_post.jwt", "dc_api.jwt", "dc_api"];
@@ -141,15 +142,41 @@ export async function buildVpRequestJWT(
     client_id: client_id,
     
     nonce: nonce,
-    state: state,
+    // state: state,
     client_metadata: client_metadata,
     iss: client_id,
     aud: audience, // Use the audience parameter
   };
 
+  // Add required timestamp claims for Digital Credentials API
+  if (response_mode === "dc_api.jwt" || response_mode === "dc_api") {
+    const now = Math.floor(Date.now() / 1000);
+    jwtPayload.iat = now; // issued at time
+    jwtPayload.exp = now + (60 * 60); // expires in 1 hour
+    jwtPayload.expected_origins = ["https://dss.aegean.gr"];  
+    jwtPayload.jwks = {
+      keys: [
+        {
+          kty: "OKP",
+          crv: "X25519",
+          x: "3LYHIg1mjyA1PohD2hOo64KAklhcZt1BBphSxAGcXgw",
+          use: "enc",
+          kid: "enc-key-1",
+        }
+      ]
+    }
+    // jwtPayload.presentation_definition = presentation_definition;
+  }
+
   if(response_mode !== "dc_api.jwt" && response_mode !== "dc_api") {
     jwtPayload.response_uri = redirect_uri;
+    
   }
+  if(response_mode === "dc_api" || response_mode === "dc_api.jwt") {
+    jwtPayload.state = state;
+  }
+
+ 
 
   // console.log("wallet_nonce", wallet_nonce);
   if(wallet_nonce) jwtPayload.wallet_nonce = wallet_nonce;

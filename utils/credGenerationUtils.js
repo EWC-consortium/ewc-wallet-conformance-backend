@@ -9,6 +9,9 @@ import {
 import { pemToJWK, generateNonce, didKeyToJwks } from "../utils/cryptoUtils.js";
 import fs from "fs";
 import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
+import { inspect } from "node:util";
+
+import { encode as cborEncode } from 'cbor-x';  
 
 import {
   getPIDSDJWTData,
@@ -109,7 +112,7 @@ function mapClaimsToMsoMdoc(claims, vct) {
 const DOC_TYPE_MDL = "org.iso.18013.5.1.mDL";
 //const DEFAULT_MDL_NAMESPACE = "org.iso.18013.5.1";
 
-export async function handleVcSdJwtFormat(
+export async function handleCredentialGenerationBasedOnFormat(
   requestBody,
   sessionObject,
   serverURL,
@@ -402,34 +405,22 @@ export async function handleVcSdJwtFormat(
           alg: 'ES256',
         });
 
-      // The document must be wrapped in an MDoc before encoding.
-      const mdoc = new MDoc([document]);
-      const cborIssuerSigned = mdoc.encode();
+      // // The document must be wrapped in an MDoc before encoding.
+      // const mdoc = new MDoc([document]);
+      // const cborIssuerSigned = mdoc.encode();
+      const docMap = document.prepare();          // ← see IssuerSignedDocument.prepare()  :contentReference[oaicite:0]{index=0}
+      const issuerSigned = docMap.get('issuerSigned');
+      const issuerSignedCbor = cborEncode(issuerSigned);
 
 
-      // Debug: Examine the raw CBOR bytes
-      console.log("=== CBOR Debug Information ===");
-      console.log(`CBOR byte length: ${cborIssuerSigned.length}`);
-      console.log(`First 20 bytes (hex): ${Buffer.from(cborIssuerSigned.slice(0, 20)).toString('hex')}`);
-      console.log(`First 20 bytes (decimal): [${Array.from(cborIssuerSigned.slice(0, 20)).join(', ')}]`);
+       
       
-      // Check if it's valid CBOR by trying to parse it
-      try {
-        // Let's see what the raw mdoc structure looks like
-        console.log("Raw mdoc type:", typeof cborIssuerSigned);
-        console.log("Raw mdoc constructor:", cborIssuerSigned.constructor.name);
-        console.log("Is Buffer?", Buffer.isBuffer(cborIssuerSigned));
-        console.log("Is Uint8Array?", cborIssuerSigned instanceof Uint8Array);
-      } catch (e) {
-        console.error("Error examining mdoc structure:", e);
-      }
-
-      let encodedMobileDocument = Buffer.from(cborIssuerSigned).toString(
+      let encodedMobileDocument = Buffer.from(issuerSignedCbor).toString(
         "base64url"
       );
       console.log(
         "mDL Credential generated with @auth0/mdl (base64url):",
-        encodedMobileDocument.substring(0, 100) + "..."
+        encodedMobileDocument
       );
 
       console.log("=== End CBOR Debug ===");
@@ -446,7 +437,7 @@ export async function handleVcSdJwtFormat(
   }
 }
 
-export async function handleVcSdJwtFormatDeferred(sessionObject, serverURL) {
+export async function handleCredentialGenerationBasedOnFormatDeferred(sessionObject, serverURL) {
   const requestBody = sessionObject.requestBody;
   const vct = requestBody.vct;
   let { signer, verifier } = await createSignerVerifierX509(

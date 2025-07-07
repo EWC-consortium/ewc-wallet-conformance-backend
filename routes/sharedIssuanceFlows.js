@@ -46,8 +46,8 @@ import {
 import jwt from "jsonwebtoken";
 
 import {
-  handleVcSdJwtFormat,
-  handleVcSdJwtFormatDeferred,
+  handleCredentialGenerationBasedOnFormat,
+  handleCredentialGenerationBasedOnFormatDeferred,
 } from "../utils/credGenerationUtils.js";
 
 const sharedRouter = express.Router();
@@ -740,7 +740,7 @@ sharedRouter.post("/credential", async (req, res) => {
     }
 
     try {
-      const credential = await handleVcSdJwtFormat(
+      const credential = await handleCredentialGenerationBasedOnFormat(
         requestBody,
         sessionObject,
         serverURL,
@@ -786,7 +786,7 @@ sharedRouter.post("/credential_deferred", async (req, res) => {
     /*
     issuance_pending: The Credential issuance is still pending. The error response SHOULD also contain the interval member, determining the minimum amount of time in seconds that the Wallet needs to wait before providing a new request to the Deferred Credential Endpoint. If interval member is not present, the Wallet MUST use 5 as the default value.
     */
-    const credential = await handleVcSdJwtFormatDeferred(
+    const credential = await handleCredentialGenerationBasedOnFormatDeferred(
       sessionObject,
       serverURL
     );

@@ -232,6 +232,67 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       }
     }
 
+    // Handle different response modes
+    console.log("response mode: " + vpSession.response_mode);
+    let claimsFromExtraction;
+    let jwtFromKeybind;
+
+    // Handle dc_api.jwt response mode
+    // This is for Digital Credentials API responses where the wallet
+    // may still post to direct_post but with dc_api.jwt format
+    if (vpSession.response_mode === 'dc_api.jwt') {
+      console.log("Processing dc_api.jwt response mode");
+      try {
+        // For DC API, the response might be in the data field or as vp_token
+        const dcResponse = req.body.data || req.body;
+        const vpToken = dcResponse.vp_token || req.body.vp_token;
+        
+        if (!vpToken) {
+          return res.status(400).json({ error: "No vp_token found in dc_api.jwt response" });
+        }
+
+        // Process the VP token similar to regular flow
+        const result = await extractClaimsFromRequest({ body: { vp_token: vpToken } }, digest);
+        claimsFromExtraction = result.extractedClaims;
+        jwtFromKeybind = result.keybindJwt;
+
+        // Verify nonce
+        let submittedNonce;
+        if (jwtFromKeybind && jwtFromKeybind.payload) {
+          submittedNonce = jwtFromKeybind.payload.nonce;
+        } else {
+          let decodedVpToken = jwt.decode(vpToken, { complete: true });
+          if (decodedVpToken && decodedVpToken.payload) {
+            submittedNonce = decodedVpToken.payload.nonce;
+          }
+        }
+
+        if (!submittedNonce) {
+          return res.status(400).json({ error: "submitted nonce not found in vp_token" });
+        }
+        
+        if (vpSession.nonce != submittedNonce) {
+          console.log(`error nonces do not match ${submittedNonce} ${vpSession.nonce}`);
+          return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
+        }
+
+        // Process claims as before
+        if (vpSession.sdsRequested && !hasOnlyAllowedFields(claimsFromExtraction, vpSession.sdsRequested)) {
+          return res.status(400).json({
+            error: "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(claimsFromExtraction),
+          });
+        }
+
+        vpSession.status = "success";
+        vpSession.claims = { ...claimsFromExtraction };
+        storeVPSession(sessionId, vpSession);
+        return res.status(200).json({ status: "ok" });
+
+      } catch (error) {
+        console.error("Error processing dc_api.jwt response:", error);
+        return res.status(400).json({ error: `dc_api.jwt processing failed: ${error.message}` });
+      }
+    }
     // Handle direct_post.jwt response mode
     // The response is a signed JWT containing the VP token
     // The JWT signature provides an additional layer of security
@@ -241,11 +302,7 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     //   "iat": timestamp,
     //   "vp_token": "verifiable_presentation_jwt_or_sd_jwt"
     // }
-    console.log("response mode" + vpSession.response_mode);
-    let claimsFromExtraction;
-    let jwtFromKeybind;
-
-    if (vpSession. response_mode === 'direct_post.jwt') {
+    else if (vpSession.response_mode === 'direct_post.jwt') {
       const jwtResponse = req.body;
       try {
         // Verify the JWT signature
