@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "mocha tests/**/*.js",
-    "dev": "SERVER_URL=https://f543-2a02-587-871d-b800-5c54-ce96-b304-805c.ngrok-free.app node server.js"
+    "dev": "SERVER_URL=https://04a9022b9d5e.ngrok-free.app node server.js"
   },
   "author": "",
   "license": "ISC",
@@ -53,6 +53,7 @@
     "zlib": "^1.0.5"
   },
   "devDependencies": {
+    "cbor": "^10.0.9",
     "mocha": "^11.5.0",
     "supertest": "^7.1.1"
   }

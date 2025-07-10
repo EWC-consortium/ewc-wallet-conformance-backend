@@ -9,9 +9,11 @@ import {
 import { pemToJWK, generateNonce, didKeyToJwks } from "../utils/cryptoUtils.js";
 import fs from "fs";
 import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
-import { inspect } from "node:util";
 
-import { encode as cborEncode } from 'cbor-x';  
+import { encode as cborEncode, decode as cborDecode} from 'cbor-x';  
+import cbor from 'cbor'; 
+//  import  diagnose from 'cbor';          // npm i cbor  (same package the spec uses)
+
 
 import {
   getPIDSDJWTData,
@@ -62,6 +64,55 @@ const defaultSigningKid = issuerConfigValues.default_signing_kid || "aegean#auth
 
 // const issuerConfig = require("../data/issuer-config.json");
 
+// Convert DER signature to IEEE P1363 format (raw r,s values) for COSE
+function derToP1363(derSignature) {
+  // DER signature format parsing
+  // DER: 0x30 [total-length] 0x02 [R-length] [R] 0x02 [S-length] [S]
+  
+  if (derSignature[0] !== 0x30) {
+    throw new Error('Invalid DER signature format');
+  }
+  
+  let offset = 2; // Skip 0x30 and total length
+  
+  // Read R value
+  if (derSignature[offset] !== 0x02) {
+    throw new Error('Invalid DER signature format - R not found');
+  }
+  offset++;
+  const rLength = derSignature[offset];
+  offset++;
+  let rValue = derSignature.slice(offset, offset + rLength);
+  offset += rLength;
+  
+  // Read S value
+  if (derSignature[offset] !== 0x02) {
+    throw new Error('Invalid DER signature format - S not found');
+  }
+  offset++;
+  const sLength = derSignature[offset];
+  offset++;
+  let sValue = derSignature.slice(offset, offset + sLength);
+  
+  // Remove leading zeros but ensure 32 bytes for each value (ES256)
+  if (rValue.length > 32) {
+    rValue = rValue.slice(rValue.length - 32);
+  } else if (rValue.length < 32) {
+    const padding = Buffer.alloc(32 - rValue.length);
+    rValue = Buffer.concat([padding, rValue]);
+  }
+  
+  if (sValue.length > 32) {
+    sValue = sValue.slice(sValue.length - 32);
+  } else if (sValue.length < 32) {
+    const padding = Buffer.alloc(32 - sValue.length);
+    sValue = Buffer.concat([padding, sValue]);
+  }
+  
+  // Concatenate r and s for IEEE P1363 format
+  return Buffer.concat([rValue, sValue]);
+}
+
 // Maps claims from existing payload to mso_mdoc format
 // This is a simplified mapper and needs to be extended for different VCTs
 function mapClaimsToMsoMdoc(claims, vct) {
@@ -110,7 +161,7 @@ function mapClaimsToMsoMdoc(claims, vct) {
 }
 
 const DOC_TYPE_MDL = "org.iso.18013.5.1.mDL";
-//const DEFAULT_MDL_NAMESPACE = "org.iso.18013.5.1";
+const DEFAULT_MDL_NAMESPACE = "org.iso.18013.5.1";
 
 export async function handleCredentialGenerationBasedOnFormat(
   requestBody,
@@ -330,36 +381,26 @@ export async function handleCredentialGenerationBasedOnFormat(
     console.log("Credential issued: ", credential);
     return credential;
   } else if (format === "mDL" || format === "mdl") {
-    console.log("Attempting to generate mDL credential using @auth0/mdl...");
+    console.log("Attempting to generate mDL credential using manual CBOR construction...");
     try {
      
-      // const devicePublicKeyJwk = cnf.jwk;
       const credentialConfiguration =
         issuerConfig.credential_configurations_supported[vct];
       if (!credentialConfiguration) {
         throw new Error(`Configuration not found for VCT: ${vct}`);
       }
 
-      // // Determine signature type for mDL
-      // const currentEffectiveSignatureType =
-      // (sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509") || sessionObject.signatureType === "x509"
-      // ? "x509"
-      // : "jwk";
       const docType = credentialConfiguration.doctype;
       if (!docType) {
         throw new Error(`'doctype' not defined for VCT: ${vct}`);
       }
       const namespace = docType;
 
-      //    // Prepare signing arguments based on signature type
-     
-      const claims =credPayload
-      /*
-      
-    */      
+      const claims = credPayload;
       const msoMdocClaims = claims.claims[namespace];
+      
       if (!msoMdocClaims) {
-        throw new Error(`Claims not found under namespace '${namespace}' for VCT: ${vct}`);
+        throw new Error(`Claims not found under namespace '${namespace}' for VCT: ${vct}. Available namespaces: ${Object.keys(claims.claims || {}).join(', ')}`);
       }
 
       const currentEffectiveSignatureType =
@@ -368,69 +409,143 @@ export async function handleCredentialGenerationBasedOnFormat(
       : "jwk";
 
       const mDLClaimsMapped = mapClaimsToMsoMdoc(msoMdocClaims, vct);
+      
       const devicePublicKeyJwk = cnf.jwk;
       let issuerPrivateKeyForSign, issuerCertificateForSign;
       
       if (currentEffectiveSignatureType === "x509") {
-        console.log("Using X.509 for mDL signing with @auth0/mdl.");
-        // Convert PEM to JWK for @auth0/mdl
-        issuerPrivateKeyForSign = pemToJWK(privateKeyPemX509, "private");
-        issuerCertificateForSign = certificatePemX509; // Certificate stays as PEM
-      } else { // "jwk"
-        console.log("Using JWK for mDL signing with @auth0/mdl.");
-        // Convert PEM to JWK for @auth0/mdl
-        issuerPrivateKeyForSign = pemToJWK(privateKeyPemX509, "private");
-        issuerCertificateForSign = certificatePemX509; // Certificate stays as PEM
+        console.log("Using X.509 for mDL signing.");
+        issuerPrivateKeyForSign = privateKeyPemX509; // Use PEM string directly for crypto operations
+        issuerCertificateForSign = certificatePemX509;
+      } else {
+        console.log("Using JWK for mDL signing.");
+        issuerPrivateKeyForSign = privateKeyPemX509; // Use PEM string directly for crypto operations
+        issuerCertificateForSign = certificatePemX509;
       }
-
       
-/*
- // Create and sign document using @auth0/mdl API
-      const document = await new Document(DOC_TYPE_MDL)
-        .addIssuerNameSpace(DEFAULT_MDL_NAMESPACE, mDLClaimsMapped)
-        .useDigestAlgorithm('SHA-256')
-*/
-      const document = await new Document(docType)
-        .addIssuerNameSpace(namespace, mDLClaimsMapped)
-        .useDigestAlgorithm("SHA-256")
-        .addValidityInfo({
-          signed: new Date(),
-          validFrom: new Date(), // Add validFrom as shown in documentation
-          validUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year validity
-        })
-        .addDeviceKeyInfo({ deviceKey: devicePublicKeyJwk })
-        .sign({
-          issuerPrivateKey: issuerPrivateKeyForSign,
-          issuerCertificate: issuerCertificateForSign,
-          alg: 'ES256',
-        });
-
-      // // The document must be wrapped in an MDoc before encoding.
-      // const mdoc = new MDoc([document]);
-      // const cborIssuerSigned = mdoc.encode();
-      const docMap = document.prepare();          // ← see IssuerSignedDocument.prepare()  :contentReference[oaicite:0]{index=0}
-      const issuerSigned = docMap.get('issuerSigned');
-      const issuerSignedCbor = cborEncode(issuerSigned);
-
-
-       
+      // Create individual claim items manually
+      const standardNamespace = namespace//"org.iso.18013.5.1";
+      const nameSpaceItems = [];
+      const valueDigests = {};
+      valueDigests[namespace] = {};
       
-      let encodedMobileDocument = Buffer.from(issuerSignedCbor).toString(
-        "base64url"
-      );
-      console.log(
-        "mDL Credential generated with @auth0/mdl (base64url):",
-        encodedMobileDocument
-      );
-
-      console.log("=== End CBOR Debug ===");
+      Object.entries(mDLClaimsMapped).forEach(([key, value], index) => {
+        // Create the IssuerSignedItem structure manually
+        const randomBytes = cryptoModule.randomBytes(16);
+        const issuerSignedItem = {
+          digestID: index,
+          random: randomBytes,
+          elementIdentifier: key,
+          elementValue: value
+        };
+        
+        // Encode the item as CBOR using cbor library
+        const encodedItem = cbor.encode(issuerSignedItem);
+        
+        // Calculate digest on the encoded item
+        const hash = cryptoModule.createHash('sha256');
+        hash.update(encodedItem);
+        valueDigests[namespace][index] = hash.digest();
+        
+        // Create tag 24 with the encoded CBOR bytes for proper 24(<<{...}>>) structure
+        const taggedItem = new cbor.Tagged(24, encodedItem);
+        nameSpaceItems.push(taggedItem);
+        
+        // console.log(`Added claim: ${key} = ${value} (digestID: ${index})`);
+      });
+      
+      // Create the issuerSigned structure manually
+      const issuerSignedData = {
+        nameSpaces: {},
+        issuerAuth: null // Will be populated during signing
+      };
+      
+      // Set the namespace with our manually created items
+      issuerSignedData.nameSpaces[namespace] = nameSpaceItems;
+      
+      // console.log("Manual nameSpaces structure:", Object.keys(issuerSignedData.nameSpaces));
+      // console.log(`${namespace} contains ${nameSpaceItems.length} items`);
+      
+      // Create the Mobile Security Object (MSO) manually
+      const validityInfo = {
+        signed: new Date().toISOString(),
+        validFrom: new Date().toISOString(),
+        validUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      };
+      
+      const mobileSecurityObject = {
+        version: "1.0",
+        digestAlgorithm: "SHA-256",
+        valueDigests: valueDigests,
+        deviceKeyInfo: {
+          deviceKey: devicePublicKeyJwk
+        },
+        docType: docType,
+        validityInfo: validityInfo
+      };
+      
+      // Encode the MSO using cbor library and keep as raw Buffer 
+      const encodedMSO = cbor.encode(mobileSecurityObject);
+      
+      // Create proper COSE Sign1 structure for issuerAuth
+      // COSE Sign1 format: [protected, unprotected, payload, signature]
+      
+      // Critical fix: Use JavaScript Map with actual integer keys for COSE headers
+      // This is the key to fixing the COSE label validation errors
+      
+      // Protected headers (must be a bstr containing encoded CBOR map)
+      const protectedHeadersMap = new Map();
+      protectedHeadersMap.set(1, -7); // alg: ES256 (COSE algorithm identifier) - use actual integer 1
+      const encodedProtectedHeaders = cbor.encode(protectedHeadersMap);
+      
+      // Unprotected headers (CBOR map, not encoded)  
+      const unprotectedHeadersMap = new Map();
+      unprotectedHeadersMap.set(33, Buffer.from(pemToBase64Der(issuerCertificateForSign), 'base64')); // x5c: certificate chain - use actual integer 33
+      
+      // Create COSE_Sign1 structure to sign 
+      // The MSO should be the payload that gets signed
+      const toBeSigned = cbor.encode([
+        "Signature1", // context string for Sign1
+        encodedProtectedHeaders, // protected headers as bstr
+        Buffer.alloc(0), // external_aad (empty) - use Buffer instead of Uint8Array for consistency
+        encodedMSO // payload (MSO to be signed)
+      ]);
+      
+      // Create actual signature using the private key
+      const sign = cryptoModule.createSign('SHA256');
+      sign.update(toBeSigned);
+      const derSignature = sign.sign(issuerPrivateKeyForSign);
+      
+      // Convert DER signature to IEEE P1363 format (raw r,s values) for COSE
+      // ES256 signature should be 64 bytes (32 bytes r + 32 bytes s)
+      const signature = derToP1363(derSignature);
+      
+      // Create the COSE Sign1 structure that will be the issuerAuth
+      // Use the encoded MSO directly as the payload 
+      const coseSign1 = [
+        encodedProtectedHeaders, // protected headers as bstr
+        unprotectedHeadersMap, // unprotected headers as map (this will preserve integer keys)
+        encodedMSO, // payload (MSO encoded as CBOR bytes)
+        signature // signature
+      ];
+      
+      // The issuerAuth IS the COSE Sign1 structure
+      const issuerAuth = coseSign1;
+      
+      issuerSignedData.issuerAuth = issuerAuth;
+      
+      // Encode the complete IssuerSigned structure using cbor library consistently
+      const finalIssuerSigned = cbor.encode(issuerSignedData);
+      
+      
+      
+      const encodedMobileDocument = Buffer.from(finalIssuerSigned).toString("base64url");
+      console.log("Manual mDL Credential generated (base64url):", encodedMobileDocument);
 
       return encodedMobileDocument;
     } catch (error) {
-      console.error("Error generating mDL credential with @auth0/mdl:", error);
-      throw new Error(
-        `Failed to generate mDL with @auth0/mdl: ${error.message}`
-      );
+      console.error("Error in manual mDL construction:", error);
+      throw new Error(`Failed to generate mDL manually: ${error.message}`);
     }
   } else {
     throw new Error(`Unsupported format: ${format}`);
