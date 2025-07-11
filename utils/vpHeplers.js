@@ -22,8 +22,8 @@ async function decodeJwtVC(jwtString) {
  * @returns {Promise<Array>} - An array of extracted claims.
  * @throws {Error} - Throws error if validation fails or processing encounters issues.
  */
-export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
-  const sessionId = req.params.id;
+export async function extractClaimsFromRequest(req, digest, isPaymentVP, sessionIdentifier) {
+  const sessionId = req.params?req.params.id:sessionIdentifier;
   let extractedClaims = [];
   let keybindJwt; // This might need to be an array if multiple SD-JWTs with different kbJwts are possible
 

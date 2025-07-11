@@ -238,59 +238,136 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     let jwtFromKeybind;
 
     // Handle dc_api.jwt response mode
-    // This is for Digital Credentials API responses where the wallet
-    // may still post to direct_post but with dc_api.jwt format
+    // This is for HAIP Digital Credentials API responses where the wallet
+    // posts the entire VP as a signed JWT in the request body
     if (vpSession.response_mode === 'dc_api.jwt') {
-      console.log("Processing dc_api.jwt response mode");
+      console.log("Processing HAIP dc_api.jwt response mode");
       try {
-        // For DC API, the response might be in the data field or as vp_token
-        const dcResponse = req.body.data || req.body;
-        const vpToken = dcResponse.vp_token || req.body.vp_token;
+        // For Response Mode dc_api.jwt, the Wallet includes 
+        // the response parameter, which contains an encrypted JWT encapsulating the Authorization Response, as defined in Section 8.3.
         
-        if (!vpToken) {
-          return res.status(400).json({ error: "No vp_token found in dc_api.jwt response" });
-        }
-
-        // Process the VP token similar to regular flow
-        const result = await extractClaimsFromRequest({ body: { vp_token: vpToken } }, digest);
-        claimsFromExtraction = result.extractedClaims;
-        jwtFromKeybind = result.keybindJwt;
-
-        // Verify nonce
-        let submittedNonce;
-        if (jwtFromKeybind && jwtFromKeybind.payload) {
-          submittedNonce = jwtFromKeybind.payload.nonce;
-        } else {
-          let decodedVpToken = jwt.decode(vpToken, { complete: true });
-          if (decodedVpToken && decodedVpToken.payload) {
-            submittedNonce = decodedVpToken.payload.nonce;
-          }
-        }
-
-        if (!submittedNonce) {
-          return res.status(400).json({ error: "submitted nonce not found in vp_token" });
-        }
+        // Extract encrypted JWT from request body
+        const encryptedJWT = req.body.response;
         
-        if (vpSession.nonce != submittedNonce) {
-          console.log(`error nonces do not match ${submittedNonce} ${vpSession.nonce}`);
-          return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
-        }
-
-        // Process claims as before
-        if (vpSession.sdsRequested && !hasOnlyAllowedFields(claimsFromExtraction, vpSession.sdsRequested)) {
-          return res.status(400).json({
-            error: "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(claimsFromExtraction),
+        console.log("HAIP dc_api.jwt encrypted JWT received:", encryptedJWT ? "Yes" : "No");
+        
+        if (!encryptedJWT) {
+          return res.status(400).json({ 
+            error: "No encrypted JWT found in HAIP dc_api.jwt response", 
+            note: "In HAIP dc_api.jwt, the response parameter should contain an encrypted JWT"
           });
         }
 
+        // Decrypt the JWT using X509 EC private key
+        console.log("Decrypting HAIP dc_api.jwt response...");
+        const privateKeyForDecryption = fs.readFileSync("./x509EC/ec_private_pkcs8.key", "utf8");
+        
+        let decryptedResponse;
+        try {
+          decryptedResponse = await decryptJWE(encryptedJWT, privateKeyForDecryption, "dc_api.jwt");
+          console.log("HAIP dc_api.jwt decrypted response:", decryptedResponse);
+        } catch (decryptError) {
+          console.error("Failed to decrypt HAIP dc_api.jwt response:", decryptError);
+          return res.status(400).json({ 
+            error: "Failed to decrypt HAIP dc_api.jwt response", 
+            details: decryptError.message 
+          });
+        }
+
+        // Extract VP token from decrypted response
+        let vpToken;
+        if (typeof decryptedResponse === 'string') {
+          try {
+            const parsedResponse = JSON.parse(decryptedResponse);
+            vpToken = parsedResponse.vp_token || parsedResponse.response || decryptedResponse;
+          } catch (parseError) {
+            // If it's not JSON, treat the entire decrypted response as the VP token
+            vpToken = decryptedResponse;
+          }
+        } else if (decryptedResponse && typeof decryptedResponse === 'object') {
+          vpToken = decryptedResponse.vp_token || decryptedResponse.response || JSON.stringify(decryptedResponse);
+        }
+
+        if (!vpToken) {
+          console.log("No VP token found in decrypted response:", decryptedResponse);
+          return res.status(400).json({ 
+            error: "No VP token found in decrypted HAIP dc_api.jwt response", 
+            decryptedResponse: decryptedResponse
+          });
+        }
+
+        console.log("HAIP dc_api.jwt extracted vpToken:", vpToken);
+
+        // For HAIP dc_api.jwt with Digital Credentials API, the vpToken might be an object
+        // with credential IDs as keys and mdoc data as values
+        let mdocData;
+        if (typeof vpToken === 'object' && vpToken !== null && !Array.isArray(vpToken)) {
+          // Extract the actual mdoc data from the object structure
+          const credentialKeys = Object.keys(vpToken);
+          if (credentialKeys.length > 0) {
+            mdocData = vpToken[credentialKeys[0]];
+            console.log("Extracted mdoc data from credential ID:", credentialKeys[0]);
+          } else {
+            return res.status(400).json({ 
+              error: "No credentials found in HAIP dc_api.jwt mdoc response" 
+            });
+          }
+        } else {
+          // If vpToken is already a string, use it directly
+          mdocData = vpToken;
+        }
+
+        if (!mdocData || typeof mdocData !== 'string') {
+          return res.status(400).json({ 
+            error: "Invalid mdoc data in HAIP dc_api.jwt response",
+            receivedType: typeof mdocData,
+            vpTokenType: typeof vpToken
+          });
+        }
+
+        console.log("Processing mdoc data:", mdocData.substring(0, 100) + "...");
+
+        const verificationOptions = {
+          requestedFields: vpSession.sdsRequested, // Apply selective disclosure if requested
+          validateStructure: true,
+          includeMetadata: true
+        };
+
+        // The document type should match what's in the mdoc - typically "org.iso.18013.5.1.mDL"
+        // but we can also let verifyMdlToken auto-detect it or use the session's document type
+        const documentType = vpSession.documentType || "org.iso.18013.5.1.mDL";
+        const mdocResult = await verifyMdlToken(mdocData, verificationOptions, documentType);
+
+        if (!mdocResult.success) {
+          console.error("mDL verification failed:", mdocResult.error);
+          return res.status(400).json({ 
+            error: `mDL verification failed: ${mdocResult.error}`,
+            details: mdocResult.details 
+          });
+        }
+
+        const claims = mdocResult.claims;
+
+        // Validate that extracted claims match what was requested
+        if (vpSession.sdsRequested && !validateMdlClaims(claims, vpSession.sdsRequested)) {
+          console.log("mDL claims do not match what was requested.");
+          return res.status(400).json({
+            error: "mDL claims do not match what was requested.",
+            requested: vpSession.sdsRequested,
+            received: Object.keys(claims)
+          });
+        }
+
+
         vpSession.status = "success";
-        vpSession.claims = { ...claimsFromExtraction };
+        vpSession.claims = claims;
+        vpSession.mdlMetadata = mdocResult.metadata; // Store metadata for debugging
         storeVPSession(sessionId, vpSession);
         return res.status(200).json({ status: "ok" });
 
       } catch (error) {
-        console.error("Error processing dc_api.jwt response:", error);
-        return res.status(400).json({ error: `dc_api.jwt processing failed: ${error.message}` });
+        console.error("Error processing HAIP dc_api.jwt response:", error);
+        return res.status(400).json({ error: `HAIP dc_api.jwt processing failed: ${error.message}` });
       }
     }
     // Handle direct_post.jwt response mode

@@ -244,8 +244,8 @@ const clientMetadata =  clientMetadataMDL;
     console.log("result.jwt", result.jwt);
     res.json({
       request: result.jwt,                 // the signed Request Object
-      expected_origins: ["https://dss.aegean.gr"], // REQUIRED for signed over DC-API
-      response_mode:  responseMode  //dc_api.jwt         // echoes what the wallet must return
+      // expected_origins: ["https://dss.aegean.gr"], // REQUIRED for signed over DC-API
+      // response_mode:  responseMode  //dc_api.jwt         // echoes what the wallet must return
     });
   });
 

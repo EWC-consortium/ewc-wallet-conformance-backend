@@ -32,6 +32,8 @@ const port = 3000;
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 // Middleware for post bodies
 app.use(bodyParser.json({ limit: "10mb" }));
+// Middleware for raw text bodies (needed for HAIP dc_api.jwt)
+app.use(bodyParser.text({ limit: "10mb", type: "application/jwt" }));
 //Middleware to log all requests to the server for debugging
 app.use((req, res, next) => {
   console.log(`---> 

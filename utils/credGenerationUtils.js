@@ -10,7 +10,7 @@ import { pemToJWK, generateNonce, didKeyToJwks } from "../utils/cryptoUtils.js";
 import fs from "fs";
 import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 
-import { encode as cborEncode, decode as cborDecode} from 'cbor-x';  
+import { encode as cborEncode, decode as cborDecode, Tag} from 'cbor-x';  
 import cbor from 'cbor'; 
 //  import  diagnose from 'cbor';          // npm i cbor  (same package the spec uses)
 
@@ -439,19 +439,21 @@ export async function handleCredentialGenerationBasedOnFormat(
           elementValue: value
         };
         
-        // Encode the item as CBOR using cbor library
-        const encodedItem = cbor.encode(issuerSignedItem);
+        // Encode the item as CBOR using cbor-x library for digest calculation  
+        const encodedItem = cborEncode(issuerSignedItem);
         
         // Calculate digest on the encoded item
         const hash = cryptoModule.createHash('sha256');
         hash.update(encodedItem);
         valueDigests[namespace][index] = hash.digest();
         
-        // Create tag 24 with the encoded CBOR bytes for proper 24(<<{...}>>) structure
+        // Create tag 24 with the ENCODED CBOR bytes using cbor library for proper tag handling
+        // This creates the correct 24(<<{...}>>) structure where the tag contains encoded CBOR
         const taggedItem = new cbor.Tagged(24, encodedItem);
+        
         nameSpaceItems.push(taggedItem);
         
-        // console.log(`Added claim: ${key} = ${value} (digestID: ${index})`);
+        console.log(`Added claim: ${key} = ${value} (digestID: ${index}), encoded length: ${encodedItem.length} bytes`);
       });
       
       // Create the issuerSigned structure manually
@@ -484,31 +486,57 @@ export async function handleCredentialGenerationBasedOnFormat(
         validityInfo: validityInfo
       };
       
-      // Encode the MSO using cbor library and keep as raw Buffer 
-      const encodedMSO = cbor.encode(mobileSecurityObject);
+      // Encode the MSO using cbor library and ensure it stays as raw bytes
+      const encodedMSO = cborEncode(mobileSecurityObject);
+      
+      // Debug: Log the MSO to verify it's properly encoded
+      console.log("MSO encoded length:", encodedMSO.length, "bytes");
+      console.log("MSO encoded (first 50 bytes):", encodedMSO.slice(0, 50).toString('hex'));
       
       // Create proper COSE Sign1 structure for issuerAuth
       // COSE Sign1 format: [protected, unprotected, payload, signature]
       
-      // Critical fix: Use JavaScript Map with actual integer keys for COSE headers
-      // This is the key to fixing the COSE label validation errors
+      // Critical fix: Ensure COSE labels are properly encoded as integers
+      // Use cbor-x consistently and be explicit about integer keys
       
       // Protected headers (must be a bstr containing encoded CBOR map)
+      // Create Map with explicit integer keys to ensure proper CBOR encoding
       const protectedHeadersMap = new Map();
-      protectedHeadersMap.set(1, -7); // alg: ES256 (COSE algorithm identifier) - use actual integer 1
-      const encodedProtectedHeaders = cbor.encode(protectedHeadersMap);
+      protectedHeadersMap.set(1, -7); // alg: ES256 (COSE algorithm identifier) - integer key 1
       
-      // Unprotected headers (CBOR map, not encoded)  
+      // Encode using cbor-x which should handle Map integer keys properly
+      const encodedProtectedHeaders = cborEncode(protectedHeadersMap);
+      
+      // Unprotected headers (CBOR map, not encoded) - use Map with integer keys
       const unprotectedHeadersMap = new Map();
-      unprotectedHeadersMap.set(33, Buffer.from(pemToBase64Der(issuerCertificateForSign), 'base64')); // x5c: certificate chain - use actual integer 33
+      unprotectedHeadersMap.set(33, Buffer.from(pemToBase64Der(issuerCertificateForSign), 'base64')); // x5c: certificate chain - integer key 33
+      
+      console.log("COSE Headers Debug:");
+      console.log("Protected headers Map keys:", Array.from(protectedHeadersMap.keys()), "values:", Array.from(protectedHeadersMap.values()));
+      console.log("Protected headers encoded length:", encodedProtectedHeaders.length, "bytes");
+      console.log("Unprotected headers Map keys:", Array.from(unprotectedHeadersMap.keys()), "values types:", Array.from(unprotectedHeadersMap.values()).map(v => typeof v));
+      
+      // Verify the encoded protected headers by decoding them
+      try {
+        const decodedProtected = cborDecode(encodedProtectedHeaders);
+        console.log("Decoded protected headers:", decodedProtected);
+        console.log("Decoded protected headers type:", decodedProtected.constructor.name);
+        if (decodedProtected instanceof Map) {
+          console.log("Decoded protected headers keys:", Array.from(decodedProtected.keys()));
+        } else {
+          console.log("Decoded protected headers keys:", Object.keys(decodedProtected));
+        }
+      } catch (e) {
+        console.error("Failed to decode protected headers:", e);
+      }
       
       // Create COSE_Sign1 structure to sign 
-      // The MSO should be the payload that gets signed
-      const toBeSigned = cbor.encode([
+      // Use the raw MSO bytes for signing
+      const toBeSigned = cborEncode([
         "Signature1", // context string for Sign1
         encodedProtectedHeaders, // protected headers as bstr
-        Buffer.alloc(0), // external_aad (empty) - use Buffer instead of Uint8Array for consistency
-        encodedMSO // payload (MSO to be signed)
+        Buffer.alloc(0), // external_aad (empty)
+        encodedMSO // payload (MSO as encoded bytes for signing)
       ]);
       
       // Create actual signature using the private key
@@ -520,21 +548,39 @@ export async function handleCredentialGenerationBasedOnFormat(
       // ES256 signature should be 64 bytes (32 bytes r + 32 bytes s)
       const signature = derToP1363(derSignature);
       
-      // Create the COSE Sign1 structure that will be the issuerAuth
-      // Use the encoded MSO directly as the payload 
+      // Critical fix for MSO byte string issue:
+      // Create the COSE Sign1 structure where the MSO is the payload as a byte string
+      // The payload MUST be the encoded MSO bytes, not a decoded object
+      
+      // Ensure the MSO payload is treated correctly as encoded CBOR bytes
+      // In COSE Sign1: [protected_bstr, unprotected_map, payload_bstr, signature_bstr]
+      
+      // Convert Map to plain object for cbor library compatibility
+      const unprotectedHeadersObject = {};
+      for (const [key, value] of unprotectedHeadersMap) {
+        unprotectedHeadersObject[key] = value;
+      }
+      
       const coseSign1 = [
-        encodedProtectedHeaders, // protected headers as bstr
-        unprotectedHeadersMap, // unprotected headers as map (this will preserve integer keys)
-        encodedMSO, // payload (MSO encoded as CBOR bytes)
-        signature // signature
+        encodedProtectedHeaders, // protected headers as encoded bstr  
+        unprotectedHeadersObject, // unprotected headers as plain object (for cbor library compatibility)
+        encodedMSO, // payload as bstr - THIS MUST BE THE ENCODED MSO BYTES
+        signature // signature as bstr
       ];
+      
+      console.log("COSE Sign1 structure types:", [
+        "encodedProtectedHeaders:", typeof encodedProtectedHeaders, encodedProtectedHeaders.constructor.name,
+        "unprotectedHeadersObject:", typeof unprotectedHeadersObject, unprotectedHeadersObject.constructor.name,
+        "encodedMSO:", typeof encodedMSO, encodedMSO.constructor.name, 
+        "signature:", typeof signature, signature.constructor.name
+      ]);
       
       // The issuerAuth IS the COSE Sign1 structure
       const issuerAuth = coseSign1;
       
       issuerSignedData.issuerAuth = issuerAuth;
       
-      // Encode the complete IssuerSigned structure using cbor library consistently
+      // Encode the complete IssuerSigned structure using cbor library for proper Tag handling
       const finalIssuerSigned = cbor.encode(issuerSignedData);
       
       

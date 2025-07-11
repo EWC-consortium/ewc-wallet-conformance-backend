@@ -3,7 +3,20 @@
   "logo_uri": "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
   "location": "Greece",
   "cover_uri": "string",
-  "description": "EWC pilot case verification"
-   
+  "description": "EWC pilot case verification",
+  "jwks" : {
+      "keys": [
+        {
+          "alg": "ECDH-ES",
+          "kty": "EC",
+          "x": "dMLtMHM-bYdiJRHJmfA7ypihS8JDAmci4q3FOeLy6mA",
+          "y": "8ZXh3dOsLoJFT1Y6F--HgR6uBjsOifnTIiiVnQfgoWs",
+          "crv": "P-256",
+          "use": "enc",
+          "kid": "ec-cert-key-1"
+        }
+      ]
+    }
+
   
 }

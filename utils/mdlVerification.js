@@ -47,7 +47,29 @@ export async function verifyMdlToken(vpTokenBase64, options = {}, documentType =
     // Step 5: Extract claims from issuerSigned nameSpaces
     const allClaims = {};
     if (document.issuerSigned?.nameSpaces) {
-      const isoNamespace = document.issuerSigned.nameSpaces[documentType];
+      // Try multiple possible namespace identifiers
+      // 1. Use the provided documentType
+      // 2. Use the standard ISO namespace "org.iso.18013.5.1"
+      // 3. Use the EU namespace "urn:eu.europa.ec.eudi:pid:1"
+      // 4. Try any available namespace
+      let isoNamespace = document.issuerSigned.nameSpaces[documentType];
+      
+      if (!isoNamespace && documentType === "org.iso.18013.5.1.mDL") {
+        // For mDL docType, try the standard ISO namespace
+        isoNamespace = document.issuerSigned.nameSpaces["org.iso.18013.5.1"];
+      }
+      
+    
+      
+      if (!isoNamespace) {
+        // Fallback: try the first available namespace
+        const availableNamespaces = Object.keys(document.issuerSigned.nameSpaces);
+        if (availableNamespaces.length > 0) {
+          isoNamespace = document.issuerSigned.nameSpaces[availableNamespaces[0]];
+          console.log("Using fallback namespace:", availableNamespaces[0]);
+        }
+      }
+      
       if (isoNamespace && Array.isArray(isoNamespace)) {
         isoNamespace.forEach(element => {
           try {

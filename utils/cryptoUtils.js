@@ -108,7 +108,8 @@ export function buildVpRequestJSON(
   return jwtPayload;
 }
 
-export async function buildVpRequestJWT(
+export async function 
+buildVpRequestJWT(
   client_id,
   redirect_uri,
   presentation_definition,
@@ -154,27 +155,10 @@ export async function buildVpRequestJWT(
     jwtPayload.iat = now; // issued at time
     jwtPayload.exp = now + (60 * 60); // expires in 1 hour
     jwtPayload.expected_origins = ["https://dss.aegean.gr"];  
-    jwtPayload.jwks = {
-      keys: [
-        {
-          kty: "OKP",
-          crv: "X25519",
-          x: "3LYHIg1mjyA1PohD2hOo64KAklhcZt1BBphSxAGcXgw",
-          use: "enc",
-          kid: "enc-key-1",
-        }
-      ]
-    }
-    // jwtPayload.presentation_definition = presentation_definition;
-  }
-
-  if(response_mode !== "dc_api.jwt" && response_mode !== "dc_api") {
     jwtPayload.response_uri = redirect_uri;
-    
-  }
-  if(response_mode === "dc_api" || response_mode === "dc_api.jwt") {
     jwtPayload.state = state;
-  }
+   }
+ 
 
  
 
@@ -198,7 +182,29 @@ export async function buildVpRequestJWT(
 
   let signedJwt;
 
-  if (client_id.startsWith("x509_san_dns:")) {
+  if (response_mode === "dc_api.jwt" || response_mode === "dc_api") {
+    // Use EC certificates for Digital Credentials API
+    privateKey = fs.readFileSync("./x509EC/ec_private_pkcs8.key", "utf8");
+    const certificate = fs.readFileSync(
+      "./x509EC/client_certificate.crt",
+      "utf8"
+    );
+    // Convert certificate to Base64 without headers
+    const certBase64 = certificate
+      .replace("-----BEGIN CERTIFICATE-----", "")
+      .replace("-----END CERTIFICATE-----", "")
+      .replace(/\s+/g, "");
+
+    const header = {
+      alg: "ES256",
+      typ: "oauth-authz-req+jwt",
+      x5c: [certBase64],
+    };
+
+    signedJwt = await new jose.SignJWT(jwtPayload)
+      .setProtectedHeader(header)
+      .sign(await jose.importPKCS8(privateKey, "ES256"));
+  } else if (client_id.startsWith("x509_san_dns:")) {
     privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
     const certificate = fs.readFileSync(
       "./x509/client_certificate.crt",
@@ -497,19 +503,26 @@ export async function jarOAutTokenResponse(
   return jwt;
 }
 
-export async function decryptJWE(jweToken, privateKeyPEM) {
+export async function decryptJWE(jweToken, privateKeyPEM, mode) {
   try {
     const privateKey = crypto.createPrivateKey(privateKeyPEM);
 
     // Decrypt the JWE using the private key
     const decryptedPayload = await jose.jwtDecrypt(jweToken, privateKey);
-    // console.log(decryptedPayload);
-    let presentation_submission =
-      decryptedPayload.payload.presentation_submission;
-    let disclosures = parseVP(decryptedPayload.payload.vp_token);
-    console.log(`diclosures in the VP found`);
-    console.log(disclosures);
-    return disclosures;
+    if(mode != "dc_api.jwt"){
+        // console.log(decryptedPayload);
+        let presentation_submission =
+        decryptedPayload.payload.presentation_submission;
+        let disclosures = parseVP(decryptedPayload.payload.vp_token);
+        console.log(`diclosures in the VP found`);
+        console.log(disclosures);
+        return disclosures;
+    }
+    console.log("Decrypted JWE payload:", decryptedPayload.payload);
+    
+    // For HAIP dc_api.jwt, return the full decrypted payload
+    // The calling code will handle extracting the VP token
+    return decryptedPayload.payload;
   } catch (error) {
     console.error("Error decrypting JWE:", error.message);
     throw error;
@@ -540,6 +553,11 @@ export async function base64UrlEncodeSha256(codeVerifier) {
 }
 
 function parseVP(vp_token) {
+  // Check if vp_token is a string
+  if (typeof vp_token !== 'string') {
+    throw new Error(`parseVP expects a string, but received: ${typeof vp_token}`);
+  }
+  
   let vpPartsArray = vp_token.split(".");
   let disclosuresPart = vpPartsArray[2]; //this is the actual sd-jdt from the vpToken
 
