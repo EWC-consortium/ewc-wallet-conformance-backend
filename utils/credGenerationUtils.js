@@ -121,6 +121,7 @@ export async function handleVcSdJwtFormat(
     headerOptions = {
       header: {
         x5c: [pemToBase64Der(certificatePemX509)],
+        typ: format
       },
     };
   } else { // Covers "jwk" and "kid-jwk"
@@ -135,7 +136,8 @@ export async function handleVcSdJwtFormat(
       console.log("jwk signature type selected: Using embedded JWK in header.");
       joseHeader = { 
         jwk: publicJwkForSigning,
-        alg: "ES256" // Algorithm must be specified when jwk is used in header
+        alg: "ES256",
+        typ: format // Algorithm must be specified when jwk is used in header
       };
     } else if (effectiveSignatureType === "kid-jwk") { // Assuming "kid-jwk" as the type for kid-based JWK signing
       console.log(`kid-jwk signature type selected: Using KID: ${defaultSigningKid} in header.`);
@@ -153,9 +155,11 @@ export async function handleVcSdJwtFormat(
       controller = controller.replace("https://","").replace("http://","");
       const kid = `did:web:${controller}#keys-1`;
       console.log(`Using KID: ${kid} for did:web signing.`);
+      console.log("format", format);
       joseHeader = { 
         kid: kid,
-        alg: "ES256"
+        alg: "ES256",
+        typ: format
       };
     } else {
       // Fallback or default if signatureType is something else (e.g., a generic 'jwk' without specific instruction)
@@ -164,13 +168,14 @@ export async function handleVcSdJwtFormat(
       console.warn(`Unspecified or unrecognized JWK signature type '${effectiveSignatureType}', defaulting to KID: ${defaultSigningKid}.`);
       joseHeader = { 
         kid: defaultSigningKid,
-        alg: "ES256"
+        alg: "ES256",
+        typ: format
       };
     }
     headerOptions = { header: joseHeader };
   }
 
-  console.log("vc+sd-jwt ", vct);
+  // console.log("dc+sd-jwt ", vct);
 
   if (!requestBody.proof || !requestBody.proof.jwt) {
     const error = new Error("proof not found");
@@ -265,25 +270,39 @@ export async function handleVcSdJwtFormat(
       expirationDate: expiryDate.toISOString(),
     };
 
-    const jwtPayload = {
+    const sdjwt = new SDJwtVcInstance({
+      signer,
+      verifier,
+      signAlg: "ES256",
+      hasher: digest,
+      hashAlg: "sha-256",
+      saltGenerator: generateSalt,
+    });
+    const sdPayload = {
       iss: serverURL,
       iat: Math.floor(now.getTime() / 1000),
       nbf: Math.floor(now.getTime() / 1000),
       exp: Math.floor(expiryDate.getTime() / 1000),
-      vc: vcPayload,
+      vc: vcPayload,  
       cnf: cnf,
     };
 
-    const privateKeyForSigning =
-      effectiveSignatureType === "x509" ? privateKeyPemX509 : privateKey;
-
-    const signOptions = {
-      algorithm: "ES256",
-      ...headerOptions,
+    const disclosureFrame = {
+      vc: {
+        credentialSubject: credPayload.disclosureFrame  
+      }
     };
 
-    const credential = jwt.sign(jwtPayload, privateKeyForSigning, signOptions);
+    headerOptions = {
+      header: {
+        ...headerOptions.header,   
+        typ: 'vc+sd-jwt',
+        cty: 'vc'
+      }
+    };
+    const credential = await sdjwt.issue(sdPayload, disclosureFrame, headerOptions);
     return credential;
+  
   } else if (format === "dc+sd-jwt") {
     console.log("Issuing a dc+sd-jwt format credential");
     const sdjwt = new SDJwtVcInstance({

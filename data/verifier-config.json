@@ -6,26 +6,15 @@
   "description": "EWC pilot case verification",
   "vp_formats_supported": {
     "jwt_vc_json": {
-      "alg_values": [
-        "ES256",
-        "ES384"
-      ]
+      "alg_values": ["ES256", "ES384"]
     },
     "dc+sd-jwt": {
-      "sd-jwt_alg_values": [
-        "ES256",
-        "ES384"
-      ],
-      "kb-jwt_alg_values": [
-        "ES256",
-        "ES384"
-      ]
+      "sd-jwt_alg_values": ["ES256", "ES384"],
+      "kb-jwt_alg_values": ["ES256", "ES384"]
     },
     "mso_mdoc": {
-      "alg_values": [
-        "ES256",
-        "ES384"
-      ]
+      "issuerauth_alg_values": [-7, -35],
+      "deviceauth_alg_values": [-7, -35]
     }
   },
   "jwks": {
@@ -41,18 +30,12 @@
       }
     ]
   },
-  "authorization_encryption_alg_values_supported": [
-    "ECDH-ES",
-    "ECDH-ES+A128KW",
-    "ECDH-ES+A192KW",
-    "ECDH-ES+A256KW"
-  ],
   "encrypted_response_enc_values_supported": [
-    "A128CBC-HS256",
-    "A192CBC-HS384",
-    "A256CBC-HS512",
     "A128GCM",
     "A192GCM",
-    "A256GCM"
+    "A256GCM",
+    "A128CBC-HS256",
+    "A192CBC-HS384",
+    "A256CBC-HS512"
   ]
 }
