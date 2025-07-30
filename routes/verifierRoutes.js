@@ -43,8 +43,10 @@ const verifierRouter = express.Router();
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 const proxyPath = process.env.PROXY_PATH || null;
 
-const privateKey = fs.readFileSync("./encryption-private.pem", "utf-8");
-const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
+const privateKey = fs.readFileSync("./encryption-private-pkcs8.pem", "utf-8");
+const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8"); 
+// this is the key that is used in the verifier-config.json file jwks
+
 
 const presentation_definition_sdJwt = JSON.parse(
   fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8")
@@ -183,7 +185,8 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
     }
     controller = controller.replace("https://", "");
-    const expectedAudience = `decentralized_identifier:did:web:${controller}`;
+    // const expectedAudience = `decentralized_identifier:did:web:${controller}`;
+    const expectedAudience = vpSession.client_id;
 
     const isMdoc = vpSession.presentation_definition && vpSession.presentation_definition.format && vpSession.presentation_definition.format.mso_mdoc;
 
@@ -250,7 +253,27 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     let jwtFromKeybind;
 
     if (vpSession.response_mode === 'direct_post.jwt') {
-      const jweToken = req.body;
+      let jweToken = req.body;
+      
+      // Handle divergent wallet behavior - some wallets wrap JWE token in an object
+      if (typeof jweToken === 'object' && jweToken !== null && jweToken.response) {
+        console.log("Wallet sent JWE token wrapped in object, extracting from response property");
+        jweToken = jweToken.response;
+      }
+      
+      // Validate JWE token format
+      if (!jweToken || typeof jweToken !== 'string') {
+        console.error("Invalid JWE token format:", typeof jweToken, jweToken);
+        return res.status(400).json({ error: "Invalid JWE token format" });
+      }
+      
+      // Check if it looks like a JWE token (should have 5 parts separated by dots)
+      const parts = jweToken.split('.');
+      if (parts.length !== 5) {
+        console.error("JWE token does not have 5 parts:", parts.length);
+        return res.status(400).json({ error: "Invalid JWE token structure" });
+      }
+      
       try {
         // Decrypt the JWE response
         const decryptedPayload = await decryptJWE(jweToken, privateKey);
@@ -262,7 +285,7 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         }
 
         // Process the VP token
-        const result = await extractClaimsFromRequest({ body: { vp_token: vpToken } }, digest);
+        const result = await extractClaimsFromRequest({ params: { id: sessionId }, body: { vp_token: vpToken } }, digest);
         claimsFromExtraction = result.extractedClaims;
         jwtFromKeybind = result.keybindJwt;
 
@@ -307,7 +330,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
       } catch (error) {
         console.error("Error processing JWE response:", error);
-        return res.status(400).json({ error: "Invalid JWE response" });
+        console.error("Error details:", {
+          name: error.name,
+          message: error.message,
+          code: error.code
+        });
+        return res.status(400).json({ 
+          error: "Invalid JWE response", 
+          details: error.message 
+        });
       }
     } 
     // Handle regular direct_post response mode

@@ -131,6 +131,7 @@ export async function buildVpRequestJWT(
   // Validate response_mode
   const allowedResponseModes = ["direct_post", "direct_post.jwt"];
   if (!allowedResponseModes.includes(response_mode)) {
+    console.log("response_mode", response_mode);
     throw new Error(`Invalid response_mode. Must be one of: ${allowedResponseModes.join(", ")}`);
   }
 
@@ -197,7 +198,7 @@ export async function buildVpRequestJWT(
 
     const header = {
       alg: signingAlg,
-      typ: "JWT",
+      typ: "oauth-authz-req+jwt",
       x5c: [certBase64],
     };
 
@@ -209,7 +210,7 @@ export async function buildVpRequestJWT(
     if (did_part.startsWith('did:jwk:')) {
       const header = {
         alg: signingAlg,
-        typ: "JWT",
+        typ: "oauth-authz-req+jwt",
         kid: kid 
       };
 
@@ -398,7 +399,7 @@ export async function buildPaymentVpRequestJWT(
     if (did_part.startsWith('did:jwk:')) {
       const header = {
         alg: signingAlg,
-        typ: "JWT",
+        typ: "oauth-authz-req+jwt",
         kid: kid 
       };
 
@@ -498,7 +499,7 @@ export async function jarOAutTokenResponse(
   // JWT header
   const header = {
     alg: signingKey.alg || "ES256",
-    typ: "JWT",
+    typ: "oauth-authz-req+jwt",
     kid: "aegean#authentication-key", //kid,
   };
 
@@ -517,15 +518,29 @@ export async function jarOAutTokenResponse(
 
 export async function decryptJWE(jweToken, privateKeyPEM) {
   try {
+    console.log("Attempting to decrypt JWE token...");
+    console.log("JWE token format check:", typeof jweToken, jweToken ? jweToken.substring(0, 50) + "..." : "null");
+    
     const privateKey = await jose.importPKCS8(privateKeyPEM, "ES256");
+    console.log("Private key imported successfully");
 
     // Decrypt the JWE using the private key
+    // For ECDH-ES+A256KW, we need to let jose auto-detect the algorithm from the JWE header
     const { plaintext, protectedHeader } = await jose.compactDecrypt(jweToken, privateKey);
+    // console.log("JWE decrypted successfully, protected header:", protectedHeader);
+    
     const decryptedPayload = JSON.parse(new TextDecoder().decode(plaintext));
+    console.log("Decrypted payload parsed successfully");
     
     return decryptedPayload;
   } catch (error) {
     console.error("Error decrypting JWE:", error);
+    console.error("Error details:", {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      stack: error.stack
+    });
     throw error;
   }
 }

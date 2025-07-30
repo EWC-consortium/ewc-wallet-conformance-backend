@@ -40,7 +40,8 @@ x509Router.get("/generateVPRequest", async (req, res) => {
     presentation_definition: presentation_definition_sdJwt,
     nonce: nonce,
     sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt),
-    response_mode: responseMode // Store response mode in session
+    response_mode: responseMode,
+    client_id: client_id // Store response mode in session,
   });
 
   // Build and sign the VP request JWT (which will be served at the request_uri)
@@ -102,7 +103,8 @@ x509Router.get("/generateVPRequestGet", async (req, res) => {
     presentation_definition: presentation_definition_sdJwt,
     nonce: nonce,
     sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt),
-    response_mode: responseMode
+    response_mode: responseMode,
+    client_id: client_id
   });
 
   // Note: buildVpRequestJWT is called by the /x509/x509VPrequest/:id endpoint
@@ -171,24 +173,11 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
     claims: null,
     dcql_query: dcql_query,
     nonce: nonce,
-    response_mode: responseMode // Store response mode
+    response_mode: responseMode,
+    client_id: client_id
   });
 
-  // JWT for request_uri
-  const vpRequestJWT = await buildVpRequestJWT(
-    client_id,
-    response_uri,
-    null, // No presentation_definition for DCQL
-    null, // privateKey
-    clientMetadata,
-    null, // kid
-    serverURL,
-    "vp_token",
-    nonce,
-    dcql_query, // dcql_query parameter
-    null, // transaction_data parameter (null for DCQL query)
-    responseMode
-  );
+   
 
   const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;
   const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
@@ -251,7 +240,8 @@ x509Router.get("/generateVPRequestDCQLGET", async (req, res) => {
     claims: null,
     dcql_query: dcql_query,
     nonce: nonce,
-    response_mode: responseMode // Store response mode
+    response_mode: responseMode, // Store response mode
+    client_id: client_id
   });
 
   
@@ -327,7 +317,8 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
     nonce: nonce,
     transaction_data: [base64UrlEncodedTxData],
     response_mode: responseMode, // Store response mode
-    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt)
+    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt),
+    client_id: client_id
   });
 
   // JWT for request_uri
@@ -426,7 +417,6 @@ async function generateX509VPRequest(uuid, clientMetadata, serverURL, wallet_non
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
-    vpSession.presentation_definition,
     null, // privateKey
     clientMetadata,
     null, // kid
@@ -440,6 +430,9 @@ async function generateX509VPRequest(uuid, clientMetadata, serverURL, wallet_non
     wallet_nonce,
     wallet_metadata
   );
+
+ 
+
 
   return { jwt: vpRequestJWT, status: 200 };
 }

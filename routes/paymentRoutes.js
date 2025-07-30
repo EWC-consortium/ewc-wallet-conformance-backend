@@ -144,6 +144,7 @@ paymentRouter.post("/generatePaymentRequest", async (req, res) => {
     frequency: frequency,
     status: "pending",
     paymentStatus: "pending",
+    client_id: client_id
   });
 
   let code = qr.image(vpRequest, {

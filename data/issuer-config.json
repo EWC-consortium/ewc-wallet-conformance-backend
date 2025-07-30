@@ -205,7 +205,7 @@
         }
       ],
       "credential_signing_alg_values_supported": ["ES256"],
-      "format": " vc+sd-jwt",
+      "format": "vc+sd-jwt",
       "proof_types_supported": {
         "jwt": {
           "proof_signing_alg_values_supported": ["ES256"]

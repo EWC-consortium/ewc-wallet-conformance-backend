@@ -107,7 +107,8 @@ didRouter.get("/generateVPRequest", async (req, res) => {
     dcql_query: dcql_query_pid,
     nonce: nonce,
     response_mode: responseMode,
-    verifier_attestations: verifier_attestations
+    verifier_attestations: verifier_attestations,
+    client_id: client_id
   });
 
   const vpRequestJWT = await buildVpRequestJWT(
@@ -201,26 +202,11 @@ didRouter.get("/generateVPRequestGET", async (req, res) => {
     dcql_query: dcql_query,
     nonce: nonce,
     response_mode: responseMode,
-    verifier_attestations: verifier_attestations
+    verifier_attestations: verifier_attestations,
+    client_id: client_id
   });
 
-  const vpRequestJWT = await buildVpRequestJWT(
-    client_id,
-    response_uri,
-    privateKey,
-    clientMetadata,
-    kid,
-    serverURL,
-    "vp_token",
-    nonce,
-    dcql_query,
-    null,
-    responseMode,
-    undefined,
-    null,
-    null,
-    verifier_attestations
-  );
+ 
 
   const requestUri = `${serverURL}/did/VPrequest/${uuid}`;
   const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
@@ -313,7 +299,8 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     nonce: nonce,
     transaction_data: [base64UrlEncodedTxData],
     response_mode: responseMode,
-    verifier_attestations: verifier_attestations
+    verifier_attestations: verifier_attestations,
+    client_id: client_id
   });
 
   const vpRequestJWT = await buildVpRequestJWT(
@@ -358,6 +345,7 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
 // Request URI endpoint (now handles POST and GET)
 didRouter.route("/VPrequest/:id")
   .post(async (req, res) => {
+    console.log("/did/VPrequest called")
     const uuid = req.params.id;
     const vpSession = await getVPSession(uuid);
     // As per OpenID4VP spec, wallet can post wallet_nonce and wallet_metadata
@@ -460,7 +448,8 @@ didRouter.get("/generateVPRequestByValue", async (req, res) => {
     claims: null,
     dcql_query: dcql_query_pid,
     nonce: nonce,
-    response_mode: responseMode
+    response_mode: responseMode,
+    client_id: client_id
   });
 
   // Use buildVPbyValue instead of buildVpRequestJWT to pass request by value

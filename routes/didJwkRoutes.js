@@ -86,7 +86,8 @@ didJwkRouter.get("/generateVPRequest", async (req, res) => {
     dcql_query: dcql_query_pid,
     nonce: nonce,
     response_mode: responseMode,
-    verifier_attestations: verifier_attestations
+    verifier_attestations: verifier_attestations,
+    client_id: client_id
   });
 
   const vpRequestJWT = await buildVpRequestJWT(
@@ -162,7 +163,8 @@ didJwkRouter.get("/generateVPRequestGET", async (req, res) => {
     dcql_query: dcql_query_pid,
     nonce: nonce,
     response_mode: responseMode,
-    verifier_attestations: verifier_attestations
+    verifier_attestations: verifier_attestations,
+    client_id: client_id
   });
 
   const requestUri = `${serverURL}/did-jwk/VPrequest/${uuid}`;

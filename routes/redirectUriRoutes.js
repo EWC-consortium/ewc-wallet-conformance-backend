@@ -52,6 +52,7 @@ redirectUriRouter.get("/generateVPRequest", async (req, res) => {
     credentialRequested: vctField?.filter,
     nonce: nonce,
     sdsRequested: paths,
+    client_id: clientId
   });
 
   const vpRequest = buildVPbyValue(
@@ -122,7 +123,8 @@ redirectUriRouter.get("/generateVPRequestDCQL", async (req, res) => {
     status: "pending",
     claims: null,
     dcql_query: dcql_query,
-    nonce: nonce
+    nonce: nonce,
+    client_id: clientId
   });
 
   const vpRequest = buildVPbyValue(
@@ -196,7 +198,9 @@ redirectUriRouter.get("/generateVPRequestTransaction", async (req, res) => {
     claims: null,
     presentation_definition: presentation_definition,
     nonce: nonce,
-    transaction_data: [base64UrlEncodedTxData] // Store as array of encoded strings
+    transaction_data: [base64UrlEncodedTxData],
+    client_id: clientId
+    // Store as array of encoded strings
   });
 
   const vpRequest = buildVPbyValue(

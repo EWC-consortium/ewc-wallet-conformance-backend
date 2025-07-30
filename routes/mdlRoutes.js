@@ -52,7 +52,8 @@ mdlRouter.get("/generateVPRequest", async (req, res) => {
       claims: null,
       dcql_query: dcql_query_mdl,
       nonce: nonce,
-      response_mode: responseMode
+      response_mode: responseMode,
+      client_id: client_id
     });
   
     const requestUri = `${serverURL}/mdl/VPrequest/${uuid}`;  
