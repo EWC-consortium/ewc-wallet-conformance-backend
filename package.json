@@ -55,6 +55,7 @@
   "devDependencies": {
     "cbor": "^10.0.9",
     "mocha": "^11.5.0",
+    "sinon": "^21.0.0",
     "supertest": "^7.1.1"
   }
 }
