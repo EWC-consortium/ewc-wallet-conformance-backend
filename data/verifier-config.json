@@ -4,6 +4,19 @@
   "location": "Greece",
   "cover_uri": "string",
   "description": "EWC pilot case verification",
+  "vp_formats_supported": {
+    "jwt_vc_json": {
+      "alg_values": ["ES256", "ES384"]
+    },
+    "dc+sd-jwt": {
+      "sd-jwt_alg_values": ["ES256", "ES384"],
+      "kb-jwt_alg_values": ["ES256", "ES384"]
+    },
+    "mso_mdoc": {
+      "issuerauth_alg_values": [-7, -35],
+      "deviceauth_alg_values": [-7, -35]
+    }
+  },
   "vp_formats": {
     "dc+sd-jwt": {
       "sd-jwt_alg_values": [
@@ -15,5 +28,26 @@
         "ES384"
       ]
     }
-  }
+  },
+  "jwks": {
+    "keys": [
+      {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "7ymGipkLd1oxRGYCIat84OqzuPfL0YoL-rYAoKqPjxk",
+        "y": "EJLD8Db88LP2sd2HClVkZrdxl0yipmGUfKF85IfUU6Q",
+        "use": "enc",
+        "kid": "enc-key-1",
+        "alg": "ECDH-ES+A256KW"
+      }
+    ]
+  },
+  "encrypted_response_enc_values_supported": [
+    "A128GCM",
+    "A192GCM",
+    "A256GCM",
+    "A128CBC-HS256",
+    "A192CBC-HS384",
+    "A256CBC-HS512"
+  ]
 }

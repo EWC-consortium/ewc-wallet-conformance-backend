@@ -136,11 +136,8 @@ buildVpRequestJWT(
     throw new Error(`Invalid response_mode. Must be one of: ${allowedResponseModes.join(", ")}`);
   }
 
-  // For direct_post.jwt, add encryption-related metadata if not present
-  if (response_mode === "direct_post.jwt" && client_metadata && !client_metadata.encrypted_response_enc_values_supported) {
-    client_metadata.encrypted_response_enc_values_supported = ["A256GCM", "A192GCM", "A128GCM"];
-    client_metadata.encrypted_response_alg_values_supported = ["ECDH-ES+A256KW", "ECDH-ES+A192KW", "ECDH-ES+A128KW"];
-  }
+  // Note: encryption metadata should be provided in client_metadata from verifier-config.json
+  // The verifier-config.json should contain jwks and encrypted_response_enc_values_supported
 
   // Construct the JWT payload
   let jwtPayload = {
@@ -538,20 +535,39 @@ export async function decryptJWE(jweToken, privateKeyPEM, mode) {
 
     // Decrypt the JWE using the private key
     const decryptedPayload = await jose.jwtDecrypt(jweToken, privateKey);
-    if(mode != "dc_api.jwt"){
-        // console.log(decryptedPayload);
-        let presentation_submission =
-        decryptedPayload.payload.presentation_submission;
-        let disclosures = parseVP(decryptedPayload.payload.vp_token);
-        console.log(`diclosures in the VP found`);
-        console.log(disclosures);
-        return disclosures;
-    }
-    console.log("Decrypted JWE payload:", decryptedPayload.payload);
     
-    // For HAIP dc_api.jwt, return the full decrypted payload
-    // The calling code will handle extracting the VP token
-    return decryptedPayload.payload;
+    if (mode === "direct_post.jwt") {
+      // For direct_post.jwt, according to OpenID4VP spec, the JWE should decrypt to a JWT
+      // console.log("Raw decryptedPayload for direct_post.jwt:", decryptedPayload);
+      
+      // First, try to get JWT from plaintext (per OpenID4VP spec)
+      if (decryptedPayload.plaintext && decryptedPayload.plaintext.length > 0) {
+        const decryptedJWT = new TextDecoder().decode(decryptedPayload.plaintext);
+        // console.log("Found JWT in plaintext (per OpenID4VP spec):", decryptedJWT.substring(0, 100) + "...");
+        return decryptedJWT; // Return JWT string for verification
+      }
+      
+      // Fallback: check if vp_token is directly in payload (wallet-specific behavior)
+      if (decryptedPayload.payload && decryptedPayload.payload.vp_token) {
+        console.log("Found vp_token in decrypted payload (wallet-specific behavior) DIVERGENT BEHAVIOR");
+        return decryptedPayload.payload;
+      }
+      
+      throw new Error("No JWT in plaintext or vp_token in payload for direct_post.jwt");
+    } else if (mode === "dc_api.jwt") {
+      console.log("Decrypted JWE payload:", decryptedPayload.payload);
+      // For HAIP dc_api.jwt, return the full decrypted payload
+      // The calling code will handle extracting the VP token
+      return decryptedPayload.payload;
+    } else {
+      // For other modes (legacy), parse and return disclosures
+      // console.log(decryptedPayload);
+      let presentation_submission = decryptedPayload.payload.presentation_submission;
+      let disclosures = parseVP(decryptedPayload.payload.vp_token);
+      // console.log(`diclosures in the VP found`);
+      // console.log(disclosures);
+      return disclosures;
+    }
   } catch (error) {
     console.error("Error decrypting JWE:", error.message);
     throw error;

@@ -390,23 +390,38 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       try {
         // Check if it's encrypted (JWE has 5 parts)
         if (jwtResponse.split('.').length === 5) {
-          // Decrypt the JWE first
-          const decrypted = await decryptJWE(jwtResponse, privateKeyPem, "direct_post.jwt");
+          console.log("Processing encrypted JWE response for direct_post.jwt");
+          // Decrypt the JWE - this may return JWT string (per spec) or payload object (wallet-specific)
+          const decrypted = await decryptJWE(jwtResponse, privateKey, "direct_post.jwt");
+          console.log("Decrypted result type:", typeof decrypted);
           
-          // Then verify the inner signed JWT
-          const decodedJWT = jwt.verify(decrypted, publicKeyPem, { algorithms: ['ES256'] });
+          let vpToken;
           
-          // Extract VP token from the decrypted JWT payload
-          const vpToken = decodedJWT.vp_token;
-          if (!vpToken) {
-            return res.status(400).json({ error: "No VP token in decrypted JWT response" });
+          if (typeof decrypted === 'string') {
+            // OpenID4VP spec compliant: JWE decrypted to JWT string
+            console.log("Processing JWT string from JWE (per OpenID4VP spec)");
+            const decodedJWT = jwt.verify(decrypted, publicKeyPem, { algorithms: ['ES256'] });
+            vpToken = decodedJWT.vp_token;
+            
+            if (!vpToken) {
+              return res.status(400).json({ error: "No VP token in decrypted JWT response" });
+            }
+          } else if (decrypted && decrypted.vp_token) {
+            // Wallet-specific behavior: JWE decrypted to payload object
+            console.log("Processing payload object from JWE (wallet-specific behavior)");
+            vpToken = decrypted.vp_token;
+          } else {
+            return res.status(400).json({ error: "Failed to decrypt JWE response or no vp_token found" });
           }
+          
+          console.log("Extracted vp_token for processing");
           
           // Process the VP token as before
           const result = await extractClaimsFromRequest({ body: { vp_token: vpToken } }, digest);
           claimsFromExtraction = result.extractedClaims;
           jwtFromKeybind = result.keybindJwt;
         } else {
+          console.log("Processing unencrypted JWT response for direct_post.jwt");
           // If not encrypted, just verify the signed JWT
           const decodedJWT = jwt.verify(jwtResponse, publicKeyPem, { algorithms: ['ES256'] });
           
