@@ -380,22 +380,47 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     //   "vp_token": "verifiable_presentation_jwt_or_sd_jwt"
     // }
     else if (vpSession.response_mode === 'direct_post.jwt') {
-      const jwtResponse = req.body;
+      // According to OpenID4VP spec, direct_post.jwt sends response in 'response' parameter
+      const jwtResponse = req.body.response;
+      
+      if (!jwtResponse) {
+        return res.status(400).json({ error: "No 'response' parameter in direct_post.jwt response" });
+      }
+      
       try {
-        // Verify the JWT signature
-        const decodedJWT = jwt.verify(jwtResponse, publicKeyPem, { algorithms: ['ES256'] });
-        
-        // Extract VP token from the JWT payload
-        const vpToken = decodedJWT.vp_token;
-        if (!vpToken) {
-          return res.status(400).json({ error: "No VP token in JWT response" });
+        // Check if it's encrypted (JWE has 5 parts)
+        if (jwtResponse.split('.').length === 5) {
+          // Decrypt the JWE first
+          const decrypted = await decryptJWE(jwtResponse, privateKeyPem, "direct_post.jwt");
+          
+          // Then verify the inner signed JWT
+          const decodedJWT = jwt.verify(decrypted, publicKeyPem, { algorithms: ['ES256'] });
+          
+          // Extract VP token from the decrypted JWT payload
+          const vpToken = decodedJWT.vp_token;
+          if (!vpToken) {
+            return res.status(400).json({ error: "No VP token in decrypted JWT response" });
+          }
+          
+          // Process the VP token as before
+          const result = await extractClaimsFromRequest({ body: { vp_token: vpToken } }, digest);
+          claimsFromExtraction = result.extractedClaims;
+          jwtFromKeybind = result.keybindJwt;
+        } else {
+          // If not encrypted, just verify the signed JWT
+          const decodedJWT = jwt.verify(jwtResponse, publicKeyPem, { algorithms: ['ES256'] });
+          
+          // Extract VP token from the JWT payload
+          const vpToken = decodedJWT.vp_token;
+          if (!vpToken) {
+            return res.status(400).json({ error: "No VP token in JWT response" });
+          }
+          
+          // Process the VP token as before
+          const result = await extractClaimsFromRequest({ body: { vp_token: vpToken } }, digest);
+          claimsFromExtraction = result.extractedClaims;
+          jwtFromKeybind = result.keybindJwt;
         }
-
-        // Process the VP token as before
-        const result = await extractClaimsFromRequest({ body: { vp_token: vpToken } }, digest);
-        claimsFromExtraction = result.extractedClaims;
-        jwtFromKeybind = result.keybindJwt;
-
 
         // Verify nonce
         let submittedNonce;

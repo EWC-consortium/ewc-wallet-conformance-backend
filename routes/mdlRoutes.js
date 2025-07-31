@@ -1,290 +1,177 @@
 import express from "express";
 import { v4 as uuidv4 } from "uuid";
-import qr from "qr-image";
-import imageDataURI from "image-data-uri";
-import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
-import { generateNonce } from "../utils/cryptoUtils.js";
-import { buildVpRequestJWT } from "../utils/cryptoUtils.js";
-import { storeVPSession } from "../services/cacheServiceRedis.js";
-import { getSDsFromPresentationDef } from "../utils/vpHeplers.js";
-import { getVPSession } from "../services/cacheServiceRedis.js";
-import fs from "fs";
+import {
+  CONFIG,
+  DEFAULT_MDL_DCQL_QUERY,
+  loadConfigurationFiles,
+  generateVPRequest,
+  processVPRequest,
+  handleSessionCreation,
+  createErrorResponse,
+} from "../utils/routeUtils.js";
 
 const mdlRouter = express.Router();
 
-const serverURL = process.env.SERVER_URL || "http://localhost:3000";
-
-// Load presentation definitions
-const presentation_definition_mdl = JSON.parse(
-  fs.readFileSync("./data/presentation_definition_mdl.json", "utf-8")
+// Load configuration files
+const { presentationDefinition: presentationDefinitionMdl, clientMetadata } = loadConfigurationFiles(
+  "./data/presentation_definition_mdl.json",
+  "./data/verifier-config.json"
 );
 
-// Load client metadata
-const clientMetadata = JSON.parse(
-  fs.readFileSync("./data/verifier-config.json", "utf-8")
+const { clientMetadata: clientMetadataMDL } = loadConfigurationFiles(
+  "./data/presentation_definition_mdl.json",
+  "./data/verifier-config-mdl.json"
 );
 
-const clientMetadataMDL = JSON.parse(
-  fs.readFileSync("./data/verifier-config-mdl.json", "utf-8")
-);
-
-// Standard VP Request with presentation_definition
+/**
+ * Generate VP request with presentation definition
+ */
 mdlRouter.get("/generateVPRequest", async (req, res) => {
-  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const responseMode = req.query.response_mode || "direct_post";
-  const nonce = generateNonce(16);
+  try {
+    const sessionId = req.query.sessionId || uuidv4();
+    const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
 
-  const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "x509_san_dns:dss.aegean.gr";
+    const result = await generateVPRequest({
+      sessionId,
+      responseMode,
+      presentationDefinition: presentationDefinitionMdl,
+      clientId: CONFIG.CLIENT_ID,
+      privateKey: null,
+      clientMetadata,
+      kid: null,
+      serverURL: CONFIG.SERVER_URL,
+      usePostMethod: false, // GET method, no request_uri_method
+      routePath: "/mdl/VPrequest",
+    });
 
-  storeVPSession(uuid, {
-    uuid: uuid,
-    status: "pending",
-    claims: null,
-    presentation_definition: presentation_definition_mdl,
-    nonce: nonce,
-    sdsRequested: getSDsFromPresentationDef(presentation_definition_mdl),
-    response_mode: responseMode,
-  });
-
-  // Note: buildVpRequestJWT is called by the /x509/x509VPrequest/:id endpoint
-  // So we don't need to call it here directly for the QR code generation step.
-
-  const requestUri = `${serverURL}/mdl/VPrequest/${uuid}`;
-  // openid4vp:// URL without request_uri_method, defaulting to GET for request_uri
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
-    requestUri
-  )}&client_id=${encodeURIComponent(client_id)}`;
-
-  let code = qr.image(vpRequest, {
-    type: "png",
-    ec_level: "M",
-    size: 20,
-    margin: 10,
-  });
-  let mediaType = "PNG";
-  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
-
-  res.json({
-    qr: encodedQR,
-    deepLink: vpRequest,
-    sessionId: uuid,
-  });
+    res.json(result);
+  } catch (error) {
+    const errorResponse = createErrorResponse(error, "generateVPRequest");
+    res.status(500).json(errorResponse);
+  }
 });
 
-// Request URI endpoint (now handles POST and GET)
+/**
+ * Request URI endpoint (handles both POST and GET)
+ */
 mdlRouter
-  .route("/VPrequest/:id?") // Corrected path to match client requests
+  .route("/VPrequest/:id?")
   .post(express.urlencoded({ extended: true }), async (req, res) => {
-    console.log("POST request received");
-    const uuid = req.params.id;
-    // As per OpenID4VP spec, wallet can post wallet_nonce and wallet_metadata
-    const { wallet_nonce, wallet_metadata } = req.body;
-    if (wallet_nonce || wallet_metadata) {
-      console.log(
-        `Received from wallet: wallet_nonce=${wallet_nonce}, wallet_metadata=${wallet_metadata}`
-      );
-    }
+    try {
+      const sessionId = req.params.id;
+      const { wallet_nonce: walletNonce, wallet_metadata: walletMetadata } = req.body;
 
-    const result = await generateX509MDLVPRequest(
-      uuid,
-      clientMetadata,
-      serverURL,
-      wallet_nonce,
-      wallet_metadata
-    );
+      if (walletNonce || walletMetadata) {
+        console.log(`Received from wallet: wallet_nonce=${walletNonce}, wallet_metadata=${walletMetadata}`);
+      }
 
-    if (result.error) {
-      return res.status(result.status).json({ error: result.error });
+      const result = await processVPRequest({
+        sessionId,
+        clientMetadata,
+        serverURL: CONFIG.SERVER_URL,
+        clientId: CONFIG.CLIENT_ID,
+        privateKey: null,
+        kid: null,
+        walletNonce,
+        walletMetadata,
+      });
+
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
+
+      res.type(CONFIG.CONTENT_TYPE).send(result.jwt);
+    } catch (error) {
+      const errorResponse = createErrorResponse(error, "POST /VPrequest/:id");
+      res.status(500).json(errorResponse);
     }
-    // For POST, the content type might differ based on wallet expectations
-    // or specific protocol steps not detailed here.
-    // Assuming JWT is expected directly for now.
-    res.type("application/oauth-authz-req+jwt").send(result.jwt);
   })
   .get(async (req, res) => {
-    // Added GET handler
-    console.log("GET request received for mDL");
-    let uuid = req.params.id;
-    if (!uuid) {
-      uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-      const responseMode = req.query.response_mode || "direct_post";
-      const nonce = generateNonce(16);
+    try {
+      let sessionId = req.params.id;
+      
+      // Handle case where no session ID is provided
+      if (!sessionId) {
+        sessionId = req.query.sessionId || uuidv4();
+        const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
+        await handleSessionCreation(sessionId, presentationDefinitionMdl, responseMode);
+      }
 
-      storeVPSession(uuid, {
-        uuid: uuid,
-        status: "pending",
-        claims: null,
-        presentation_definition: presentation_definition_mdl,
-        nonce: nonce,
-        sdsRequested: getSDsFromPresentationDef(presentation_definition_mdl),
-        response_mode: responseMode,
+      // Check if session exists, create new one if not
+      const { getVPSession } = await import("../services/cacheServiceRedis.js");
+      let storedSession = await getVPSession(sessionId);
+      if (!storedSession) {
+        console.log(`No session found for UUID: ${sessionId}`);
+        const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
+        await handleSessionCreation(sessionId, presentationDefinitionMdl, responseMode);
+        console.log(`New session created for UUID: ${sessionId}`);
+      }
+
+      const result = await processVPRequest({
+        sessionId,
+        clientMetadata,
+        serverURL: CONFIG.SERVER_URL,
+        clientId: CONFIG.CLIENT_ID,
+        privateKey: null,
+        kid: null,
       });
-    }
-    let storedSession = await getVPSession(uuid);
-    if (!storedSession) {
-      console.log(`No session found for UUID: ${uuid}`);
-      const responseMode = req.query.response_mode || "direct_post";
-      const nonce = generateNonce(16);
 
-      storeVPSession(uuid, {
-        uuid: uuid,
-        status: "pending",
-        claims: null,
-        presentation_definition: presentation_definition_mdl,
-        nonce: nonce,
-        sdsRequested: getSDsFromPresentationDef(presentation_definition_mdl),
-        response_mode: responseMode,
-      });
-      console.log(`New session created for UUID: ${uuid}`);
-    }
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
 
-    const result = await generateX509MDLVPRequest(
-      uuid,
-      clientMetadata,
-      serverURL
-    );
-
-    if (result.error) {
-      return res.status(result.status).json({ error: result.error });
+      console.log("result.jwt", result.jwt);
+      res.type(CONFIG.CONTENT_TYPE).send(result.jwt);
+    } catch (error) {
+      const errorResponse = createErrorResponse(error, "GET /VPrequest/:id");
+      res.status(500).json(errorResponse);
     }
-    // As per OpenID4VP, the request_uri should return the request object (JWT)
-    // with content type application/oauth-authz-req+jwt
-    console.log("result.jwt", result.jwt);
-    res.type("application/oauth-authz-req+jwt").send(result.jwt);
   });
 
-mdlRouter
-  .route("/VPrequest/dcapi/:id?") // Corrected path to match client requests
-  // only get for now I guess
-  // .post(express.urlencoded({ extended: true }), async (req, res) => {
-  //   console.log("POST request received");
-  //   const uuid = req.params.id;
-  //   // As per OpenID4VP spec, wallet can post wallet_nonce and wallet_metadata
-  //   const { wallet_nonce, wallet_metadata } = req.body;
-  //   if (wallet_nonce || wallet_metadata) {
-  //     console.log(
-  //       `Received from wallet: wallet_nonce=${wallet_nonce}, wallet_metadata=${wallet_metadata}`
-  //     );
-  //   }
+/**
+ * DC API endpoint for mDL requests
+ */
+mdlRouter.get("/VPrequest/dcapi/:id", async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const responseMode = "dc_api.jwt";
+    const { generateNonce, storeVPSessionData, getSDsFromPresentationDef } = await import("../utils/routeUtils.js");
+    const nonce = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
+    const state = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
 
-  //   const result = await generateX509MDLVPRequest(
-  //     uuid,
-  //     clientMetadata,
-  //     serverURL,
-  //     wallet_nonce,
-  //     wallet_metadata
-  //   );
-
-  //   if (result.error) {
-  //     return res.status(result.status).json({ error: result.error });
-  //   }
-  //   // For POST, the content type might differ based on wallet expectations
-  //   // or specific protocol steps not detailed here.
-  //   // Assuming JWT is expected directly for now.
-  //   res.type("application/oauth-authz-req+jwt").send(result.jwt);
-  // })
-  .get(async (req, res) => {
-    // Added GET handler
-    console.log("GET request received for mDL using dcql dc api");
-    let uuid = req.params.id;
-    const dcql_query = {
-      credentials: [
-        {
-          claims: [
-            {
-              path: ["org.iso.18013.5.1", "family_name"],
-            },
-            {
-              path: ["org.iso.18013.5.1", "given_name"],
-            },
-            {
-              path: ["org.iso.18013.5.1", "age_over_21"],
-            },
-          ],
-          format: "mso_mdoc",
-          id: "cred1",
-          meta: {
-            doctype_value: "org.iso.18013.5.1.mDL",
-          },
-        },
-      ],
-    };
-
-    const responseMode =  "dc_api.jwt";
-    const nonce = generateNonce(16);
-    const state = generateNonce(16);
-
-    storeVPSession(uuid, {
-      uuid: uuid,
-      status: "pending",
-      claims: null,
-      nonce: nonce,
-      state: state,
-      dcql_query:dcql_query,
-      sdsRequested: getSDsFromPresentationDef(presentation_definition_mdl),
+    // Store session data with DCQL query and state
+    await storeVPSessionData(sessionId, {
+      nonce,
+      state,
+      dcql_query: DEFAULT_MDL_DCQL_QUERY,
+      sdsRequested: getSDsFromPresentationDef(presentationDefinitionMdl),
       response_mode: responseMode,
     });
-    console.log(`New session created for UUID: ${uuid}`);
 
-const clientMetadata =  clientMetadataMDL;
+    console.log(`New session created for UUID: ${sessionId}`);
 
-
-    const result = await generateX509MDLVPRequest(
-      uuid,
-      clientMetadata,
-      serverURL
-    );
+    const result = await processVPRequest({
+      sessionId,
+      clientMetadata: clientMetadataMDL,
+      serverURL: CONFIG.SERVER_URL,
+      clientId: CONFIG.CLIENT_ID,
+      privateKey: null,
+      kid: null,
+      audience: "https://self-issued.me/v2", // DC API audience
+    });
 
     if (result.error) {
       return res.status(result.status).json({ error: result.error });
     }
-    // As per OpenID4VP, the request_uri should return the request object (JWT)
-    // with content type application/oauth-authz-req+jwt
+
     console.log("result.jwt", result.jwt);
     res.json({
-      request: result.jwt,                 // the signed Request Object
-      // expected_origins: ["https://dss.aegean.gr"], // REQUIRED for signed over DC-API
-      // response_mode:  responseMode  //dc_api.jwt         // echoes what the wallet must return
+      request: result.jwt,
     });
-  });
-
-async function generateX509MDLVPRequest(
-  uuid,
-  clientMetadata,
-  serverURL,
-  wallet_nonce,
-  wallet_metadata,
- 
-) {
-  const vpSession = await getVPSession(uuid);
-
-  if (!vpSession) {
-    return { error: "Invalid session ID", status: 400 };
+  } catch (error) {
+    const errorResponse = createErrorResponse(error, "GET /VPrequest/dcapi/:id");
+    res.status(500).json(errorResponse);
   }
-
-  const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "x509_san_dns:dss.aegean.gr";
-
-  const vpRequestJWT = await buildVpRequestJWT(
-    client_id,
-    response_uri,
-    vpSession.presentation_definition,
-    null, // privateKey
-    clientMetadata,
-    null, // kid
-    serverURL,
-    "vp_token",
-    vpSession.nonce,
-    vpSession.dcql_query || null,
-    vpSession.transaction_data || null,
-    vpSession.response_mode, // Pass response_mode from session
-     "https://self-issued.me/v2", // audience should be client_id for Digital Credentials API
-    wallet_nonce,
-    wallet_metadata,
-    vpSession.state // Pass state from session
-  );
-  return { jwt: vpRequestJWT, status: 200 };
-}
+});
 
 export default mdlRouter;

@@ -136,6 +136,12 @@ buildVpRequestJWT(
     throw new Error(`Invalid response_mode. Must be one of: ${allowedResponseModes.join(", ")}`);
   }
 
+  // For direct_post.jwt, add encryption-related metadata if not present
+  if (response_mode === "direct_post.jwt" && client_metadata && !client_metadata.encrypted_response_enc_values_supported) {
+    client_metadata.encrypted_response_enc_values_supported = ["A256GCM", "A192GCM", "A128GCM"];
+    client_metadata.encrypted_response_alg_values_supported = ["ECDH-ES+A256KW", "ECDH-ES+A192KW", "ECDH-ES+A128KW"];
+  }
+
   // Construct the JWT payload
   let jwtPayload = {
     response_type: response_type,
@@ -149,15 +155,33 @@ buildVpRequestJWT(
     aud: audience, // Use the audience parameter
   };
 
+  // Add response_uri for all response modes that require it
+  if (response_mode === "direct_post" || response_mode === "direct_post.jwt" || 
+      response_mode === "dc_api.jwt" || response_mode === "dc_api") {
+    jwtPayload.response_uri = redirect_uri;
+  }
+
+  // Set appropriate audience based on response mode
+  if (response_mode === "dc_api.jwt" || response_mode === "dc_api") {
+    jwtPayload.aud = "https://self-issued.me/v2"; // Digital Credentials API audience
+  } else {
+    jwtPayload.aud = client_id; // For direct_post, audience should be the client_id
+  }
+
   // Add required timestamp claims for Digital Credentials API
   if (response_mode === "dc_api.jwt" || response_mode === "dc_api") {
     const now = Math.floor(Date.now() / 1000);
     jwtPayload.iat = now; // issued at time
     jwtPayload.exp = now + (60 * 60); // expires in 1 hour
     jwtPayload.expected_origins = ["https://dss.aegean.gr"];  
-    jwtPayload.response_uri = redirect_uri;
     jwtPayload.state = state;
-   }
+  }
+
+  
+    const now = Math.floor(Date.now() / 1000);
+    jwtPayload.iat = now; // issued at time
+    jwtPayload.exp = now + (60 * 5); // expires in 5 minutes
+  
  
 
  
@@ -228,6 +252,9 @@ buildVpRequestJWT(
   } else if (client_id.startsWith("did:")) {
     // Check if this is a did:jwk identifier
     if (client_id.startsWith('did:jwk:')) {
+      // Load private key from file for DID JWK
+      const didJwkPrivateKey = fs.readFileSync("./didjwks/did_private_pkcs8.key", "utf8");
+      
       const header = {
         alg: "ES256",
         typ: "oauth-authz-req+jwt",
@@ -236,9 +263,11 @@ buildVpRequestJWT(
 
       signedJwt = await new jose.SignJWT(jwtPayload)
         .setProtectedHeader(header)
-        .sign(await jose.importPKCS8(privateKey, "ES256"));
+        .sign(await jose.importPKCS8(didJwkPrivateKey, "ES256"));
     } else if (client_id.startsWith("did:web:")) {
-      // Handle did:web case
+      // Handle did:web case - load private key from file
+      const didWebPrivateKey = fs.readFileSync("./didjwks/did_private_pkcs8.key", "utf8");
+      
       const signingKey = {
         kty: "EC",
         x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
@@ -250,7 +279,7 @@ buildVpRequestJWT(
 
       // Convert the private key to a KeyLike object
       const privateKeyObj = await jose.importPKCS8(
-        privateKey,
+        didWebPrivateKey,
         signingKey.alg || "ES256"
       );
 
