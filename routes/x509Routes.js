@@ -11,432 +11,464 @@ import fs from "fs";
 
 const x509Router = express.Router();
 
-const serverURL = process.env.SERVER_URL || "http://localhost:3000";
-
-// Load presentation definitions
-const presentation_definition_sdJwt = JSON.parse(
-  fs.readFileSync("./data/presentation_definition_pid.json", "utf-8")
-);
-
-// Load client metadata
-const clientMetadata = JSON.parse(
-  fs.readFileSync("./data/verifier-config.json", "utf-8")
-);
-
-// Standard VP Request with presentation_definition
-x509Router.get("/generateVPRequest", async (req, res) => {
-  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const responseMode = req.query.response_mode || "direct_post";
-  const nonce = generateNonce(16);
-
-  const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "x509_san_dns:dss.aegean.gr"; // This should match the DNS SAN in the certificate
-
-  // Store session data
-  storeVPSession(uuid, {
-    uuid: uuid,
-    status: "pending",
-    claims: null,
-    presentation_definition: presentation_definition_sdJwt,
-    nonce: nonce,
-    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt),
-    response_mode: responseMode // Store response mode in session
-  });
-
-  // Build and sign the VP request JWT (which will be served at the request_uri)
-  // Note: buildVpRequestJWT itself doesn't need request_uri_method. 
-  // This parameter is for the initial openid4vp:// URI.
-  const vpRequestJWT = await buildVpRequestJWT(
-    client_id,
-    response_uri,
-    presentation_definition_sdJwt,
-    null, // privateKey will be loaded in buildVpRequestJWT
-    clientMetadata,
-    null,
-    serverURL,
-    "vp_token",
-    nonce,
-    null, // dcql_query
-    null, // transaction_data
-    responseMode
-  );
-
-  // Create the openid4vp:// URL
-  // Since the /x509VPrequest/:id endpoint is a POST endpoint (as per its definition later in this file),
-  // we add request_uri_method=post.
-  const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
-    requestUri
-  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
-
-  // Generate QR code
-  let code = qr.image(vpRequest, {
+// Configuration constants
+const CONFIG = {
+  SERVER_URL: process.env.SERVER_URL || "http://localhost:3000",
+  CLIENT_ID: "x509_san_dns:dss.aegean.gr",
+  DEFAULT_RESPONSE_MODE: "direct_post",
+  DEFAULT_NONCE_LENGTH: 16,
+  QR_CONFIG: {
     type: "png",
     ec_level: "M",
     size: 20,
     margin: 10,
-  });
-  let mediaType = "PNG";
-  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
-  
-  res.json({
-    qr: encodedQR,
-    deepLink: vpRequest,
-    sessionId: uuid,
-  });
-});
+  },
+  MEDIA_TYPE: "PNG",
+  CONTENT_TYPE: "application/oauth-authz-req+jwt",
+  SESSION_STATUS: {
+    PENDING: "pending",
+  },
+  ERROR_MESSAGES: {
+    INVALID_SESSION: "Invalid session ID",
+    FILE_READ_ERROR: "Failed to read configuration file",
+    QR_GENERATION_ERROR: "Failed to generate QR code",
+    SESSION_STORE_ERROR: "Failed to store session",
+    JWT_BUILD_ERROR: "Failed to build JWT",
+  },
+};
 
-// New endpoint for GET request_uri
-x509Router.get("/generateVPRequestGet", async (req, res) => {
-  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const responseMode = req.query.response_mode || "direct_post";
-  const nonce = generateNonce(16);
-
-  const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "x509_san_dns:dss.aegean.gr";
-
-  storeVPSession(uuid, {
-    uuid: uuid,
-    status: "pending",
-    claims: null,
-    presentation_definition: presentation_definition_sdJwt,
-    nonce: nonce,
-    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt),
-    response_mode: responseMode
-  });
-
-  // Note: buildVpRequestJWT is called by the /x509/x509VPrequest/:id endpoint
-  // So we don't need to call it here directly for the QR code generation step.
-
-  const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;  
-  // openid4vp:// URL without request_uri_method, defaulting to GET for request_uri
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
-    requestUri
-  )}&client_id=${encodeURIComponent(client_id)}`;
-
-  let code = qr.image(vpRequest, {
-    type: "png",
-    ec_level: "M",
-    size: 20,
-    margin: 10,
-  });
-  let mediaType = "PNG";
-  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
-
-  res.json({
-    qr: encodedQR,
-    deepLink: vpRequest,
-    sessionId: uuid,
-  });
-});
-
-// DCQL Query endpoint
-x509Router.get("/generateVPRequestDCQL", async (req, res) => {
-  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const nonce = generateNonce(16);
-  const responseMode = req.query.response_mode || "direct_post"; // Added for consistency if needed for JWT
-
-  const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "x509_san_dns:dss.aegean.gr";
-
-  // Example DCQL query - this should be configurable
-  const dcql_query =   {
-    "credentials": [
-      {
-        "id": "cmwallet",
-        "format": "dc+sd-jwt",
-        "meta": {
-          "vct_values": [
-            "urn:eu.europa.ec.eudi:pid:1"
-          ]
-        },
-        "claims": [
-          {
-            "path": [
-              "family_name"
-            ]
-          }
-        ]
-      }
-    ]
-  }
-
-  
-  storeVPSession(uuid, {
-    uuid: uuid,
-    status: "pending",
-    claims: null,
-    dcql_query: dcql_query,
-    nonce: nonce,
-    response_mode: responseMode // Store response mode
-  });
-
-  // JWT for request_uri
-  const vpRequestJWT = await buildVpRequestJWT(
-    client_id,
-    response_uri,
-    null, // No presentation_definition for DCQL
-    null, // privateKey
-    clientMetadata,
-    null, // kid
-    serverURL,
-    "vp_token",
-    nonce,
-    dcql_query, // dcql_query parameter
-    null, // transaction_data parameter (null for DCQL query)
-    responseMode
-  );
-
-  const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
-    requestUri
-  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
-
-  let code = qr.image(vpRequest, {
-    type: "png",
-    ec_level: "M",
-    size: 20,
-    margin: 10,
-  });
-  let mediaType = "PNG";
-  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
-  
-  res.json({
-    qr: encodedQR,
-    deepLink: vpRequest,
-    sessionId: uuid,
-  });
-});
-
-
-x509Router.get("/generateVPRequestDCQLGET", async (req, res) => {
-  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const nonce = generateNonce(16);
-  const responseMode = req.query.response_mode || "direct_post"; // Added for consistency if needed for JWT
-
-  const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "x509_san_dns:dss.aegean.gr";
-
- 
-  const dcql_query =   {
-    "credentials": [
-      {
-        "id": "cmwallet",
-        "format": "dc+sd-jwt",
-        "meta": {
-          "vct_values": [
-            "urn:eu.europa.ec.eudi:pid:1"
-          ]
-        },
-        "claims": [
-          {
-            "path": [
-              "family_name"
-            ]
-          }
-        ]
-      }
-    ]
-  }
-
-  storeVPSession(uuid, {
-    uuid: uuid,
-    status: "pending",
-    claims: null,
-    dcql_query: dcql_query,
-    nonce: nonce,
-    response_mode: responseMode // Store response mode
-  });
-
-  
-
-  const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
-    requestUri
-  )}&client_id=${encodeURIComponent(client_id)}`;
-
-  let code = qr.image(vpRequest, {
-    type: "png",
-    ec_level: "M",
-    size: 20,
-    margin: 10,
-  });
-  let mediaType = "PNG";
-  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
-  
-  res.json({
-    qr: encodedQR,
-    deepLink: vpRequest,
-    sessionId: uuid,
-  });
-});
-
-
-// Transaction Data endpoint
-x509Router.get("/generateVPRequestTransaction", async (req, res) => {
-  const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
-  const nonce = generateNonce(16);
-  const responseMode = req.query.response_mode || "direct_post"; // Added for consistency
-
-  const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "x509_san_dns:dss.aegean.gr";
-
-  // For transaction data, we still need a presentation definition
-  const presentation_definition = presentation_definition_sdJwt; 
-
-  const credentialIds = presentation_definition.input_descriptors.map(descriptor => descriptor.id);
-  const transactionDataObj = {
-    type: "qes_authorization",
-    credential_ids: credentialIds,
-    transaction_data_hashes_alg: ["sha-256"],
-    // Transaction-specific data
-    purpose: "Verification of identity",
-    timestamp: new Date().toISOString(),
-    transaction_id: uuidv4(),
-    "documentDigests": [
-      {
-       "hash": "sTOgwOm+474gFj0q0x1iSNspKqbcse4IeiqlDg/HWuI=",
-       "label": "Example Contract",
-       "hashAlgorithmOID": "2.16.840.1.101.3.4.2.1",
-       "documentLocations": [
+// Default DCQL query configuration
+const DEFAULT_DCQL_QUERY = {
+  credentials: [
+    {
+      id: "cmwallet",
+      format: "dc+sd-jwt",
+      meta: {
+        vct_values: ["urn:eu.europa.ec.eudi:pid:1"],
+      },
+      claims: [
         {
-         "uri": "https://protected.rp.example/contract-01.pdf?token=HS9naJKWwp901hBcK348IUHiuH8374",
-         "method": {
-         "type": "public"
-         }
+          path: ["family_name"],
         },
-       ],
-       "dtbsr": "VYDl4oTeJ5TmIPCXKdTX1MSWRLI9CKYcyMRz6xlaGg"
-      }
-     ]
-  };
-  const base64UrlEncodedTxData = Buffer.from(JSON.stringify(transactionDataObj))
-    .toString('base64url');
+      ],
+    },
+  ],
+};
 
-  storeVPSession(uuid, {
-    uuid: uuid,
-    status: "pending",
-    claims: null,
-    presentation_definition: presentation_definition, 
-    nonce: nonce,
-    transaction_data: [base64UrlEncodedTxData],
-    response_mode: responseMode, // Store response mode
-    sdsRequested: getSDsFromPresentationDef(presentation_definition_sdJwt)
-  });
+// Default transaction data configuration
+const DEFAULT_TRANSACTION_DATA = {
+  type: "qes_authorization",
+  transaction_data_hashes_alg: ["sha-256"],
+  purpose: "Verification of identity",
+  documentDigests: [
+    {
+      hash: "sTOgwOm+474gFj0q0x1iSNspKqbcse4IeiqlDg/HWuI=",
+      label: "Example Contract",
+      hashAlgorithmOID: "2.16.840.1.101.3.4.2.1",
+      documentLocations: [
+        {
+          uri: "https://protected.rp.example/contract-01.pdf?token=HS9naJKWwp901hBcK348IUHiuH8374",
+          method: {
+            type: "public",
+          },
+        },
+      ],
+      dtbsr: "VYDl4oTeJ5TmIPCXKdTX1MSWRLI9CKYcyMRz6xlaGg",
+    },
+  ],
+};
 
-  // JWT for request_uri
-  const vpRequestJWT = await buildVpRequestJWT(
-    client_id,
-    response_uri,
-    presentation_definition, 
-    null, 
-    clientMetadata,
-    null, 
-    serverURL,
-    "vp_token",
-    nonce,
-    null, // No DCQL query when using transaction data with PD
-    [base64UrlEncodedTxData],
-    responseMode
+// Load configuration files
+let presentationDefinitionSdJwt;
+let clientMetadata;
+
+try {
+  presentationDefinitionSdJwt = JSON.parse(
+    fs.readFileSync("./data/presentation_definition_pid.json", "utf-8")
   );
-
-  const requestUri = `${serverURL}/x509/x509VPrequest/${uuid}`;
-  const vpRequest = `openid4vp://?request_uri=${encodeURIComponent(
-    requestUri
-  )}&request_uri_method=post&client_id=${encodeURIComponent(client_id)}`;
-
-  let code = qr.image(vpRequest, {
-    type: "png",
-    ec_level: "M",
-    size: 20,
-    margin: 10,
-  });
-  let mediaType = "PNG";
-  let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
-  
-  res.json({
-    qr: encodedQR,
-    deepLink: vpRequest,
-    sessionId: uuid,
-  });
-});
-
-
-
-
-
-// Request URI endpoint (now handles POST and GET)
-x509Router.route("/x509VPrequest/:id") // Corrected path to match client requests
-  .post(express.urlencoded({ extended: true }), async (req, res) => {
-    console.log("POST request received");
-    const uuid = req.params.id;
-
-    // As per OpenID4VP spec, wallet can post wallet_nonce and wallet_metadata
-    const { wallet_nonce, wallet_metadata } = req.body;
-    if (wallet_nonce || wallet_metadata) {
-      console.log(`Received from wallet: wallet_nonce=${wallet_nonce}, wallet_metadata=${wallet_metadata}`);
-    }
-
-    const result = await generateX509VPRequest(uuid, clientMetadata, serverURL, wallet_nonce, wallet_metadata);
-
-    if (result.error) {
-      return res.status(result.status).json({ error: result.error });
-    }
-    // For POST, the content type might differ based on wallet expectations
-    // or specific protocol steps not detailed here.
-    // Assuming JWT is expected directly for now.
-    res.type("application/oauth-authz-req+jwt").send(result.jwt);
-  })
-  .get(async (req, res) => { // Added GET handler
-    console.log("GET request received");
-    const uuid = req.params.id;
-    const result = await generateX509VPRequest(uuid, clientMetadata, serverURL);
-   
-
-    if (result.error) {
-      return res.status(result.status).json({ error: result.error });
-    }
-    // As per OpenID4VP, the request_uri should return the request object (JWT)
-    // with content type application/oauth-authz-req+jwt
-    res.type("application/oauth-authz-req+jwt").send(result.jwt);
-  });
-
-
-
-// Helper function to process VP Request
-async function generateX509VPRequest(uuid, clientMetadata, serverURL, wallet_nonce, wallet_metadata) {
-  const vpSession = await getVPSession(uuid);
-
-  if (!vpSession) {
-    return { error: "Invalid session ID", status: 400 };
-  }
-
-  const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = "x509_san_dns:dss.aegean.gr";
-
-  // console.log("wallet_nonce", wallet_nonce);
-  // console.log("wallet_metadata", wallet_metadata);
-  
-  const vpRequestJWT = await buildVpRequestJWT(
-    client_id,
-    response_uri,
-    vpSession.presentation_definition,
-    null, // privateKey
-    clientMetadata,
-    null, // kid
-    serverURL,
-    "vp_token",
-    vpSession.nonce,
-    vpSession.dcql_query || null,
-    vpSession.transaction_data || null,
-    vpSession.response_mode, // Pass response_mode from session
-    undefined, // audience, to use default
-    wallet_nonce,
-    wallet_metadata
+  clientMetadata = JSON.parse(
+    fs.readFileSync("./data/verifier-config.json", "utf-8")
   );
-
-  return { jwt: vpRequestJWT, status: 200 };
+} catch (error) {
+  console.error("Failed to load configuration files:", error.message);
+  throw new Error(CONFIG.ERROR_MESSAGES.FILE_READ_ERROR);
 }
 
+/**
+ * Generate a QR code from a string and return it as a data URI
+ * @param {string} data - The data to encode in the QR code
+ * @returns {Promise<string>} - The QR code as a data URI
+ */
+async function generateQRCode(data) {
+  try {
+    const code = qr.image(data, CONFIG.QR_CONFIG);
+    const encodedQR = imageDataURI.encode(await streamToBuffer(code), CONFIG.MEDIA_TYPE);
+    return encodedQR;
+  } catch (error) {
+    console.error("QR code generation failed:", error.message);
+    throw new Error(CONFIG.ERROR_MESSAGES.QR_GENERATION_ERROR);
+  }
+}
+
+/**
+ * Create an OpenID4VP request URL
+ * @param {string} requestUri - The request URI
+ * @param {string} clientId - The client ID
+ * @param {boolean} usePostMethod - Whether to use POST method
+ * @returns {string} - The OpenID4VP request URL
+ */
+function createOpenID4VPRequestUrl(requestUri, clientId, usePostMethod = false) {
+  const baseUrl = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&client_id=${encodeURIComponent(clientId)}`;
+  return usePostMethod ? `${baseUrl}&request_uri_method=post` : baseUrl;
+}
+
+/**
+ * Store VP session data
+ * @param {string} sessionId - The session ID
+ * @param {Object} sessionData - The session data to store
+ * @returns {Promise<void>}
+ */
+async function storeVPSessionData(sessionId, sessionData) {
+  try {
+    await storeVPSession(sessionId, {
+      uuid: sessionId,
+      status: CONFIG.SESSION_STATUS.PENDING,
+      claims: null,
+      ...sessionData,
+    });
+  } catch (error) {
+    console.error("Failed to store VP session:", error.message);
+    throw new Error(CONFIG.ERROR_MESSAGES.SESSION_STORE_ERROR);
+  }
+}
+
+/**
+ * Create a standard VP request response
+ * @param {string} qrCode - The QR code data URI
+ * @param {string} deepLink - The deep link URL
+ * @param {string} sessionId - The session ID
+ * @returns {Object} - The response object
+ */
+function createVPRequestResponse(qrCode, deepLink, sessionId) {
+  return {
+    qr: qrCode,
+    deepLink,
+    sessionId,
+  };
+}
+
+/**
+ * Generate VP request with presentation definition
+ */
+x509Router.get("/generateVPRequest", async (req, res) => {
+  try {
+    const sessionId = req.query.sessionId || uuidv4();
+    const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
+    const nonce = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
+    const responseUri = `${CONFIG.SERVER_URL}/direct_post/${sessionId}`;
+
+    // Store session data
+    await storeVPSessionData(sessionId, {
+      presentation_definition: presentationDefinitionSdJwt,
+      nonce,
+      sdsRequested: getSDsFromPresentationDef(presentationDefinitionSdJwt),
+      response_mode: responseMode,
+    });
+
+    // Build VP request JWT
+    await buildVpRequestJWT(
+      CONFIG.CLIENT_ID,
+      responseUri,
+      presentationDefinitionSdJwt,
+      null,
+      clientMetadata,
+      null,
+      CONFIG.SERVER_URL,
+      "vp_token",
+      nonce,
+      null,
+      null,
+      responseMode
+    );
+
+    // Create OpenID4VP request URL
+    const requestUri = `${CONFIG.SERVER_URL}/x509/x509VPrequest/${sessionId}`;
+    const vpRequest = createOpenID4VPRequestUrl(requestUri, CONFIG.CLIENT_ID, true);
+
+    // Generate QR code
+    const qrCode = await generateQRCode(vpRequest);
+
+    res.json(createVPRequestResponse(qrCode, vpRequest, sessionId));
+  } catch (error) {
+    console.error("Error in generateVPRequest:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Generate VP request for GET method
+ */
+x509Router.get("/generateVPRequestGet", async (req, res) => {
+  try {
+    const sessionId = req.query.sessionId || uuidv4();
+    const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
+    const nonce = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
+
+    // Store session data
+    await storeVPSessionData(sessionId, {
+      presentation_definition: presentationDefinitionSdJwt,
+      nonce,
+      sdsRequested: getSDsFromPresentationDef(presentationDefinitionSdJwt),
+      response_mode: responseMode,
+    });
+
+    // Create OpenID4VP request URL (GET method)
+    const requestUri = `${CONFIG.SERVER_URL}/x509/x509VPrequest/${sessionId}`;
+    const vpRequest = createOpenID4VPRequestUrl(requestUri, CONFIG.CLIENT_ID, false);
+
+    // Generate QR code
+    const qrCode = await generateQRCode(vpRequest);
+
+    res.json(createVPRequestResponse(qrCode, vpRequest, sessionId));
+  } catch (error) {
+    console.error("Error in generateVPRequestGet:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Generate VP request with DCQL query
+ */
+x509Router.get("/generateVPRequestDCQL", async (req, res) => {
+  try {
+    const sessionId = req.query.sessionId || uuidv4();
+    const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
+    const nonce = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
+    const responseUri = `${CONFIG.SERVER_URL}/direct_post/${sessionId}`;
+
+    // Store session data with DCQL query
+    await storeVPSessionData(sessionId, {
+      dcql_query: DEFAULT_DCQL_QUERY,
+      nonce,
+      response_mode: responseMode,
+    });
+
+    // Build VP request JWT with DCQL query
+    await buildVpRequestJWT(
+      CONFIG.CLIENT_ID,
+      responseUri,
+      null,
+      null,
+      clientMetadata,
+      null,
+      CONFIG.SERVER_URL,
+      "vp_token",
+      nonce,
+      DEFAULT_DCQL_QUERY,
+      null,
+      responseMode
+    );
+
+    // Create OpenID4VP request URL
+    const requestUri = `${CONFIG.SERVER_URL}/x509/x509VPrequest/${sessionId}`;
+    const vpRequest = createOpenID4VPRequestUrl(requestUri, CONFIG.CLIENT_ID, true);
+
+    // Generate QR code
+    const qrCode = await generateQRCode(vpRequest);
+
+    res.json(createVPRequestResponse(qrCode, vpRequest, sessionId));
+  } catch (error) {
+    console.error("Error in generateVPRequestDCQL:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Generate VP request with DCQL query for GET method
+ */
+x509Router.get("/generateVPRequestDCQLGET", async (req, res) => {
+  try {
+    const sessionId = req.query.sessionId || uuidv4();
+    const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
+    const nonce = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
+
+    // Store session data with DCQL query
+    await storeVPSessionData(sessionId, {
+      dcql_query: DEFAULT_DCQL_QUERY,
+      nonce,
+      response_mode: responseMode,
+    });
+
+    // Create OpenID4VP request URL (GET method)
+    const requestUri = `${CONFIG.SERVER_URL}/x509/x509VPrequest/${sessionId}`;
+    const vpRequest = createOpenID4VPRequestUrl(requestUri, CONFIG.CLIENT_ID, false);
+
+    // Generate QR code
+    const qrCode = await generateQRCode(vpRequest);
+
+    res.json(createVPRequestResponse(qrCode, vpRequest, sessionId));
+  } catch (error) {
+    console.error("Error in generateVPRequestDCQLGET:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Generate VP request with transaction data
+ */
+x509Router.get("/generateVPRequestTransaction", async (req, res) => {
+  try {
+    const sessionId = req.query.sessionId || uuidv4();
+    const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
+    const nonce = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
+    const responseUri = `${CONFIG.SERVER_URL}/direct_post/${sessionId}`;
+
+    // Create transaction data with credential IDs
+    const credentialIds = presentationDefinitionSdJwt.input_descriptors.map(
+      (descriptor) => descriptor.id
+    );
+    const transactionDataObj = {
+      ...DEFAULT_TRANSACTION_DATA,
+      credential_ids: credentialIds,
+      timestamp: new Date().toISOString(),
+      transaction_id: uuidv4(),
+    };
+
+    const base64UrlEncodedTxData = Buffer.from(JSON.stringify(transactionDataObj))
+      .toString("base64url");
+
+    // Store session data with transaction data
+    await storeVPSessionData(sessionId, {
+      presentation_definition: presentationDefinitionSdJwt,
+      nonce,
+      transaction_data: [base64UrlEncodedTxData],
+      response_mode: responseMode,
+      sdsRequested: getSDsFromPresentationDef(presentationDefinitionSdJwt),
+    });
+
+    // Build VP request JWT with transaction data
+    await buildVpRequestJWT(
+      CONFIG.CLIENT_ID,
+      responseUri,
+      presentationDefinitionSdJwt,
+      null,
+      clientMetadata,
+      null,
+      CONFIG.SERVER_URL,
+      "vp_token",
+      nonce,
+      null,
+      [base64UrlEncodedTxData],
+      responseMode
+    );
+
+    // Create OpenID4VP request URL
+    const requestUri = `${CONFIG.SERVER_URL}/x509/x509VPrequest/${sessionId}`;
+    const vpRequest = createOpenID4VPRequestUrl(requestUri, CONFIG.CLIENT_ID, true);
+
+    // Generate QR code
+    const qrCode = await generateQRCode(vpRequest);
+
+    res.json(createVPRequestResponse(qrCode, vpRequest, sessionId));
+  } catch (error) {
+    console.error("Error in generateVPRequestTransaction:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Helper function to process VP Request
+ * @param {string} sessionId - The session ID
+ * @param {Object} clientMetadata - The client metadata
+ * @param {string} serverURL - The server URL
+ * @param {string} walletNonce - The wallet nonce (optional)
+ * @param {string} walletMetadata - The wallet metadata (optional)
+ * @returns {Promise<Object>} - The result object with JWT or error
+ */
+async function generateX509VPRequest(sessionId, clientMetadata, serverURL, walletNonce, walletMetadata) {
+  try {
+    const vpSession = await getVPSession(sessionId);
+
+    if (!vpSession) {
+      return { error: CONFIG.ERROR_MESSAGES.INVALID_SESSION, status: 400 };
+    }
+
+    const responseUri = `${serverURL}/direct_post/${sessionId}`;
+
+    const vpRequestJWT = await buildVpRequestJWT(
+      CONFIG.CLIENT_ID,
+      responseUri,
+      vpSession.presentation_definition,
+      null,
+      clientMetadata,
+      null,
+      serverURL,
+      "vp_token",
+      vpSession.nonce,
+      vpSession.dcql_query || null,
+      vpSession.transaction_data || null,
+      vpSession.response_mode,
+      undefined,
+      walletNonce,
+      walletMetadata
+    );
+
+    return { jwt: vpRequestJWT, status: 200 };
+  } catch (error) {
+    console.error("Error in generateX509VPRequest:", error.message);
+    throw new Error(CONFIG.ERROR_MESSAGES.JWT_BUILD_ERROR);
+  }
+}
+
+/**
+ * Request URI endpoint (handles both POST and GET)
+ */
+x509Router
+  .route("/x509VPrequest/:id")
+  .post(express.urlencoded({ extended: true }), async (req, res) => {
+    try {
+      console.log("POST request received");
+      const sessionId = req.params.id;
+
+      // Extract wallet parameters
+      const { wallet_nonce: walletNonce, wallet_metadata: walletMetadata } = req.body;
+      if (walletNonce || walletMetadata) {
+        console.log(`Received from wallet: wallet_nonce=${walletNonce}, wallet_metadata=${walletMetadata}`);
+      }
+
+      const result = await generateX509VPRequest(
+        sessionId,
+        clientMetadata,
+        CONFIG.SERVER_URL,
+        walletNonce,
+        walletMetadata
+      );
+
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
+
+      res.type(CONFIG.CONTENT_TYPE).send(result.jwt);
+    } catch (error) {
+      console.error("Error in POST /x509VPrequest/:id:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  })
+  .get(async (req, res) => {
+    try {
+      console.log("GET request received");
+      const sessionId = req.params.id;
+      const result = await generateX509VPRequest(sessionId, clientMetadata, CONFIG.SERVER_URL);
+
+      if (result.error) {
+        return res.status(result.status).json({ error: result.error });
+      }
+
+      res.type(CONFIG.CONTENT_TYPE).send(result.jwt);
+    } catch (error) {
+      console.error("Error in GET /x509VPrequest/:id:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
 
 export default x509Router; 
