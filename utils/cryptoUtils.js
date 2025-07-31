@@ -237,7 +237,7 @@ export async function buildVpRequestJWT(
       // JWT header
       const header = {
         alg: signingAlg,
-        typ: "JWT",
+        typ: "oauth-authz-req+jwt",
         kid: kid,
       };
 

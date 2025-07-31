@@ -42,7 +42,7 @@ const dcql_query_jwt_vc = {
   "credentials": [
     {
       "id": "verifiable_id_card",
-      "format": "jwt_vc_json",
+      "format": "dc+sd-jwt",
       "meta": {
         "credential_types": [
           "VerifiableCredential",
