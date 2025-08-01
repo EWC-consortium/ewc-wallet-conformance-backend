@@ -732,4 +732,203 @@ describe('Pre-Auth SD-JWT Routes', () => {
       expect(response.body.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']).to.not.have.property('tx_code');
     });
   });
+
+  describe('Critical Fixes - Session Management', () => {
+    it('should return newly created session data when no existing session', async () => {
+      // Mock no existing session
+      mockCacheServiceRedis.getPreAuthSession.resolves(null);
+      
+      await request(app)
+        .get('/preauth/offer-no-code')
+        .query({ signatureType: 'did:web' })
+        .expect(200);
+
+      // Verify that a new session was created
+      expect(mockCacheServiceRedis.storePreAuthSession.called).to.be.true;
+      
+      // Verify the session data contains the correct signature type
+      const callArgs = mockCacheServiceRedis.storePreAuthSession.getCall(0).args;
+      expect(callArgs[1]).to.have.property('signatureType', 'did:web');
+      expect(callArgs[1]).to.have.property('status', 'pending');
+      expect(callArgs[1]).to.have.property('flowType', 'pre-auth');
+      expect(callArgs[1]).to.have.property('isHaip', false);
+    });
+
+    it('should handle existing sessions correctly without creating duplicates', async () => {
+      const existingSession = {
+        status: 'pending',
+        flowType: 'pre-auth',
+        isHaip: false,
+        signatureType: 'did:web'
+      };
+      mockCacheServiceRedis.getPreAuthSession.resolves(existingSession);
+
+      await request(app)
+        .get('/preauth/offer-no-code')
+        .query({ signatureType: 'did:web' })
+        .expect(200);
+
+      // Should not create a new session since one already exists
+      expect(mockCacheServiceRedis.storePreAuthSession.called).to.be.false;
+    });
+
+    it('should handle different signature types correctly', async () => {
+      // Test did:web signature type
+      mockCacheServiceRedis.getPreAuthSession.resolves(null);
+      
+      await request(app)
+        .get('/preauth/offer-no-code')
+        .query({ signatureType: 'did:web' })
+        .expect(200);
+
+      let callArgs = mockCacheServiceRedis.storePreAuthSession.getCall(0).args;
+      expect(callArgs[1]).to.have.property('signatureType', 'did:web');
+
+      // Reset and test jwk signature type
+      mockCacheServiceRedis.getPreAuthSession.resolves(null);
+      mockCacheServiceRedis.storePreAuthSession.reset();
+      
+      await request(app)
+        .get('/preauth/offer-no-code')
+        .query({ signatureType: 'jwk' })
+        .expect(200);
+
+      callArgs = mockCacheServiceRedis.storePreAuthSession.getCall(0).args;
+      expect(callArgs[1]).to.have.property('signatureType', 'jwk');
+    });
+  });
+
+  describe('Critical Fixes - Credential Offer URI Format', () => {
+    it('should create proper OpenID4VCI credential offer URI format', async () => {
+      const sessionId = 'test-session-123';
+      const credentialType = 'VerifiableStudentIDSDJWT';
+      
+      const response = await request(app)
+        .get('/preauth/offer-no-code')
+        .query({ 
+          sessionId: sessionId,
+          credentialType: credentialType 
+        })
+        .expect(200);
+
+      const deepLink = response.body.deepLink;
+      
+      // Verify the URI starts with the correct scheme
+      expect(deepLink).to.match(/^openid-credential-offer:\/\/\?credential_offer_uri=/);
+      
+      // Extract and decode the credential_offer_uri parameter
+      const uriMatch = deepLink.match(/credential_offer_uri=([^&]+)/);
+      expect(uriMatch).to.not.be.null;
+      
+      const decodedUri = decodeURIComponent(uriMatch[1]);
+      
+      // Verify the URI contains the expected components
+      expect(decodedUri).to.include('http://localhost:3000');
+      expect(decodedUri).to.include('/credential-offer-no-code/');
+      expect(decodedUri).to.include(sessionId);
+      expect(decodedUri).to.include(`type=${credentialType}`);
+    });
+
+    it('should handle special characters in credential types correctly', async () => {
+      const sessionId = 'test-session-456';
+      const credentialType = 'Special:Credential-Type_123';
+      
+      const response = await request(app)
+        .get('/preauth/offer-no-code')
+        .query({ 
+          sessionId: sessionId,
+          credentialType: credentialType 
+        })
+        .expect(200);
+
+      const deepLink = response.body.deepLink;
+      const uriMatch = deepLink.match(/credential_offer_uri=([^&]+)/);
+      const decodedUri = decodeURIComponent(uriMatch[1]);
+      
+      expect(decodedUri).to.include(`type=${credentialType}`);
+    });
+
+    it('should use correct URL scheme for different flows', async () => {
+      // Test standard flow
+      const standardResponse = await request(app)
+        .get('/preauth/offer-no-code')
+        .expect(200);
+      expect(standardResponse.body.deepLink).to.include('openid-credential-offer://');
+
+      // Test HAIP flow
+      const haipResponse = await request(app)
+        .get('/preauth/haip-offer-tx-code')
+        .expect(200);
+      expect(haipResponse.body.deepLink).to.include('haip://');
+    });
+  });
+
+  describe('Critical Fixes - Error Handling', () => {
+    it('should handle Redis errors during session retrieval', async () => {
+      mockCacheServiceRedis.getPreAuthSession.rejects(new Error('Redis connection failed'));
+
+      const response = await request(app)
+        .get('/preauth/offer-no-code')
+        .expect(500);
+
+      expect(response.body).to.have.property('error');
+    });
+
+    it('should handle Redis errors during session storage', async () => {
+      mockCacheServiceRedis.storePreAuthSession.rejects(new Error('Redis storage failed'));
+
+      const response = await request(app)
+        .get('/preauth/offer-no-code')
+        .expect(500);
+
+      expect(response.body).to.have.property('error');
+    });
+  });
+
+  describe('Critical Fixes - Utility Functions', () => {
+    it('should test createPreAuthCredentialOfferUri function indirectly', async () => {
+      const sessionId = 'test-utility-session';
+      const credentialType = 'TestCredentialType';
+      
+      const response = await request(app)
+        .get('/preauth/offer-no-code')
+        .query({ 
+          sessionId: sessionId,
+          credentialType: credentialType 
+        })
+        .expect(200);
+
+      // Verify the function creates the correct URI structure
+      const deepLink = response.body.deepLink;
+      
+      // Check that it follows the OpenID4VCI format
+      expect(deepLink).to.match(/^openid-credential-offer:\/\/\?credential_offer_uri=/);
+      
+      // Verify the URI is properly encoded
+      const uriMatch = deepLink.match(/credential_offer_uri=([^&]+)/);
+      expect(uriMatch).to.not.be.null;
+      
+      const decodedUri = decodeURIComponent(uriMatch[1]);
+      expect(decodedUri).to.include(sessionId);
+      expect(decodedUri).to.include(credentialType);
+    });
+
+    it('should handle different URL schemes correctly', async () => {
+      // Test standard scheme
+      const standardResponse = await request(app)
+        .get('/preauth/offer-no-code')
+        .query({ sessionId: 'test-standard' })
+        .expect(200);
+      
+      expect(standardResponse.body.deepLink).to.include('openid-credential-offer://');
+
+      // Test HAIP scheme
+      const haipResponse = await request(app)
+        .get('/preauth/haip-offer-tx-code')
+        .query({ sessionId: 'test-haip' })
+        .expect(200);
+      
+      expect(haipResponse.body.deepLink).to.include('haip://');
+    });
+  });
 }); 

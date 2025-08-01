@@ -18,6 +18,23 @@ export const client = redis.createClient({
   }
 })();
 
+// Add event listeners for Redis connection status
+client.on('error', (err) => {
+  console.error('Redis Client Error:', err);
+});
+
+client.on('connect', () => {
+  console.log('Redis Client Connected');
+});
+
+client.on('ready', () => {
+  console.log('Redis Client Ready');
+});
+
+client.on('end', () => {
+  console.log('Redis Client Connection Ended');
+});
+
 /*
 pre-auth-sessions : {
   key: "12321-12312-12312" //session
@@ -29,31 +46,44 @@ pre-auth-sessions : {
 }
 */
 
+
+
 // Function to store a pre-auth session in Redis
 export async function storePreAuthSession(sessionKey, sessionValue) {
   try {
+    // Check if Redis client is connected
+    if (!client.isReady) {
+      console.error("Redis client is not ready");
+      throw new Error("Redis client is not ready");
+    }
+    
     const key = `pre-auth-sessions:${sessionKey}`;
     const ttlInSeconds = 180; // 3 minutes
     await client.setEx(key, ttlInSeconds, JSON.stringify(sessionValue)); // Set with expiration
-    console.log(`Session stored under key: ${key}`);
   } catch (err) {
     console.error("Error storing session:", err);
+    throw err; // Re-throw the error so calling code knows about the failure
   }
 }
 // Function to retrieve a pre-auth session from Redis
 export async function getPreAuthSession(sessionKey) {
   try {
+    // Check if Redis client is connected
+    if (!client.isReady) {
+      console.error("Redis client is not ready");
+      throw new Error("Redis client is not ready");
+    }
+    
     const key = `pre-auth-sessions:${sessionKey}`;
     const result = await client.get(key);
     if (result) {
-      // console.log("Session retrieved:", JSON.parse(result));
       return JSON.parse(result);
     } else {
-      console.log("Session not found for key:", key);
       return null;
     }
   } catch (err) {
     console.error("Error retrieving session:", err);
+    throw err; // Re-throw the error so calling code knows about the failure
   }
 }
 

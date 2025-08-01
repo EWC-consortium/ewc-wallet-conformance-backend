@@ -357,6 +357,21 @@ export const buildCredentialOfferUrl = (sessionId, credentialType, endpointPath,
 };
 
 /**
+ * Create pre-auth credential offer URI
+ * @param {string} sessionId - Session ID
+ * @param {string} credentialType - Credential type
+ * @param {string} endpointPath - Endpoint path
+ * @param {string} urlScheme - URL scheme to use
+ * @param {Object} additionalParams - Additional query parameters
+ * @returns {string} Proper OpenID4VCI credential offer URI
+ */
+export const createPreAuthCredentialOfferUri = (sessionId, credentialType, endpointPath, urlScheme = URL_SCHEMES.STANDARD, additionalParams = {}) => {
+  const encodedCredentialOfferUri = buildCredentialOfferUrl(sessionId, credentialType, endpointPath, urlScheme, additionalParams);
+  const credentialOffer = `${urlScheme}?credential_offer_uri=${encodedCredentialOfferUri}`;
+  return credentialOffer;
+};
+
+/**
  * Create credential offer response with QR code
  * @param {string} credentialOffer - Credential offer string
  * @param {string} sessionId - Session ID

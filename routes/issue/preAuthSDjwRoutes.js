@@ -32,6 +32,7 @@ import {
   // QR code and URL generation utilities
   generateQRCode,
   buildCredentialOfferUrl,
+  createPreAuthCredentialOfferUri,
   createCredentialOfferResponse,
   createCredentialOfferConfig,
   
@@ -53,6 +54,7 @@ const manageSession = async (sessionId, sessionData) => {
     const existingSession = await getPreAuthSession(sessionId);
     if (!existingSession) {
       await storePreAuthSession(sessionId, sessionData);
+      return sessionData; // Return the newly created session data
     }
     return existingSession;
   } catch (error) {
@@ -78,7 +80,7 @@ router.get("/offer-tx-code", async (req, res) => {
     const sessionData = createBaseSession("pre-auth", false, signatureType);
     await manageSession(sessionId, sessionData);
 
-    const credentialOffer = buildCredentialOfferUrl(
+    const credentialOffer = createPreAuthCredentialOfferUri(
       sessionId,
       credentialType,
       "/credential-offer-tx-code"
@@ -122,7 +124,7 @@ router.get("/offer-no-code", async (req, res) => {
     const sessionData = createBaseSession("pre-auth", false, signatureType);
     await manageSession(sessionId, sessionData);
 
-    const credentialOffer = buildCredentialOfferUrl(
+    const credentialOffer = createPreAuthCredentialOfferUri(
       sessionId,
       credentialType,
       "/credential-offer-no-code"
@@ -151,7 +153,7 @@ router.post("/offer-no-code", async (req, res) => {
     const sessionData = createSessionWithPayload(credentialPayload, true);
     await manageSession(sessionId, sessionData);
 
-    const credentialOffer = buildCredentialOfferUrl(
+    const credentialOffer = createPreAuthCredentialOfferUri(
       sessionId,
       credentialType,
       "/credential-offer-no-code"
@@ -167,13 +169,19 @@ router.post("/offer-no-code", async (req, res) => {
 /**
  * Pre-authorized flow without transaction code - credential offer configuration
  */
-router.get("/credential-offer-no-code/:id", (req, res) => {
+router.get("/credential-offer-no-code/:id", async (req, res) => {
   try {
     const sessionId = req.params.id;
     const credentialType = getCredentialType(req);
 
     if (!isValidSessionId(sessionId)) {
       return sendErrorResponse(res, "invalid_request", ERROR_MESSAGES.INVALID_SESSION_ID, 400);
+    }
+
+    // Check if session exists in Redis
+    const sessionData = await getPreAuthSession(sessionId);
+    if (!sessionData) {
+      return sendErrorResponse(res, "invalid_request", "Session not found", 404);
     }
 
     const config = createCredentialOfferConfig(credentialType, sessionId, false);
@@ -207,7 +215,7 @@ router.get("/haip-offer-tx-code", async (req, res) => {
     const sessionData = createBaseSession("pre-auth", true);
     await manageSession(sessionId, sessionData);
 
-    const credentialOffer = buildCredentialOfferUrl(
+    const credentialOffer = createPreAuthCredentialOfferUri(
       sessionId,
       credentialType,
       "/haip-credential-offer-tx-code",
