@@ -8,7 +8,7 @@ import {
   processVPRequest,
   handleSessionCreation,
   createErrorResponse,
-} from "../utils/routeUtils.js";
+} from "../../utils/routeUtils.js";
 
 const mdlRouter = express.Router();
 
@@ -98,7 +98,7 @@ mdlRouter
       }
 
       // Check if session exists, create new one if not
-      const { getVPSession } = await import("../services/cacheServiceRedis.js");
+      const { getVPSession } = await import("../../services/cacheServiceRedis.js");
       let storedSession = await getVPSession(sessionId);
       if (!storedSession) {
         console.log(`No session found for UUID: ${sessionId}`);
@@ -135,7 +135,7 @@ mdlRouter.get("/VPrequest/dcapi/:id", async (req, res) => {
   try {
     const sessionId = req.params.id;
     const responseMode = "dc_api.jwt";
-    const { generateNonce, storeVPSessionData, getSDsFromPresentationDef } = await import("../utils/routeUtils.js");
+    const { generateNonce, storeVPSessionData, getSDsFromPresentationDef } = await import("../../utils/routeUtils.js");
     const nonce = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
     const state = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
 

@@ -11,7 +11,7 @@ import {
   processVPRequest,
   createTransactionData,
   createErrorResponse,
-} from "../utils/routeUtils.js";
+} from "../../utils/routeUtils.js";
 
 const didJwkRouter = express.Router();
 

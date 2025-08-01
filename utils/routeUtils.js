@@ -1,15 +1,82 @@
+import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import { generateNonce, buildVpRequestJWT } from "./cryptoUtils.js";
-import { storeVPSession, getVPSession } from "../services/cacheServiceRedis.js";
 import { getSDsFromPresentationDef } from "./vpHeplers.js";
-import fs from "fs";
-import base64url from "base64url";
+import { storeVPSession, getVPSession } from "../services/cacheServiceRedis.js";
 import { createPublicKey } from "crypto";
+import base64url from "base64url";
 
-// Configuration constants
+// ============================================================================
+// SHARED CONSTANTS
+// ============================================================================
+
+export const SERVER_URL = process.env.SERVER_URL || "http://localhost:3000";
+export const PROXY_PATH = process.env.PROXY_PATH || null;
+
+export const DEFAULT_CREDENTIAL_TYPE = "VerifiablePortableDocumentA2SDJWT";
+export const DEFAULT_SIGNATURE_TYPE = "jwt";
+export const DEFAULT_CLIENT_ID_SCHEME = "redirect_uri";
+export const DEFAULT_REDIRECT_URI = "openid4vp://";
+
+export const QR_CONFIG = {
+  type: "png",
+  ec_level: "H",
+  size: 10,
+  margin: 10,
+};
+
+export const CLIENT_METADATA = {
+  client_name: "UAegean EWC Verifier",
+  logo_uri: "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
+  location: "Greece",
+  cover_uri: "string",
+  description: "EWC pilot case verification",
+  vp_formats: {
+    "vc+sd-jwt": {
+      "sd-jwt_alg_values": ["ES256", "ES384"],
+      "kb-jwt_alg_values": ["ES256", "ES384"],
+    },
+  },
+};
+
+export const TX_CODE_CONFIG = {
+  length: 4,
+  input_mode: "numeric",
+  description: "Please provide the one-time code that was sent via e-mail or offline",
+};
+
+export const URL_SCHEMES = {
+  STANDARD: "openid-credential-offer://",
+  HAIP: "haip://",
+  OPENID4VP: "openid4vp://",
+};
+
+export const ERROR_MESSAGES = {
+  // Common errors
+  SESSION_CREATION_FAILED: "Failed to create session",
+  QR_GENERATION_FAILED: "Failed to generate QR code",
+  INVALID_SESSION_ID: "Invalid session ID",
+  INVALID_CREDENTIAL_TYPE: "Invalid credential type",
+  STORAGE_ERROR: "Storage operation failed",
+  QR_ENCODING_ERROR: "QR code encoding failed",
+  CRYPTO_KEY_LOAD_ERROR: "Failed to load cryptographic keys",
+  
+  // Code flow specific errors
+  ITB_SESSION_EXPIRED: "ITB session expired",
+  INVALID_RESPONSE_TYPE: "Invalid response_type",
+  NO_CREDENTIALS_REQUESTED: "no credentials requested",
+  PARSE_AUTHORIZATION_DETAILS_ERROR: "error parsing authorization details",
+  MISSING_RESPONSE_TYPE: "authorizationDetails missing response_type",
+  MISSING_CODE_CHALLENGE: "authorizationDetails missing code_challenge",
+  PAR_REQUEST_NOT_FOUND: "ERROR: request_uri present in authorization endpoint, but no par request cached for request_uri",
+  ISSUANCE_SESSION_NOT_FOUND: "issuance session not found",
+  NO_JWT_PRESENTED: "no jwt presented",
+};
+
+// Configuration constants for x509 routes
 export const CONFIG = {
   SERVER_URL: process.env.SERVER_URL || "http://localhost:3000",
   CLIENT_ID: "x509_san_dns:dss.aegean.gr",
@@ -101,6 +168,384 @@ export const DEFAULT_MDL_DCQL_QUERY = {
   ],
 };
 
+// ============================================================================
+// CRYPTOGRAPHIC UTILITIES
+// ============================================================================
+
+/**
+ * Load cryptographic keys from files
+ * @returns {Object} Object containing privateKey and publicKeyPem
+ */
+export const loadCryptographicKeys = () => {
+  try {
+    const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
+    const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
+    return { privateKey, publicKeyPem };
+  } catch (error) {
+    console.error("Error loading cryptographic keys:", error);
+    throw new Error(ERROR_MESSAGES.CRYPTO_KEY_LOAD_ERROR);
+  }
+};
+
+/**
+ * Load presentation definition from file
+ * @returns {Object} Presentation definition object
+ */
+export const loadPresentationDefinition = () => {
+  return JSON.parse(fs.readFileSync("./data/presentation_definition_sdjwt.json", "utf-8"));
+};
+
+/**
+ * Load private key from file
+ * @returns {string} Private key content
+ */
+export const loadPrivateKey = () => {
+  return fs.readFileSync("./didjwks/did_private_pkcs8.key", "utf8");
+};
+
+// ============================================================================
+// PARAMETER EXTRACTION UTILITIES
+// ============================================================================
+
+/**
+ * Extract session ID from request with fallback to UUID
+ * @param {Object} req - Express request object
+ * @returns {string} Session ID
+ */
+export const getSessionId = (req) => {
+  return req.query.sessionId || uuidv4();
+};
+
+/**
+ * Extract credential type from request with default fallback
+ * @param {Object} req - Express request object
+ * @returns {string} Credential type
+ */
+export const getCredentialType = (req) => {
+  return req.query.credentialType || req.query.type || DEFAULT_CREDENTIAL_TYPE;
+};
+
+/**
+ * Extract signature type from request with default fallback
+ * @param {Object} req - Express request object
+ * @returns {string} Signature type
+ */
+export const getSignatureType = (req) => {
+  return req.query.signatureType || DEFAULT_SIGNATURE_TYPE;
+};
+
+/**
+ * Extract client ID scheme from request with default fallback
+ * @param {Object} req - Express request object
+ * @returns {string} Client ID scheme
+ */
+export const getClientIdScheme = (req) => {
+  return req.query.client_id_scheme || DEFAULT_CLIENT_ID_SCHEME;
+};
+
+// ============================================================================
+// SESSION MANAGEMENT UTILITIES
+// ============================================================================
+
+/**
+ * Create base session object with common properties
+ * @param {string} flowType - Type of flow (pre-auth, code, etc.)
+ * @param {boolean} isHaip - Whether this is a HAIP flow
+ * @param {string} signatureType - Signature type
+ * @param {Object} additionalProps - Additional properties to add
+ * @returns {Object} Base session object
+ */
+export const createBaseSession = (flowType = "pre-auth", isHaip = false, signatureType = null, additionalProps = {}) => {
+  const session = {
+    status: "pending",
+    flowType,
+    isHaip,
+    ...additionalProps
+  };
+
+  if (signatureType) {
+    session.signatureType = signatureType;
+  }
+
+  return session;
+};
+
+/**
+ * Create session with credential payload
+ * @param {Object} credentialPayload - Credential payload data
+ * @param {boolean} isHaip - Whether this is a HAIP flow
+ * @returns {Object} Session object with credential payload
+ */
+export const createSessionWithPayload = (credentialPayload, isHaip = true) => {
+  return {
+    ...createBaseSession("pre-auth", isHaip),
+    credentialPayload
+  };
+};
+
+/**
+ * Create code flow session object
+ * @param {string} client_id_scheme - Client ID scheme
+ * @param {string} flowType - Flow type
+ * @param {boolean} isDynamic - Whether this is a dynamic flow
+ * @param {boolean} isDeferred - Whether this is a deferred flow
+ * @param {string} signatureType - Signature type
+ * @returns {Object} Code flow session object
+ */
+export const createCodeFlowSession = (client_id_scheme, flowType, isDynamic = false, isDeferred = false, signatureType = null) => {
+  const session = {
+    walletSession: null,
+    requests: null,
+    results: null,
+    status: "pending",
+    client_id_scheme: client_id_scheme,
+    flowType: flowType,
+  };
+
+  if (isDynamic) session.isDynamic = true;
+  if (isDeferred) session.isDeferred = true;
+  if (signatureType) session.signatureType = signatureType;
+
+  return session;
+};
+
+// ============================================================================
+// QR CODE AND URL GENERATION UTILITIES
+// ============================================================================
+
+/**
+ * Generate QR code from credential offer
+ * @param {string} credentialOffer - Credential offer string
+ * @returns {Promise<string>} Base64 encoded QR code
+ */
+export const generateQRCode = async (credentialOffer) => {
+  try {
+    const code = qr.image(credentialOffer, QR_CONFIG);
+    const mediaType = "PNG";
+    const encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+    return encodedQR;
+  } catch (error) {
+    console.error("QR code generation error:", error);
+    throw new Error(ERROR_MESSAGES.QR_GENERATION_FAILED);
+  }
+};
+
+/**
+ * Build credential offer URL with parameters
+ * @param {string} sessionId - Session ID
+ * @param {string} credentialType - Credential type
+ * @param {string} endpointPath - Endpoint path
+ * @param {string} urlScheme - URL scheme to use
+ * @param {Object} additionalParams - Additional query parameters
+ * @returns {string} Encoded credential offer URL
+ */
+export const buildCredentialOfferUrl = (sessionId, credentialType, endpointPath, urlScheme = URL_SCHEMES.STANDARD, additionalParams = {}) => {
+  const params = new URLSearchParams();
+  params.append('type', credentialType);
+  
+  // Add additional parameters
+  Object.entries(additionalParams).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      params.append(key, value);
+    }
+  });
+  
+  const queryString = params.toString();
+  const fullUrl = `${SERVER_URL}${endpointPath}/${sessionId}${queryString ? `?${queryString}` : ''}`;
+  
+  return encodeURIComponent(fullUrl);
+};
+
+/**
+ * Create credential offer response with QR code
+ * @param {string} credentialOffer - Credential offer string
+ * @param {string} sessionId - Session ID
+ * @returns {Promise<Object>} Response object with QR code and deep link
+ */
+export const createCredentialOfferResponse = async (credentialOffer, sessionId) => {
+  try {
+    const qr = await generateQRCode(credentialOffer);
+    return {
+      qr,
+      deepLink: credentialOffer,
+      sessionId,
+    };
+  } catch (error) {
+    console.error("Credential offer response creation error:", error);
+    throw error;
+  }
+};
+
+/**
+ * Create credential offer configuration object
+ * @param {string} credentialType - Credential type
+ * @param {string} sessionId - Session ID
+ * @param {boolean} includeTxCode - Whether to include transaction code
+ * @param {string} grantType - Grant type to use
+ * @returns {Object} Credential offer configuration
+ */
+export const createCredentialOfferConfig = (credentialType, sessionId, includeTxCode = false, grantType = "urn:ietf:params:oauth:grant-type:pre-authorized_code") => {
+  const config = {
+    credential_issuer: SERVER_URL,
+    credential_configuration_ids: [credentialType],
+    grants: {
+      [grantType]: {},
+    },
+  };
+
+  // For authorization code flow, use issuer_state
+  if (grantType === "authorization_code") {
+    config.grants[grantType].issuer_state = sessionId;
+  } else {
+    // For pre-authorized code flow, use pre-authorized_code
+    config.grants[grantType]["pre-authorized_code"] = sessionId;
+  }
+
+  if (includeTxCode) {
+    config.grants[grantType].tx_code = TX_CODE_CONFIG;
+  }
+
+  return config;
+};
+
+/**
+ * Build code flow credential offer URL
+ * @param {string} uuid - Session UUID
+ * @param {string} credentialType - Credential type
+ * @param {string} client_id_scheme - Client ID scheme
+ * @param {boolean} includeCredentialType - Whether to include credential type in URL
+ * @returns {string} Encoded credential offer URL
+ */
+export const buildCodeFlowCredentialOfferUrl = (uuid, credentialType, client_id_scheme, includeCredentialType = true) => {
+  const baseUrl = `${SERVER_URL}/credential-offer-code-sd-jwt/${uuid}`;
+  const params = new URLSearchParams();
+  
+  if (includeCredentialType) {
+    params.append('credentialType', credentialType);
+  }
+  params.append('scheme', client_id_scheme);
+  
+  const queryString = params.toString();
+  const fullUrl = queryString ? `${baseUrl}?${queryString}` : baseUrl;
+  
+  return encodeURIComponent(fullUrl);
+};
+
+/**
+ * Create code flow credential offer response
+ * @param {string} uuid - Session UUID
+ * @param {string} credentialType - Credential type
+ * @param {string} client_id_scheme - Client ID scheme
+ * @param {boolean} includeCredentialType - Whether to include credential type in URL
+ * @returns {string} Credential offer string
+ */
+export const createCodeFlowCredentialOfferResponse = (uuid, credentialType, client_id_scheme, includeCredentialType = true) => {
+  const encodedCredentialOfferUri = buildCodeFlowCredentialOfferUrl(uuid, credentialType, client_id_scheme, includeCredentialType);
+  const credentialOffer = `openid-credential-offer://?credential_offer_uri=${encodedCredentialOfferUri}`;
+  return credentialOffer;
+};
+
+// ============================================================================
+// DID UTILITIES
+// ============================================================================
+
+/**
+ * Build DID controller string
+ * @returns {string} DID controller string
+ */
+export const buildDidController = () => {
+  let controller = SERVER_URL;
+  if (PROXY_PATH) {
+    controller = SERVER_URL.replace("/" + PROXY_PATH, "") + ":" + PROXY_PATH;
+  }
+  return controller.replace("https://", "");
+};
+
+// ============================================================================
+// ERROR HANDLING UTILITIES
+// ============================================================================
+
+/**
+ * Create standardized error response
+ * @param {string} error - Error code
+ * @param {string} description - Error description
+ * @param {number} status - HTTP status code
+ * @returns {Object} Standardized error response
+ */
+export const createErrorResponse = (error, description, status = 500) => {
+  return {
+    status,
+    body: {
+      error: error || "server_error",
+      error_description: description || "An unexpected error occurred"
+    }
+  };
+};
+
+/**
+ * Handle route errors consistently
+ * @param {Error} error - Error object
+ * @param {string} context - Error context for logging
+ * @param {Object} res - Express response object
+ */
+export const handleRouteError = (error, context, res) => {
+  console.error(`${context} error:`, error);
+  const errorResponse = createErrorResponse("server_error", error.message);
+  res.status(errorResponse.status).json(errorResponse.body);
+};
+
+// ============================================================================
+// VALIDATION UTILITIES
+// ============================================================================
+
+/**
+ * Validate session ID
+ * @param {string} sessionId - Session ID to validate
+ * @returns {boolean} Whether session ID is valid
+ */
+export const isValidSessionId = (sessionId) => {
+  return sessionId && typeof sessionId === 'string' && sessionId.trim().length > 0;
+};
+
+/**
+ * Validate credential payload
+ * @param {Object} payload - Credential payload to validate
+ * @returns {boolean} Whether payload is valid
+ */
+export const isValidCredentialPayload = (payload) => {
+  return payload && typeof payload === 'object' && Object.keys(payload).length > 0;
+};
+
+// ============================================================================
+// RESPONSE UTILITIES
+// ============================================================================
+
+/**
+ * Send standardized success response
+ * @param {Object} res - Express response object
+ * @param {Object} data - Response data
+ * @param {number} status - HTTP status code
+ */
+export const sendSuccessResponse = (res, data, status = 200) => {
+  res.status(status).json(data);
+};
+
+/**
+ * Send standardized error response
+ * @param {Object} res - Express response object
+ * @param {string} error - Error code
+ * @param {string} description - Error description
+ * @param {number} status - HTTP status code
+ */
+export const sendErrorResponse = (res, error, description, status = 500) => {
+  const errorResponse = createErrorResponse(error, description, status);
+  res.status(errorResponse.status).json(errorResponse.body);
+};
+
+// ============================================================================
+// X509 ROUTES UTILITIES
+// ============================================================================
+
 /**
  * Load configuration files safely
  * @param {string} presentationDefPath - Path to presentation definition file
@@ -131,139 +576,6 @@ export function loadConfigurationFiles(presentationDefPath, clientMetadataPath, 
     console.error("Failed to load configuration files:", error.message);
     throw new Error(CONFIG.ERROR_MESSAGES.FILE_READ_ERROR);
   }
-}
-
-/**
- * Generate DID JWK identifier from private key
- * @param {string} privateKey - The private key in PEM format
- * @returns {string} - The DID JWK identifier
- */
-export function generateDidJwkIdentifier(privateKey) {
-  try {
-    const publicKey = createPublicKey(privateKey);
-    const jwk = publicKey.export({ format: 'jwk' });
-    return `did:jwk:${base64url(JSON.stringify(jwk))}`;
-  } catch (error) {
-    console.error("Failed to generate DID JWK identifier:", error.message);
-    throw new Error(CONFIG.ERROR_MESSAGES.JWK_GENERATION_ERROR);
-  }
-}
-
-/**
- * Create DID controller from server URL
- * @param {string} serverURL - The server URL
- * @returns {string} - The DID controller
- */
-export function createDidController(serverURL) {
-  let controller = serverURL;
-  if (process.env.PROXY_PATH) {
-    controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
-  }
-  controller = controller.replace("https://", "");
-  return controller;
-}
-
-/**
- * Generate DID-based client ID and key ID
- * @param {string} serverURL - The server URL
- * @returns {Object} - Object containing client_id and kid
- */
-export function generateDidIdentifiers(serverURL) {
-  const controller = createDidController(serverURL);
-  const client_id = `did:web:${controller}`;
-  const kid = `did:web:${controller}#keys-1`;
-  return { client_id, kid };
-}
-
-/**
- * Generate DID JWK identifiers
- * @param {string} didJwkIdentifier - The DID JWK identifier
- * @returns {Object} - Object containing client_id and kid
- */
-export function generateDidJwkIdentifiers(didJwkIdentifier) {
-  const client_id = didJwkIdentifier;
-  const kid = `${didJwkIdentifier}#0`; // did:jwk uses #0 as default key ID
-  return { client_id, kid };
-}
-
-/**
- * Generate a QR code from a string and return it as a data URI
- * @param {string} data - The data to encode in the QR code
- * @returns {Promise<string>} - The QR code as a data URI
- */
-export async function generateQRCode(data) {
-  try {
-    const code = qr.image(data, CONFIG.QR_CONFIG);
-    const encodedQR = imageDataURI.encode(await streamToBuffer(code), CONFIG.MEDIA_TYPE);
-    return encodedQR;
-  } catch (error) {
-    console.error("QR code generation failed:", error.message);
-    throw new Error(CONFIG.ERROR_MESSAGES.QR_GENERATION_ERROR);
-  }
-}
-
-/**
- * Create an OpenID4VP request URL
- * @param {string} requestUri - The request URI
- * @param {string} clientId - The client ID
- * @param {boolean} usePostMethod - Whether to use POST method
- * @returns {string} - The OpenID4VP request URL
- */
-export function createOpenID4VPRequestUrl(requestUri, clientId, usePostMethod = false) {
-  const baseUrl = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&client_id=${encodeURIComponent(clientId)}`;
-  return usePostMethod ? `${baseUrl}&request_uri_method=post` : baseUrl;
-}
-
-/**
- * Store VP session data
- * @param {string} sessionId - The session ID
- * @param {Object} sessionData - The session data to store
- * @returns {Promise<void>}
- */
-export async function storeVPSessionData(sessionId, sessionData) {
-  try {
-    await storeVPSession(sessionId, {
-      uuid: sessionId,
-      status: CONFIG.SESSION_STATUS.PENDING,
-      claims: null,
-      ...sessionData,
-    });
-  } catch (error) {
-    console.error("Failed to store VP session:", error.message);
-    throw new Error(CONFIG.ERROR_MESSAGES.SESSION_STORE_ERROR);
-  }
-}
-
-/**
- * Create a standard VP request response
- * @param {string} qrCode - The QR code data URI
- * @param {string} deepLink - The deep link URL
- * @param {string} sessionId - The session ID
- * @returns {Object} - The response object
- */
-export function createVPRequestResponse(qrCode, deepLink, sessionId) {
-  return {
-    qr: qrCode,
-    deepLink,
-    sessionId,
-  };
-}
-
-/**
- * Create transaction data object with credential IDs
- * @param {Object} presentationDefinition - The presentation definition
- * @returns {Object} - The transaction data object
- */
-export function createTransactionData(presentationDefinition) {
-  const credentialIds = presentationDefinition.input_descriptors.map(
-    (descriptor) => descriptor.id
-  );
-  return {
-    ...DEFAULT_TRANSACTION_DATA,
-    credential_ids: credentialIds,
-    timestamp: new Date().toISOString(),
-    transaction_id: uuidv4(),
-  };
 }
 
 /**
@@ -395,6 +707,70 @@ export async function processVPRequest(params) {
 }
 
 /**
+ * Create transaction data object with credential IDs
+ * @param {Object} presentationDefinition - The presentation definition
+ * @returns {Object} - The transaction data object
+ */
+export function createTransactionData(presentationDefinition) {
+  const credentialIds = presentationDefinition.input_descriptors.map(
+    (descriptor) => descriptor.id
+  );
+  return {
+    ...DEFAULT_TRANSACTION_DATA,
+    credential_ids: credentialIds,
+    timestamp: new Date().toISOString(),
+    transaction_id: uuidv4(),
+  };
+}
+
+/**
+ * Create an OpenID4VP request URL
+ * @param {string} requestUri - The request URI
+ * @param {string} clientId - The client ID
+ * @param {boolean} usePostMethod - Whether to use POST method
+ * @returns {string} - The OpenID4VP request URL
+ */
+export function createOpenID4VPRequestUrl(requestUri, clientId, usePostMethod = false) {
+  const baseUrl = `openid4vp://?request_uri=${encodeURIComponent(requestUri)}&client_id=${encodeURIComponent(clientId)}`;
+  return usePostMethod ? `${baseUrl}&request_uri_method=post` : baseUrl;
+}
+
+/**
+ * Store VP session data
+ * @param {string} sessionId - The session ID
+ * @param {Object} sessionData - The session data to store
+ * @returns {Promise<void>}
+ */
+export async function storeVPSessionData(sessionId, sessionData) {
+  try {
+    await storeVPSession(sessionId, {
+      uuid: sessionId,
+      status: CONFIG.SESSION_STATUS.PENDING,
+      claims: null,
+      ...sessionData,
+    });
+  } catch (error) {
+    console.error("Failed to store VP session:", error.message);
+    throw new Error(CONFIG.ERROR_MESSAGES.SESSION_STORE_ERROR);
+  }
+}
+
+/**
+ * Create a standard VP request response
+ * @param {string} qrCode - The QR code data URI
+ * @param {string} deepLink - The deep link URL
+ * @param {string} sessionId - The session ID
+ * @returns {Object} - The response object
+ */
+export function createVPRequestResponse(qrCode, deepLink, sessionId) {
+  return {
+    qr: qrCode,
+    deepLink,
+    sessionId,
+  };
+}
+
+/**
  * Handle session creation for GET requests when no session exists
  * @param {string} sessionId - The session ID
  * @param {Object} presentationDefinition - The presentation definition
@@ -412,17 +788,59 @@ export async function handleSessionCreation(sessionId, presentationDefinition, r
   });
 }
 
-// Re-export functions for convenience
-export { generateNonce } from "./cryptoUtils.js";
-export { getSDsFromPresentationDef } from "./vpHeplers.js";
+// ============================================================================
+// DID UTILITIES
+// ============================================================================
 
 /**
- * Create error response handler
- * @param {Error} error - The error object
- * @param {string} context - The context where the error occurred
- * @returns {Object} - The error response object
+ * Generate DID JWK identifier from private key
+ * @param {string} privateKey - The private key in PEM format
+ * @returns {string} - The DID JWK identifier
  */
-export function createErrorResponse(error, context) {
-  console.error(`Error in ${context}:`, error.message);
-  return { error: error.message };
+export function generateDidJwkIdentifier(privateKey) {
+  try {
+    const publicKey = createPublicKey(privateKey);
+    const jwk = publicKey.export({ format: 'jwk' });
+    return `did:jwk:${base64url(JSON.stringify(jwk))}`;
+  } catch (error) {
+    console.error("Failed to generate DID JWK identifier:", error.message);
+    throw new Error(CONFIG.ERROR_MESSAGES.JWK_GENERATION_ERROR);
+  }
+}
+
+/**
+ * Create DID controller from server URL
+ * @param {string} serverURL - The server URL
+ * @returns {string} - The DID controller
+ */
+export function createDidController(serverURL) {
+  let controller = serverURL;
+  if (process.env.PROXY_PATH) {
+    controller = serverURL.replace("/" + process.env.PROXY_PATH, "") + ":" + process.env.PROXY_PATH;
+  }
+  controller = controller.replace("https://", "");
+  return controller;
+}
+
+/**
+ * Generate DID-based client ID and key ID
+ * @param {string} serverURL - The server URL
+ * @returns {Object} - Object containing client_id and kid
+ */
+export function generateDidIdentifiers(serverURL) {
+  const controller = createDidController(serverURL);
+  const client_id = `did:web:${controller}`;
+  const kid = `did:web:${controller}#keys-1`;
+  return { client_id, kid };
+}
+
+/**
+ * Generate DID JWK identifiers
+ * @param {string} didJwkIdentifier - The DID JWK identifier
+ * @returns {Object} - Object containing client_id and kid
+ */
+export function generateDidJwkIdentifiers(didJwkIdentifier) {
+  const client_id = didJwkIdentifier;
+  const kid = `${didJwkIdentifier}#0`; // did:jwk uses #0 as default key ID
+  return { client_id, kid };
 } 

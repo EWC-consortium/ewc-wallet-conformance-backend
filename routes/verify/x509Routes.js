@@ -5,42 +5,39 @@ import {
   DEFAULT_DCQL_QUERY,
   DEFAULT_TRANSACTION_DATA,
   loadConfigurationFiles,
-  generateDidIdentifiers,
   generateVPRequest,
   processVPRequest,
   createTransactionData,
   createErrorResponse,
-} from "../utils/routeUtils.js";
+} from "../../utils/routeUtils.js";
 
-const didRouter = express.Router();
+const x509Router = express.Router();
 
 // Load configuration files
-const { presentationDefinition, clientMetadata, privateKey } = loadConfigurationFiles(
+const { presentationDefinition, clientMetadata } = loadConfigurationFiles(
   "./data/presentation_definition_pid.json",
-  "./data/verifier-config.json",
-  "./didjwks/did_private_pkcs8.key"
+  "./data/verifier-config.json"
 );
 
 /**
  * Generate VP request with presentation definition
  */
-didRouter.get("/generateVPRequest", async (req, res) => {
+x509Router.get("/generateVPRequest", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
-    const { client_id, kid } = generateDidIdentifiers(CONFIG.SERVER_URL);
 
     const result = await generateVPRequest({
       sessionId,
       responseMode,
       presentationDefinition,
-      clientId: client_id,
-      privateKey,
+      clientId: CONFIG.CLIENT_ID,
+      privateKey: null,
       clientMetadata,
-      kid,
+      kid: null,
       serverURL: CONFIG.SERVER_URL,
       usePostMethod: true,
-      routePath: "/did/VPrequest",
+      routePath: "/x509/x509VPrequest",
     });
 
     res.json(result);
@@ -53,28 +50,27 @@ didRouter.get("/generateVPRequest", async (req, res) => {
 /**
  * Generate VP request for GET method
  */
-didRouter.get("/generateVPRequestGET", async (req, res) => {
+x509Router.get("/generateVPRequestGet", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
-    const { client_id, kid } = generateDidIdentifiers(CONFIG.SERVER_URL);
 
     const result = await generateVPRequest({
       sessionId,
       responseMode,
       presentationDefinition,
-      clientId: client_id,
-      privateKey,
+      clientId: CONFIG.CLIENT_ID,
+      privateKey: null,
       clientMetadata,
-      kid,
+      kid: null,
       serverURL: CONFIG.SERVER_URL,
       usePostMethod: false,
-      routePath: "/did/VPrequest",
+      routePath: "/x509/x509VPrequest",
     });
 
     res.json(result);
   } catch (error) {
-    const errorResponse = createErrorResponse(error, "generateVPRequestGET");
+    const errorResponse = createErrorResponse(error, "generateVPRequestGet");
     res.status(500).json(errorResponse);
   }
 });
@@ -82,24 +78,23 @@ didRouter.get("/generateVPRequestGET", async (req, res) => {
 /**
  * Generate VP request with DCQL query
  */
-didRouter.get("/generateVPRequestDCQL", async (req, res) => {
+x509Router.get("/generateVPRequestDCQL", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
-    const { client_id, kid } = generateDidIdentifiers(CONFIG.SERVER_URL);
 
     const result = await generateVPRequest({
       sessionId,
       responseMode,
       presentationDefinition: null,
-      clientId: client_id,
-      privateKey,
+      clientId: CONFIG.CLIENT_ID,
+      privateKey: null,
       clientMetadata,
-      kid,
+      kid: null,
       serverURL: CONFIG.SERVER_URL,
       dcqlQuery: DEFAULT_DCQL_QUERY,
       usePostMethod: true,
-      routePath: "/did/VPrequest",
+      routePath: "/x509/x509VPrequest",
     });
 
     res.json(result);
@@ -110,13 +105,41 @@ didRouter.get("/generateVPRequestDCQL", async (req, res) => {
 });
 
 /**
- * Generate VP request with transaction data
+ * Generate VP request with DCQL query for GET method
  */
-didRouter.get("/generateVPRequestTransaction", async (req, res) => {
+x509Router.get("/generateVPRequestDCQLGET", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
-    const { client_id, kid } = generateDidIdentifiers(CONFIG.SERVER_URL);
+
+    const result = await generateVPRequest({
+      sessionId,
+      responseMode,
+      presentationDefinition: null,
+      clientId: CONFIG.CLIENT_ID,
+      privateKey: null,
+      clientMetadata,
+      kid: null,
+      serverURL: CONFIG.SERVER_URL,
+      dcqlQuery: DEFAULT_DCQL_QUERY,
+      usePostMethod: false,
+      routePath: "/x509/x509VPrequest",
+    });
+
+    res.json(result);
+  } catch (error) {
+    const errorResponse = createErrorResponse(error, "generateVPRequestDCQLGET");
+    res.status(500).json(errorResponse);
+  }
+});
+
+/**
+ * Generate VP request with transaction data
+ */
+x509Router.get("/generateVPRequestTransaction", async (req, res) => {
+  try {
+    const sessionId = req.query.sessionId || uuidv4();
+    const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
 
     const transactionDataObj = createTransactionData(presentationDefinition);
     const base64UrlEncodedTxData = Buffer.from(JSON.stringify(transactionDataObj))
@@ -126,14 +149,14 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
       sessionId,
       responseMode,
       presentationDefinition,
-      clientId: client_id,
-      privateKey,
+      clientId: CONFIG.CLIENT_ID,
+      privateKey: null,
       clientMetadata,
-      kid,
+      kid: null,
       serverURL: CONFIG.SERVER_URL,
       transactionData: base64UrlEncodedTxData,
       usePostMethod: true,
-      routePath: "/did/VPrequest",
+      routePath: "/x509/x509VPrequest",
     });
 
     res.json(result);
@@ -146,12 +169,11 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
 /**
  * Request URI endpoint (handles both POST and GET)
  */
-didRouter
-  .route("/VPrequest/:id")
-  .post(async (req, res) => {
+x509Router
+  .route("/x509VPrequest/:id")
+  .post(express.urlencoded({ extended: true }), async (req, res) => {
     try {
       const sessionId = req.params.id;
-      const { client_id, kid } = generateDidIdentifiers(CONFIG.SERVER_URL);
       const { wallet_nonce: walletNonce, wallet_metadata: walletMetadata } = req.body;
 
       if (walletNonce || walletMetadata) {
@@ -162,9 +184,9 @@ didRouter
         sessionId,
         clientMetadata,
         serverURL: CONFIG.SERVER_URL,
-        clientId: client_id,
-        privateKey,
-        kid,
+        clientId: CONFIG.CLIENT_ID,
+        privateKey: null,
+        kid: null,
         walletNonce,
         walletMetadata,
       });
@@ -175,22 +197,20 @@ didRouter
 
       res.type(CONFIG.CONTENT_TYPE).send(result.jwt);
     } catch (error) {
-      const errorResponse = createErrorResponse(error, "POST /VPrequest/:id");
+      const errorResponse = createErrorResponse(error, "POST /x509VPrequest/:id");
       res.status(500).json(errorResponse);
     }
   })
   .get(async (req, res) => {
     try {
       const sessionId = req.params.id;
-      const { client_id, kid } = generateDidIdentifiers(CONFIG.SERVER_URL);
-
       const result = await processVPRequest({
         sessionId,
         clientMetadata,
         serverURL: CONFIG.SERVER_URL,
-        clientId: client_id,
-        privateKey,
-        kid,
+        clientId: CONFIG.CLIENT_ID,
+        privateKey: null,
+        kid: null,
       });
 
       if (result.error) {
@@ -199,9 +219,9 @@ didRouter
 
       res.type(CONFIG.CONTENT_TYPE).send(result.jwt);
     } catch (error) {
-      const errorResponse = createErrorResponse(error, "GET /VPrequest/:id");
+      const errorResponse = createErrorResponse(error, "GET /x509VPrequest/:id");
       res.status(500).json(errorResponse);
     }
   });
 
-export default didRouter; 
+export default x509Router; 

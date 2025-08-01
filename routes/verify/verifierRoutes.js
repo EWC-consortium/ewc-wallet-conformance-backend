@@ -7,29 +7,29 @@ import {
   decryptJWE,
   buildVpRequestJSON,
   buildVpRequestJWT,
-} from "../utils/cryptoUtils.js";
+} from "../../utils/cryptoUtils.js";
 
 import {
   extractClaimsFromRequest,
   hasOnlyAllowedFields,
   getSDsFromPresentationDef,
-} from "../utils/vpHeplers.js";
+} from "../../utils/vpHeplers.js";
 
-import { buildVPbyValue } from "../utils/tokenUtils.js";
+import { buildVPbyValue } from "../../utils/tokenUtils.js";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
 import { digest } from "@sd-jwt/crypto-nodejs";
 import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import jwt from "jsonwebtoken";
-import TimedArray from "../utils/timedArray.js";
+import TimedArray from "../../utils/timedArray.js";
 
-import { getVPSession, storeVPSession } from "../services/cacheServiceRedis.js";
-import redirectUriRouter from "./redirectUriRoutes.js";
+import { getVPSession, storeVPSession } from "../../services/cacheServiceRedis.js";
+import redirectUriRouter from "../redirectUriRoutes.js";
 import x509Router from "./x509Routes.js";
 import didRouter from "./didRoutes.js";
 import didJwkRouter from "./didJwkRoutes.js";
-import { verifyMdlToken, validateMdlClaims } from "../utils/mdlVerification.js";
+import { verifyMdlToken, validateMdlClaims } from "../../utils/mdlVerification.js";
 import base64url from "base64url";
 import { encode as encodeCbor } from 'cbor-x';
 

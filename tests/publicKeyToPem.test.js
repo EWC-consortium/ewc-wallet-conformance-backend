@@ -1,6 +1,6 @@
 import * as jose from "jose";
 import jwt from "jsonwebtoken";
-import { publicKeyToPem } from "../routes/sharedIssuanceFlows.js";
+import { publicKeyToPem } from "../routes/issue/sharedIssuanceFlows.js";
 import { strict as assert } from "assert";
 
 describe("publicKeyToPem", () => {

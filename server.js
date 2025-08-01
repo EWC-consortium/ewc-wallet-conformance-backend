@@ -1,21 +1,20 @@
 // main file
 import express from "express";
-import router from "./routes/preAuthSDjwRoutes.js";
-import verifierRouter from "./routes/verifierRoutes.js";
+import router from "./routes/issue/preAuthSDjwRoutes.js";
+import verifierRouter from "./routes/verify/verifierRoutes.js";
 import metadataRouter from "./routes/metadataroutes.js";
 import codeFlowRouter from "./routes/codeFlowJwtRoutes.js";
-import codeFlowRouterSDJWT from "./routes/codeFlowSdJwtRoutes.js";
+import codeFlowRouterSDJWT from "./routes/issue/codeFlowSdJwtRoutes.js";
 import boardingPassRouter from "./routes/boardingPassRoutes.js";
 import pidRouter from "./routes/pidroutes.js";
 import paymentRouter from "./routes/paymentRoutes.js";
 import passportRouter from "./routes/passportRoutes.js";
 import didWebRouter from "./routes/didweb.js";
 import educationalRouter from "./routes/educationalRoutes.js";
-import sharedRouter from "./routes/sharedIssuanceFlows.js";
+import sharedRouter from "./routes/issue/sharedIssuanceFlows.js";
 import batchRouter from "./routes/batchRequestRoutes.js";
 import receiptRouter from "./routes/receiptsRoutes.js";
-import mdlRouter from "./routes/mdlRoutes.js";
-import x509Router from "./routes/x509Routes.js";
+import mdlRouter from "./routes/verify/mdlRoutes.js";
 import bodyParser from "body-parser"; // Body parser middleware
 
 import * as OpenApiValidator from "express-openapi-validator";
