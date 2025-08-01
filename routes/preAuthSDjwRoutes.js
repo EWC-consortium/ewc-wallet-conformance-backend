@@ -49,7 +49,8 @@ router.get(["/offer-tx-code"], async (req, res) => {
       accessToken: null,
       flowType: "pre-auth",
       isHaip: false,
-      signatureType: signatureType
+      signatureType: signatureType,
+      tx_code: "1234"
     });
   }
   
@@ -242,6 +243,7 @@ router.get(["/haip-offer-tx-code"], async (req, res) => {
       accessToken: null,
       isHaip: true,
       flowType: "pre-auth",
+      tx_code: "1234"
     });
   }
   let encodedCredentialOfferUri = encodeURIComponent(`${serverURL}/haip-credential-offer-tx-code/${uuid}?type=${credentialType}`)

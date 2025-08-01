@@ -100,7 +100,9 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
   //pre-auth code flow
   const preAuthorizedCode = req.body["pre-authorized_code"]; // req.body["pre-authorized_code"]
   const tx_code = req.body["tx_code"];
-  //TODO check tx_code as well
+  
+
+
 
   // check if for this auth session we are issuing a PID credential to validate the WUA and PoP
   if (preAuthorizedCode) {
@@ -112,6 +114,8 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
       console.log(pop);
     }
   }
+
+ 
 
   //code flow
   const grantType = req.body.grant_type;
@@ -135,6 +139,17 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
       console.log("pre-auth code flow");
       let chosenCredentialConfigurationId = null;
       let existingPreAuthSession = await getPreAuthSession(preAuthorizedCode);
+
+
+      if(existingPreAuthSession && existingPreAuthSession.tx_code && existingPreAuthSession.tx_code !== tx_code){
+        return res.status(400).json({
+          error: "invalid_request",
+          error_description:
+            "The wallet provided an invalid 'tx_code' parameter.",
+        });
+      }
+    
+
 
       if (existingPreAuthSession) {
         //Credential Issuers MAY support requesting authorization to issue a Credential using the

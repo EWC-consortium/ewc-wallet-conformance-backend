@@ -4,7 +4,7 @@ import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import { generateNonce } from "../utils/cryptoUtils.js";
-import { buildVpRequestJWT } from "../utils/cryptoUtils.js";
+import { buildVpRequestJWT, filterClientMetadataForResponseMode } from "../utils/cryptoUtils.js";
 import { storeVPSession, getVPSession } from "../services/cacheServiceRedis.js";
 import { getSDsFromPresentationDef } from "../utils/vpHeplers.js";
 import fs from "fs";
@@ -47,12 +47,13 @@ x509Router.get("/generateVPRequest", async (req, res) => {
   // Build and sign the VP request JWT (which will be served at the request_uri)
   // Note: buildVpRequestJWT itself doesn't need request_uri_method. 
   // This parameter is for the initial openid4vp:// URI.
+  const filteredClientMetadata = filterClientMetadataForResponseMode(clientMetadata, responseMode);
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
     presentation_definition_sdJwt,
     null, // privateKey will be loaded in buildVpRequestJWT
-    clientMetadata,
+    filteredClientMetadata,
     null,
     serverURL,
     "vp_token",
@@ -322,12 +323,13 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
   });
 
   // JWT for request_uri
+  const filteredClientMetadata = filterClientMetadataForResponseMode(clientMetadata, responseMode);
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
     presentation_definition, 
     null, 
-    clientMetadata,
+    filteredClientMetadata,
     null, 
     serverURL,
     "vp_token",
@@ -374,7 +376,7 @@ x509Router.route("/x509VPrequest/:id") // Corrected path to match client request
       console.log(`Received from wallet: wallet_nonce=${wallet_nonce}, wallet_metadata=${wallet_metadata}`);
     }
 
-    const result = await generateX509VPRequest(uuid, clientMetadata, serverURL, wallet_nonce, wallet_metadata);
+    const result = await generateX509VPRequest(uuid, clientMetadata, serverURL, wallet_nonce, wallet_metadata, responseMode);
 
     if (result.error) {
       return res.status(result.status).json({ error: result.error });
@@ -387,7 +389,7 @@ x509Router.route("/x509VPrequest/:id") // Corrected path to match client request
   .get(async (req, res) => { // Added GET handler
     console.log("GET request received");
     const uuid = req.params.id;
-    const result = await generateX509VPRequest(uuid, clientMetadata, serverURL);
+    const result = await generateX509VPRequest(uuid, clientMetadata, serverURL, null, null);
    
 
     if (result.error) {
@@ -414,11 +416,12 @@ async function generateX509VPRequest(uuid, clientMetadata, serverURL, wallet_non
   // console.log("wallet_nonce", wallet_nonce);
   // console.log("wallet_metadata", wallet_metadata);
   
+  const filteredClientMetadata = filterClientMetadataForResponseMode(clientMetadata, vpSession.response_mode);
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
     null, // privateKey
-    clientMetadata,
+    filteredClientMetadata,
     null, // kid
     serverURL,
     "vp_token",

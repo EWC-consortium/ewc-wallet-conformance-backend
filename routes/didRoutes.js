@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
-import { generateNonce, buildVpRequestJWT, didKeyToJwks } from "../utils/cryptoUtils.js";
+import { generateNonce, buildVpRequestJWT, didKeyToJwks, filterClientMetadataForResponseMode } from "../utils/cryptoUtils.js";
 import { buildVPbyValue } from "../utils/tokenUtils.js";
 import { getVPSession, storeVPSession } from "../services/cacheServiceRedis.js";
 import fs from "fs";
@@ -111,11 +111,12 @@ didRouter.get("/generateVPRequest", async (req, res) => {
     client_id: client_id
   });
 
+  const filteredClientMetadata = filterClientMetadataForResponseMode(clientMetadata, responseMode);
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
     privateKey,
-    clientMetadata,
+    filteredClientMetadata,
     kid,
     serverURL,
     "vp_token",
@@ -303,11 +304,12 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     client_id: client_id
   });
 
+  const filteredClientMetadata = filterClientMetadataForResponseMode(clientMetadata, responseMode);
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
     privateKey,
-    clientMetadata,
+    filteredClientMetadata,
     kid,
     serverURL,
     "vp_token",
@@ -367,11 +369,12 @@ didRouter.route("/VPrequest/:id")
     const client_id = `decentralized_identifier:did:web:${controller}`;
     const kid = `did:web:${controller}#keys-1`;
 
+    const filteredClientMetadata = filterClientMetadataForResponseMode(clientMetadata, vpSession.response_mode);
     const vpRequestJWT = await buildVpRequestJWT(
       client_id,
       response_uri,
       privateKey,
-      clientMetadata,
+      filteredClientMetadata,
       kid,
       serverURL,
       "vp_token",
@@ -405,11 +408,12 @@ didRouter.route("/VPrequest/:id")
     const client_id = `decentralized_identifier:did:web:${controller}`;
     const kid = `did:web:${controller}#keys-1`;
 
+    const filteredClientMetadata = filterClientMetadataForResponseMode(clientMetadata, vpSession.response_mode);
     const vpRequestJWT = await buildVpRequestJWT(
       client_id,
       response_uri,
       privateKey,
-      clientMetadata,
+      filteredClientMetadata,
       kid,
       serverURL,
       "vp_token",

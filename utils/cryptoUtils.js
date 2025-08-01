@@ -108,6 +108,32 @@ export function buildVpRequestJSON(
   return jwtPayload;
 }
 
+// Helper function to filter client metadata based on response mode
+export function filterClientMetadataForResponseMode(clientMetadata, responseMode) {
+  // Only include encryption parameters for JWT response modes
+  const jwtResponseModes = ["direct_post.jwt", "dc_api.jwt"];
+  
+  if (jwtResponseModes.includes(responseMode)) {
+    // Include all encryption parameters for JWT response modes
+    return clientMetadata;
+  } else {
+    // Remove encryption parameters for non-JWT response modes
+    const filteredMetadata = { ...clientMetadata };
+    
+    // Remove jwks if present
+    if (filteredMetadata.jwks) {
+      delete filteredMetadata.jwks;
+    }
+    
+    // Remove encrypted_response_enc_values_supported if present
+    if (filteredMetadata.encrypted_response_enc_values_supported) {
+      delete filteredMetadata.encrypted_response_enc_values_supported;
+    }
+    
+    return filteredMetadata;
+  }
+}
+
 export async function buildVpRequestJWT(
   client_id,
   redirect_uri,
@@ -129,7 +155,7 @@ export async function buildVpRequestJWT(
   const state = generateNonce(16);
 
   // Validate response_mode
-  const allowedResponseModes = ["direct_post", "direct_post.jwt"];
+  const allowedResponseModes = ["direct_post", "direct_post.jwt", "dc_api.jwt"];
   if (!allowedResponseModes.includes(response_mode)) {
     console.log("response_mode", response_mode);
     throw new Error(`Invalid response_mode. Must be one of: ${allowedResponseModes.join(", ")}`);

@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import qr from "qr-image";
 import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
-import { generateNonce, buildVpRequestJWT } from "../utils/cryptoUtils.js";
+import { generateNonce, buildVpRequestJWT, filterClientMetadataForResponseMode } from "../utils/cryptoUtils.js";
 import { getVPSession, storeVPSession } from "../services/cacheServiceRedis.js";
 import fs from "fs";
 import base64url from "base64url";
@@ -90,11 +90,12 @@ didJwkRouter.get("/generateVPRequest", async (req, res) => {
     client_id: client_id
   });
 
+  const filteredClientMetadata = filterClientMetadataForResponseMode(clientMetadata, responseMode);
   const vpRequestJWT = await buildVpRequestJWT(
     client_id,
     response_uri,
     privateKey,
-    clientMetadata,
+    filteredClientMetadata,
     kid,
     serverURL,
     "vp_token",
@@ -207,11 +208,12 @@ didJwkRouter.route("/VPrequest/:id")
     const client_id = didJwkIdentifier;
     const kid = `${didJwkIdentifier.substring("decentralized_identifier:".length)}#0`; 
 
+    const filteredClientMetadata = filterClientMetadataForResponseMode(clientMetadata, vpSession.response_mode);
     const vpRequestJWT = await buildVpRequestJWT(
       client_id,
       response_uri,
       privateKey,
-      clientMetadata,
+      filteredClientMetadata,
       kid,
       serverURL,
       "vp_token",
@@ -240,11 +242,12 @@ didJwkRouter.route("/VPrequest/:id")
     const client_id = didJwkIdentifier;
     const kid = `${didJwkIdentifier.substring("decentralized_identifier:".length)}#0`; 
 
+    const filteredClientMetadata = filterClientMetadataForResponseMode(clientMetadata, vpSession.response_mode);
     const vpRequestJWT = await buildVpRequestJWT(
       client_id,
       response_uri,
       privateKey,
-      clientMetadata,
+      filteredClientMetadata,
       kid,
       serverURL,
       "vp_token",
