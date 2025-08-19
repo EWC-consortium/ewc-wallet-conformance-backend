@@ -37,12 +37,12 @@ const dcql_query_pid = {
   ]
 };
 
-// DCQL query for JWT VC format
+// DCQL query for VCDM over SD-JWT (vc+sd-jwt)
 const dcql_query_jwt_vc = {
   "credentials": [
     {
       "id": "verifiable_id_card",
-      "format": "dc+sd-jwt",
+      "format": "vc+sd-jwt",
       "meta": {
         "credential_types": [
           "VerifiableCredential",
@@ -154,7 +154,7 @@ didRouter.get("/generateVPRequest", async (req, res) => {
 didRouter.get("/generateVPRequestGET", async (req, res) => {
   const uuid = req.query.sessionId ? req.query.sessionId : uuidv4();
   const responseMode = req.query.response_mode || "direct_post";
-  // New parameter: "dc+sd-jwt" or "jwt_vc_json"
+  // New parameter: "dc+sd-jwt" (SD-JWT VC) or "vc+sd-jwt" (VCDM over SD-JWT)
   const credentialFormat = req.query.credentialFormat || "dc+sd-jwt"; 
   const nonce = generateNonce(16);
 
@@ -188,8 +188,8 @@ didRouter.get("/generateVPRequestGET", async (req, res) => {
   // Determine which DCQL query to use based on credentialFormat
   let dcql_query = null;
   
-  if (credentialFormat === "jwt_vc_json") {
-    // Use DCQL query for JWT VC
+  if (credentialFormat === "vc+sd-jwt" || credentialFormat === "jwt_vc_json") {
+    // Use DCQL query for VCDM over SD-JWT
     dcql_query = dcql_query_jwt_vc;
   } else {
     // Default to DCQL query for dc+sd-jwt

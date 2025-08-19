@@ -83,6 +83,44 @@ const { signer, verifier } = await createSignerVerifierX509(
 
 // *********************************************************************
 
+// Helper to persist a failed status for a session in cache
+async function markSessionFailed(
+  sessionObject,
+  flowType,
+  {
+    codeSessionKey = null,
+    preAuthsessionKey = null,
+    token = null,
+  } = {}
+) {
+  try {
+    if (!sessionObject) return;
+    sessionObject.status = "failed";
+    if (flowType === "code") {
+      let keyToUse = codeSessionKey;
+      if (!keyToUse && token) {
+        try {
+          keyToUse = await getSessionAccessToken(token);
+        } catch (e) {
+          // ignore, fallback below
+        }
+      }
+      if (keyToUse) {
+        await storeCodeFlowSession(keyToUse, sessionObject);
+      } else if (sessionObject.results && sessionObject.results.issuerState) {
+        await storeCodeFlowSession(
+          sessionObject.results.issuerState,
+          sessionObject
+        );
+      }
+    } else if (preAuthsessionKey) {
+      await storePreAuthSession(preAuthsessionKey, sessionObject);
+    }
+  } catch (e) {
+    console.error("Failed to persist failed status for session:", e);
+  }
+}
+
 // *****************************************************************
 // ************* TOKEN ENDPOINTS ***********************************
 // *****************************************************************
@@ -142,6 +180,7 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
 
 
       if(existingPreAuthSession && existingPreAuthSession.tx_code && existingPreAuthSession.tx_code !== tx_code){
+        await markSessionFailed(existingPreAuthSession, "pre-auth", { preAuthsessionKey: preAuthorizedCode });
         return res.status(400).json({
           error: "invalid_request",
           error_description:
@@ -264,6 +303,7 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
             console.log(
               "PKCE verification failed for authorization_code flow."
             );
+            await markSessionFailed(existingCodeSession, "code", { codeSessionKey: issuanceSessionId });
             return res.status(400).json({
               error: "invalid_grant",
               error_description: "PKCE verification failed.",
@@ -336,7 +376,6 @@ sharedRouter.post("/credential", async (req, res) => {
   const token = authHeader && authHeader.split(" ")[1]; // Split "Bearer" and the token
   const requestBody = req.body;
 
-  const proofJwt = requestBody.proof.jwt;
   // const format = requestBody.format; // this is not part of ID2. the format should be fetched form the
 
   //TODO: check if the token is valid and if it is a valid token for this issuer
@@ -346,6 +385,7 @@ sharedRouter.post("/credential", async (req, res) => {
   // Session object retrieval (this logic is similar to what's now in the nonce check)
   const preAuthsessionKey = await getSessionKeyFromAccessToken(token);
   let sessionObject; // This will be the main session object for the rest of the function
+  let codeSessionKey; // Will be populated if this is a code flow session
   if (preAuthsessionKey) {
     sessionObject = await getPreAuthSession(preAuthsessionKey);
     if (!sessionObject)
@@ -353,12 +393,14 @@ sharedRouter.post("/credential", async (req, res) => {
   }
   if (!sessionObject) {
     // If not found in pre-auth, try code flow
-    const codeSessionKey = await getSessionAccessToken(token);
+    codeSessionKey = await getSessionAccessToken(token);
     if (codeSessionKey) {
       sessionObject = await getCodeFlowSession(codeSessionKey);
       flowType = "code";
     }
   }
+
+  // Use global helper to persist failures
 
 
 
@@ -374,6 +416,7 @@ sharedRouter.post("/credential", async (req, res) => {
     console.log(
       "Invalid credential request: Must provide exactly one of credential_identifier or credential_configuration_id"
     );
+    await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
     return res.status(400).json({
       error: "invalid_credential_request",
       error_description:
@@ -393,7 +436,7 @@ sharedRouter.post("/credential", async (req, res) => {
     // Depending on policy, you might allow this and skip specific alg validation or enforce credential_configuration_id for requests needing such validation.
   }
 
-  if (!requestBody.proof || !requestBody.proof.jwt) {
+  if (!requestBody || !requestBody.proof || !requestBody.proof.jwt) {
     /*
        Object containing the proof of possession of the cryptographic key material the issued Credential would be bound to. 
        The proof object is REQUIRED if the proof_types_supported parameter is non-empty and present in the credential_configurations_supported parameter 
@@ -402,11 +445,15 @@ sharedRouter.post("/credential", async (req, res) => {
        This issuer atm only supports jwt proof types
       */
     console.log("NO keybinding info found!!!");
+    await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
     return res.status(400).json({
       error: "invalid_proof",
       error_description: "No proof information found",
     });
   }
+
+  // Safe to read now after guards above
+  const proofJwt = requestBody.proof.jwt;
 
   // New Proof Validation Logic
   if (effectiveConfigurationId) {
@@ -422,6 +469,7 @@ sharedRouter.post("/credential", async (req, res) => {
         console.log(
           `Invalid credential_configuration_id: ${effectiveConfigurationId} not found in issuer metadata.`
         );
+        await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
         return res.status(400).json({
           error: "invalid_credential_request",
           error_description: `Credential configuration ID '${effectiveConfigurationId}' not found.`,
@@ -442,6 +490,7 @@ sharedRouter.post("/credential", async (req, res) => {
 
           if (!decodedProofHeader || !decodedProofHeader.alg) {
             console.log("Proof JWT header or alg is missing.");
+            await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
             return res.status(400).json({
               error: "invalid_proof",
               error_description: "Proof JWT is malformed or missing algorithm.",
@@ -454,6 +503,7 @@ sharedRouter.post("/credential", async (req, res) => {
                 decodedProofHeader.alg
               }. Supported: ${supportedAlgs.join(", ")}`
             );
+            await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
             return res.status(400).json({
               error: "invalid_proof",
               error_description: `Proof JWT uses an unsupported algorithm '${
@@ -487,6 +537,7 @@ sharedRouter.post("/credential", async (req, res) => {
               }
             } catch (jwkError) {
               console.error("Error resolving did:key to JWK:", jwkError);
+              await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
               return res.status(400).json({
                 error: "invalid_proof",
                 error_description:
@@ -507,6 +558,7 @@ sharedRouter.post("/credential", async (req, res) => {
               console.log("Successfully resolved did:jwk to JWK.");
             } catch (error) {
               console.error("Error resolving did:jwk to JWK:", error);
+              await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
               return res.status(400).json({
                 error: "invalid_proof",
                 error_description:
@@ -543,7 +595,15 @@ sharedRouter.post("/credential", async (req, res) => {
               console.log(
                 `Resolving did:web by fetching DID document from: ${didDocUrl}`
               );
-              const response = await fetch(didDocUrl);
+              // Add timeout to avoid hanging requests that can bubble up as 502 from proxy
+              const controllerAbort = new AbortController();
+              const timeoutId = setTimeout(() => controllerAbort.abort(), 5000);
+              let response;
+              try {
+                response = await fetch(didDocUrl, { signal: controllerAbort.signal });
+              } finally {
+                clearTimeout(timeoutId);
+              }
               if (!response.ok) {
                 throw new Error(
                   `Failed to fetch DID document, status: ${response.status}`
@@ -574,6 +634,7 @@ sharedRouter.post("/credential", async (req, res) => {
               );
             } catch (error) {
               console.error("Error resolving did:web:", error);
+              await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
               return res.status(400).json({
                 error: "invalid_proof",
                 error_description: `Failed to resolve public key from proof JWT kid (did:web): ${error.message}`,
@@ -583,6 +644,7 @@ sharedRouter.post("/credential", async (req, res) => {
             console.log(
               "Proof JWT header does not contain jwk or a resolvable DID kid (did:key, did:jwk, did:web)."
             );
+            await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
             return res.status(400).json({
               error: "invalid_proof",
               error_description:
@@ -593,6 +655,7 @@ sharedRouter.post("/credential", async (req, res) => {
           if (!publicKeyForProof) {
             // This case should ideally be caught by the checks above
             console.log("Public key for proof could not be determined.");
+            await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
             return res.status(400).json({
               error: "invalid_proof",
               error_description:
@@ -630,6 +693,7 @@ sharedRouter.post("/credential", async (req, res) => {
           // Verify claims
           if (!proofPayload.iss && flowType == "code") {
             console.log("Proof JWT missing 'iss' claim.");
+            await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
             return res.status(400).json({
               error: "invalid_proof",
               error_description:
@@ -644,6 +708,7 @@ sharedRouter.post("/credential", async (req, res) => {
             console.log(
               `Proof JWT nonce not found in cache or expired: ${proofPayload.nonce}`
             );
+            await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
             return res.status(400).json({
               error: "invalid_proof",
               error_description:
@@ -673,6 +738,7 @@ sharedRouter.post("/credential", async (req, res) => {
       }
     } catch (err) {
       console.error("Error during proof validation:", err);
+      await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
       return res.status(500).json({
         error: "server_error",
         error_description: "An error occurred during proof validation.",
@@ -703,6 +769,7 @@ sharedRouter.post("/credential", async (req, res) => {
     console.error(
       "Session object could not be retrieved after proof validation for credential issuance."
     );
+    await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
     return res.status(500).json({
       error: "server_error",
       error_description: "Session lost after proof validation.",
@@ -742,6 +809,7 @@ sharedRouter.post("/credential", async (req, res) => {
       ];
 
     if (!credConfig) {
+      await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
       return res.status(400).json({
         error: "invalid_credential_request",
         error_description: `Credential configuration ID '${effectiveConfigurationId}' not found.`,
@@ -775,6 +843,7 @@ sharedRouter.post("/credential", async (req, res) => {
       res.json(response);
     } catch (err) {
       console.log(err);
+      await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
       return res.status(400).json({
         error: "credential_request_denied",
         error_description: err.message,

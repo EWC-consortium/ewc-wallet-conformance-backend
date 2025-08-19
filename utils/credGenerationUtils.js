@@ -259,7 +259,7 @@ export async function handleVcSdJwtFormat(
   const expiryDate = new Date(now);
   expiryDate.setMonth(now.getMonth() + 6);
 
-  if (format === "jwt_vc_json") {
+  if (format === "jwt_vc_json" || format === "vc+sd-jwt") {
     console.log("Issuing a jwt_vc format credential");
     const vcPayload = {
       "@context": ["https://www.w3.org/2018/credentials/v1"],

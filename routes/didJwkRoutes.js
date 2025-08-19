@@ -13,7 +13,7 @@ import * as jose from "jose";
 const didJwkRouter = express.Router();
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 
-// DCQL query for PID
+// DCQL query for PID (SD-JWT VC)
 const dcql_query_pid = {
   "credentials": [
     {
@@ -33,6 +33,27 @@ const dcql_query_pid = {
         { "path": ["expiry_date"] },
         { "path": ["issuing_authority"] },
         { "path": ["issuing_country"] }
+      ]
+    }
+  ]
+};
+
+// DCQL query for VCDM over SD-JWT (vc+sd-jwt)
+const dcql_query_jwt_vc = {
+  "credentials": [
+    {
+      "id": "verifiable_id_card",
+      "format": "vc+sd-jwt",
+      "meta": {
+        "credential_types": [
+          "VerifiableCredential",
+          "VerifiableIdCardJwtVc"
+        ]
+      },
+      "claims": [
+        { "path": ["given_name"] },
+        { "path": ["family_name"] },
+        { "path": ["birth_date"] }
       ]
     }
   ]
@@ -157,11 +178,16 @@ didJwkRouter.get("/generateVPRequestGET", async (req, res) => {
       .sign(privateKeyObj);
   const verifier_attestations = [attestationJwt];
 
+  // Allow selecting format via query: credentialFormat=dc+sd-jwt|vc+sd-jwt
+  const credentialFormat = req.query.credentialFormat || "dc+sd-jwt";
+
+  let dcql_query = credentialFormat === "vc+sd-jwt" ? dcql_query_jwt_vc : dcql_query_pid;
+
   storeVPSession(uuid, {
     uuid: uuid,
     status: "pending",
     claims: null,
-    dcql_query: dcql_query_pid,
+    dcql_query: dcql_query,
     nonce: nonce,
     response_mode: responseMode,
     verifier_attestations: verifier_attestations,
