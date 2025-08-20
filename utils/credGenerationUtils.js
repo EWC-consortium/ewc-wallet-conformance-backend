@@ -262,12 +262,12 @@ export async function handleVcSdJwtFormat(
   if (format === "jwt_vc_json" || format === "vc+sd-jwt") {
     console.log("Issuing a jwt_vc format credential");
     const vcPayload = {
-      "@context": ["https://www.w3.org/2018/credentials/v1"],
+      "@context": ["https://www.w3.org/ns/credentials/v2"],
       type: ["VerifiableCredential", vct],
       credentialSubject: credPayload.claims,
       issuer: serverURL,
-      issuanceDate: now.toISOString(),
-      expirationDate: expiryDate.toISOString(),
+      validFrom: now.toISOString(),
+      validUntil: expiryDate.toISOString(),
     };
 
     const sdjwt = new SDJwtVcInstance({
@@ -283,14 +283,12 @@ export async function handleVcSdJwtFormat(
       iat: Math.floor(now.getTime() / 1000),
       nbf: Math.floor(now.getTime() / 1000),
       exp: Math.floor(expiryDate.getTime() / 1000),
-      vc: vcPayload,  
+      ...vcPayload,  
       cnf: cnf,
     };
 
     const disclosureFrame = {
-      vc: {
-        credentialSubject: credPayload.disclosureFrame  
-      }
+      credentialSubject: credPayload.disclosureFrame
     };
 
     headerOptions = {

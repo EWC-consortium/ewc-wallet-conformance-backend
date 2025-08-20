@@ -20,114 +20,105 @@ export const createPIDPayload = (token, serverURL, decodedHeaderSubjectDID) => {
     decodedHeaderSubjectDID
   );
 
+  const nowSec = Math.floor(Date.now() / 1000);
+  const expSec = nowSec + 60 * 60 * 24 * 30;
+
   return {
     iss: serverURL,
     sub: decodedHeaderSubjectDID || "",
-    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30, // Token expiration time (30 days)
-    iat: Math.floor(Date.now() / 1000),
+    iat: nowSec,
+    nbf: nowSec,
+    exp: expSec,
     jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
-    vc: {
-      credentialSubject: credentialSubject,
-      expirationDate: new Date(
-        (Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30) * 1000
-      ).toISOString(),
-      id: decodedHeaderSubjectDID,
-      issuanceDate: new Date(
-        Math.floor(Date.now() / 1000) * 1000
-      ).toISOString(),
-      issuer: serverURL,
-      type: ["PID"],
-      "@context": [
-        "https://www.w3.org/2018/credentials/v1",
-        "https://europa.eu/2018/credentials/eudi/pid/v1",
-      ],
-      validFrom: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
-    },
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1",
+      "https://europa.eu/2018/credentials/eudi/pid/v1",
+    ],
+    type: ["VerifiableCredential", "PID"],
+    credentialSubject: credentialSubject,
   };
 };
 
 export const createEPassportPayload = (serverURL, decodedHeaderSubjectDID) => {
+  const nowSec = Math.floor(Date.now() / 1000);
   return {
     iss: serverURL,
     sub: decodedHeaderSubjectDID || uuidv4(),
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 60 * 60, // Token expiration time (1 hour)
+    iat: nowSec,
+    nbf: nowSec,
+    exp: nowSec + 60 * 60, // 1 hour
     jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
-    vc: {
-      credentialSubject: {
-        id: decodedHeaderSubjectDID || "",
-        electronicPassport: {
-          dataGroup1: {
-            birthdate: "1990-01-01",
-            docTypeCode: "P",
-            expiryDate: "2030-01-01",
-            genderCode: "M",
-            holdersName: "John Doe",
-            issuerCode: "GR",
-            natlText: "Hellenic",
-            passportNumberIdentifier: "123456789",
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1",
+      "https://schemas.prod.digitalcredentials.iata.org/contexts/iata_credential.jsonld",
+    ],
+    type: ["VerifiableCredential", "ePassportCredential"],
+    credentialSubject: {
+      id: decodedHeaderSubjectDID || "",
+      electronicPassport: {
+        dataGroup1: {
+          birthdate: "1990-01-01",
+          docTypeCode: "P",
+          expiryDate: "2030-01-01",
+          genderCode: "M",
+          holdersName: "John Doe",
+          issuerCode: "GR",
+          natlText: "Hellenic",
+          passportNumberIdentifier: "123456789",
+        },
+        dataGroup15: {
+          activeAuthentication: {
+            publicKeyBinaryObject: "somePublicKeyUri",
           },
-          dataGroup15: {
-            activeAuthentication: {
-              publicKeyBinaryObject: "somePublicKeyUri",
+        },
+        dataGroup2EncodedFaceBiometrics: {
+          faceBiometricDataEncodedPicture: "someBiometricUri",
+        },
+        digitalTravelCredential: {
+          contentInfo: {
+            versionNumber: 1,
+            signatureInfo: {
+              digestHashAlgorithmIdentifier: "sha-256",
+              signatureAlgorithmIdentifier: "RS256",
+              signatureCertificateText: "someCertificateText",
+              signatureDigestResultBinaryObject: "someDigestResultUri",
+              signedAttributes: {
+                attributeTypeCode: "someTypeCode",
+                attributeValueText: "someValueText",
+              },
             },
           },
-          dataGroup2EncodedFaceBiometrics: {
-            faceBiometricDataEncodedPicture: "someBiometricUri",
+          dataCapabilitiesInfo: {
+            dataTransferInterfaceTypeCode: "NFC",
+            securityAssuranceLevelIndText: "someSecurityLevel",
+            userConsentInfoText: "userConsentRequired",
+            virtualComponentPresenceInd: true,
           },
-          digitalTravelCredential: {
-            contentInfo: {
+          dataContent: {
+            dataGroup1: {
+              birthdate: "1990-01-01",
+              docTypeCode: "P",
+              expiryDate: "2030-01-01",
+              genderCode: "M",
+              holdersName: "John Doe",
+              issuerCode: "GR",
+              natlText: "Hellenic",
+              passportNumberIdentifier: "123456789",
+              personalNumberIdentifier: "987654321",
+            },
+            dataGroup2EncodedFaceBiometrics: {
+              faceBiometricDataEncodedPicture: "someBiometricUri",
+            },
+            docSecurityObject: {
+              dataGroupHash: [
+                { dataGroupNumber: 1, valueBinaryObject: "someHashUri" },
+              ],
+              digestHashAlgorithmIdentifier: "sha-256",
               versionNumber: 1,
-              signatureInfo: {
-                digestHashAlgorithmIdentifier: "sha-256",
-                signatureAlgorithmIdentifier: "RS256",
-                signatureCertificateText: "someCertificateText",
-                signatureDigestResultBinaryObject: "someDigestResultUri",
-                signedAttributes: {
-                  attributeTypeCode: "someTypeCode",
-                  attributeValueText: "someValueText",
-                },
-              },
-            },
-            dataCapabilitiesInfo: {
-              dataTransferInterfaceTypeCode: "NFC",
-              securityAssuranceLevelIndText: "someSecurityLevel",
-              userConsentInfoText: "userConsentRequired",
-              virtualComponentPresenceInd: true,
-            },
-            dataContent: {
-              dataGroup1: {
-                birthdate: "1990-01-01",
-                docTypeCode: "P",
-                expiryDate: "2030-01-01",
-                genderCode: "M",
-                holdersName: "John Doe",
-                issuerCode: "GR",
-                natlText: "Hellenic",
-                passportNumberIdentifier: "123456789",
-                personalNumberIdentifier: "987654321",
-              },
-              dataGroup2EncodedFaceBiometrics: {
-                faceBiometricDataEncodedPicture: "someBiometricUri",
-              },
-              docSecurityObject: {
-                dataGroupHash: [
-                  { dataGroupNumber: 1, valueBinaryObject: "someHashUri" },
-                ],
-                digestHashAlgorithmIdentifier: "sha-256",
-                versionNumber: 1,
-              },
             },
           },
         },
       },
-      type: ["ePassportCredential"],
-      "@context": [
-        "https://www.w3.org/2018/credentials/v1",
-        "https://schemas.prod.digitalcredentials.iata.org/contexts/iata_credential.jsonld",
-      ],
-      issuer: serverURL,
-      validFrom: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
     },
   };
 };
@@ -200,55 +191,41 @@ export const createStudentIDPayload = (
     };
   }
 
+  const nowSec = Math.floor(Date.now() / 1000);
+  const expSec = nowSec + 60 * 60 * 24 * 30;
   return {
     iss: serverURL,
     sub: decodedHeaderSubjectDID || "",
-    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
-    iat: Math.floor(Date.now() / 1000),
+    iat: nowSec,
+    nbf: nowSec,
+    exp: expSec,
     jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
-    vc: {
-      type: ["StudentID"],
-      "@context": ["https://www.w3.org/2018/credentials/v1"],
-      issuer: serverURL,
-      credentialSubject: credentialSubject,
-      issuanceDate: new Date(
-        Math.floor(Date.now() / 1000) * 1000
-      ).toISOString(),
-      expirationDate: new Date(
-        (Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30) * 1000
-      ).toISOString(),
-      validFrom: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
-    },
+    "@context": ["https://www.w3.org/2018/credentials/v1"],
+    type: ["VerifiableCredential", "StudentID"],
+    credentialSubject: credentialSubject,
   };
 };
 
 export const createAllianceIDPayload = (serverURL) => {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const expSec = nowSec + 60 * 60 * 24 * 30;
   return {
     iss: serverURL,
-    sub: decodedHeaderSubjectDID || uuidv4(),
-    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
-    iat: Math.floor(Date.now() / 1000),
+    sub: uuidv4(),
+    iat: nowSec,
+    nbf: nowSec,
+    exp: expSec,
     jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
-    vc: {
-      type: ["allianceIDCredential"],
-      "@context": ["https://www.w3.org/2018/credentials/v1"],
-      issuer: serverURL,
-      credentialSubject: {
-        id: decodedHeaderSubjectDID || "",
-        identifier: {
-          schemeID: "European Student Identifier",
-          value:
-            "urn:schac:europeanUniversityAllianceCode:int:euai:ERUA:universityXYZ",
-          id: "urn:schac:europeanUniversityAllianceCode:int:euai:ERUA:universityXYZ",
-        },
+    "@context": ["https://www.w3.org/2018/credentials/v1"],
+    type: ["VerifiableCredential", "allianceIDCredential"],
+    credentialSubject: {
+      id: uuidv4(),
+      identifier: {
+        schemeID: "European Student Identifier",
+        value:
+          "urn:schac:europeanUniversityAllianceCode:int:euai:ERUA:universityXYZ",
+        id: "urn:schac:europeanUniversityAllianceCode:int:euai:ERUA:universityXYZ",
       },
-      issuanceDate: new Date(
-        Math.floor(Date.now() / 1000) * 1000
-      ).toISOString(),
-      expirationDate: new Date(
-        (Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30) * 1000
-      ).toISOString(),
-      validFrom: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
     },
   };
 };
@@ -315,25 +292,18 @@ export const createFerryBoardingPassPayload = (
     };
   }
 
+  const nowSec = Math.floor(Date.now() / 1000);
+  const expSec = nowSec + 60 * 60 * 24 * 30;
   return {
     iss: serverURL,
     sub: decodedHeaderSubjectDID || "",
-    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
-    iat: Math.floor(Date.now() / 1000),
+    iat: nowSec,
+    nbf: nowSec,
+    exp: expSec,
     jti: "urn:did:1904a925-38bd-4eda-b682-4b5e3ca9d4bc",
-    vc: {
-      type: ["VerifiableCredential", "ferryBoardingPassCredential"],
-      "@context": ["https://www.w3.org/2018/credentials/v1"],
-      issuer: serverURL,
-      credentialSubject: credentialSubject,
-      issuanceDate: new Date(
-        Math.floor(Date.now() / 1000) * 1000
-      ).toISOString(),
-      expirationDate: new Date(
-        (Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30) * 1000
-      ).toISOString(),
-      validFrom: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString(),
-    },
+    "@context": ["https://www.w3.org/2018/credentials/v1"],
+    type: ["VerifiableCredential", "ferryBoardingPassCredential"],
+    credentialSubject: credentialSubject,
   };
 };
 
