@@ -1,0 +1,17 @@
+{
+  "name": "wallet-client",
+  "version": "0.1.0",
+  "description": "Minimal OpenID4VCI wallet client for sd-jwt issuance against rfc-issuer-v1",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "jose": "^5.2.4",
+    "node-fetch": "^3.3.2",
+    "express": "^4.19.2"
+  }
+}
+
+
