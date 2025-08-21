@@ -50,6 +50,7 @@ import {
   handleVcSdJwtFormatDeferred,
 } from "../utils/credGenerationUtils.js";
 import statusListManager from "../utils/statusListUtils.js";
+import { statusListUpdateIndex } from "../services/cacheServiceRedis.js";
 
 const sharedRouter = express.Router();
 
@@ -903,6 +904,20 @@ sharedRouter.post("/credential", async (req, res) => {
           await storeCodeFlowSession(codeSessionKey, sessionObject);
         } else {
           await storePreAuthSession(preAuthsessionKey, sessionObject);
+        }
+
+        // Auto-revoke specific credential types after 5 minutes
+        // Example: VerifiableStudentIDSDJWT
+        if (effectiveConfigurationId === "VerifiableStudentIDSDJWT") {
+          // Simple in-memory timeout-based revocation after 5 minutes
+          setTimeout(async () => {
+            try {
+              await statusListUpdateIndex(statusListId, tokenIndex, 1);
+              console.log(`Timeout revoked ${statusListId}#${tokenIndex}`);
+            } catch (e) {
+              console.error("Timeout revocation failed", e);
+            }
+          }, 5 * 60 * 1000);
         }
       }
     }
