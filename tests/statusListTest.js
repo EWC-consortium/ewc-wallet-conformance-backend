@@ -4,15 +4,15 @@ import statusListManager from '../utils/statusListUtils.js';
 describe('Token Status List Tests', () => {
   let testStatusListId;
 
-  before(() => {
+  before(async () => {
     // Create a test status list
-    const statusList = statusListManager.createStatusList(100, 1);
+    const statusList = await statusListManager.createStatusList(100, 1);
     testStatusListId = statusList.id;
   });
 
   describe('Status List Creation', () => {
-    it('should create a status list with valid parameters', () => {
-      const statusList = statusListManager.createStatusList(1000, 1);
+    it('should create a status list with valid parameters', async () => {
+      const statusList = await statusListManager.createStatusList(1000, 1);
       assert.ok(statusList.id);
       assert.strictEqual(statusList.size, 1000);
       assert.strictEqual(statusList.bits, 1);
@@ -22,27 +22,28 @@ describe('Token Status List Tests', () => {
 
     it('should reject invalid bits values', () => {
       assert.throws(() => {
+        // call without await to keep throws catch
         statusListManager.createStatusList(100, 3);
       }, Error);
     });
   });
 
   describe('Token Status Management', () => {
-    it('should update token status correctly', () => {
-      const success = statusListManager.updateTokenStatus(testStatusListId, 5, 1);
+    it('should update token status correctly', async () => {
+      const success = await statusListManager.updateTokenStatus(testStatusListId, 5, 1);
       assert.strictEqual(success, true);
       
-      const status = statusListManager.getTokenStatus(testStatusListId, 5);
+      const status = await statusListManager.getTokenStatus(testStatusListId, 5);
       assert.strictEqual(status, 1);
     });
 
-    it('should reject invalid indices', () => {
-      const success = statusListManager.updateTokenStatus(testStatusListId, 999, 1);
+    it('should reject invalid indices', async () => {
+      const success = await statusListManager.updateTokenStatus(testStatusListId, 999, 1);
       assert.strictEqual(success, false);
     });
 
-    it('should return null for invalid status list', () => {
-      const status = statusListManager.getTokenStatus('invalid-id', 0);
+    it('should return null for invalid status list', async () => {
+      const status = await statusListManager.getTokenStatus('invalid-id', 0);
       assert.strictEqual(status, null);
     });
   });
@@ -92,7 +93,7 @@ describe('Token Status List Tests', () => {
   });
 
   describe('Status Reference Creation', () => {
-    it('should create valid status references', () => {
+    it('should create valid status references', async () => {
       const reference = statusListManager.createStatusReference(testStatusListId, 15);
       assert.ok(reference.status_list);
       assert.strictEqual(reference.status_list.uri, `http://localhost:3000/status-list/${testStatusListId}`);
@@ -101,18 +102,18 @@ describe('Token Status List Tests', () => {
   });
 
   describe('Status List Management', () => {
-    it('should return all status lists', () => {
-      const statusLists = statusListManager.getAllStatusLists();
+    it('should return all status lists', async () => {
+      const statusLists = await statusListManager.getAllStatusLists();
       assert.ok(Array.isArray(statusLists));
       assert.ok(statusLists.length > 0);
     });
 
-    it('should delete status lists', () => {
-      const statusList = statusListManager.createStatusList(50, 1);
-      const success = statusListManager.deleteStatusList(statusList.id);
+    it('should delete status lists', async () => {
+      const statusList = await statusListManager.createStatusList(50, 1);
+      const success = await statusListManager.deleteStatusList(statusList.id);
       assert.strictEqual(success, true);
       
-      const deletedStatusList = statusListManager.getStatusList(statusList.id);
+      const deletedStatusList = await statusListManager.getStatusList(statusList.id);
       assert.strictEqual(deletedStatusList, null);
     });
   });

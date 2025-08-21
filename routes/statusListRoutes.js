@@ -13,7 +13,7 @@ statusListRouter.get("/status-list/:id", async (req, res) => {
     const statusListId = req.params.id;
     
     // Check if status list exists
-    const statusList = statusListManager.getStatusList(statusListId);
+    const statusList = await statusListManager.getStatusList(statusListId);
     if (!statusList) {
       return res.status(404).json({
         error: "status_list_not_found",
@@ -51,7 +51,7 @@ statusListRouter.get("/status-list/:id", async (req, res) => {
 statusListRouter.get("/status-list/:id/info", async (req, res) => {
   try {
     const statusListId = req.params.id;
-    const statusList = statusListManager.getStatusList(statusListId);
+    const statusList = await statusListManager.getStatusList(statusListId);
     
     if (!statusList) {
       return res.status(404).json({
@@ -101,7 +101,7 @@ statusListRouter.post("/status-list", async (req, res) => {
       });
     }
 
-    const statusList = statusListManager.createStatusList(size, bits);
+    const statusList = await statusListManager.createStatusList(size, bits);
     
     res.status(201).json({
       id: statusList.id,
@@ -135,7 +135,7 @@ statusListRouter.put("/status-list/:id/revoke/:index", async (req, res) => {
       });
     }
 
-    const success = statusListManager.updateTokenStatus(statusListId, index, 1); // 1 = revoked
+    const success = await statusListManager.updateTokenStatus(statusListId, index, 1); // 1 = revoked
     
     if (!success) {
       return res.status(404).json({
@@ -174,7 +174,7 @@ statusListRouter.put("/status-list/:id/unrevoke/:index", async (req, res) => {
       });
     }
 
-    const success = statusListManager.updateTokenStatus(statusListId, index, 0); // 0 = valid
+    const success = await statusListManager.updateTokenStatus(statusListId, index, 0); // 0 = valid
     
     if (!success) {
       return res.status(404).json({
@@ -213,7 +213,7 @@ statusListRouter.get("/status-list/:id/status/:index", async (req, res) => {
       });
     }
 
-    const status = statusListManager.getTokenStatus(statusListId, index);
+    const status = await statusListManager.getTokenStatus(statusListId, index);
     
     if (status === null) {
       return res.status(404).json({
@@ -242,7 +242,7 @@ statusListRouter.get("/status-list/:id/status/:index", async (req, res) => {
  */
 statusListRouter.get("/status-lists", async (req, res) => {
   try {
-    const statusLists = statusListManager.getAllStatusLists();
+    const statusLists = await statusListManager.getAllStatusLists();
     
     const statusListInfos = statusLists.map(statusList => ({
       id: statusList.id,
@@ -272,7 +272,7 @@ statusListRouter.get("/status-lists", async (req, res) => {
 statusListRouter.delete("/status-list/:id", async (req, res) => {
   try {
     const statusListId = req.params.id;
-    const success = statusListManager.deleteStatusList(statusListId);
+    const success = await statusListManager.deleteStatusList(statusListId);
     
     if (!success) {
       return res.status(404).json({

@@ -64,12 +64,7 @@ The status list functionality is automatically integrated with credential issuan
 
 ## Configuration
 
-Add to `issuer-config.json`:
-```json
-{
-  "status_list_endpoint": "https://server.example.com/status-list"
-}
-```
+No issuer metadata changes are required by VCI ID2. The credential embeds the status reference (URI + idx), and the status list token is served at that URI.
 
 ## Testing
 

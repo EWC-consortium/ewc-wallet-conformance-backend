@@ -881,32 +881,28 @@ sharedRouter.post("/credential", async (req, res) => {
       format = "mdl";
     }
 
-    // Add status list reference to the credential if supported
+    // Always add a status list reference to the credential (per desired behavior)
     let statusReference = null;
-    if (credConfig.status_list_supported !== false) {
-      // Get or create a status list for this credential type
-      const statusListId = await getOrCreateStatusListForCredentialType(effectiveConfigurationId);
-      if (statusListId) {
-        // Find an available index in the status list
-        const tokenIndex = await findAvailableStatusListIndex(statusListId);
-        if (tokenIndex !== null) {
-          statusReference = statusListManager.createStatusReference(statusListId, tokenIndex);
-          
-          // Store the status list reference in the session for later use
-          if (!sessionObject.statusListReferences) {
-            sessionObject.statusListReferences = {};
-          }
-          sessionObject.statusListReferences[effectiveConfigurationId] = {
-            statusListId,
-            tokenIndex
-          };
-          
-          // Update session storage
-          if (flowType === "code") {
-            await storeCodeFlowSession(codeSessionKey, sessionObject);
-          } else {
-            await storePreAuthSession(preAuthsessionKey, sessionObject);
-          }
+    const statusListId = await getOrCreateStatusListForCredentialType(effectiveConfigurationId);
+    if (statusListId) {
+      const tokenIndex = await findAvailableStatusListIndex(statusListId);
+      if (tokenIndex !== null) {
+        statusReference = statusListManager.createStatusReference(statusListId, tokenIndex);
+        // Pass reference into request so the generator can embed it in the credential
+        requestBody.status_reference = statusReference;
+
+        // Persist in session for auditing/management
+        if (!sessionObject.statusListReferences) {
+          sessionObject.statusListReferences = {};
+        }
+        sessionObject.statusListReferences[effectiveConfigurationId] = {
+          statusListId,
+          tokenIndex
+        };
+        if (flowType === "code") {
+          await storeCodeFlowSession(codeSessionKey, sessionObject);
+        } else {
+          await storePreAuthSession(preAuthsessionKey, sessionObject);
         }
       }
     }
@@ -1088,17 +1084,15 @@ export const publicKeyToPem = async (jwk) => {
 async function getOrCreateStatusListForCredentialType(credentialType) {
   try {
     // Check if we already have a status list for this credential type
-    const statusLists = statusListManager.getAllStatusLists();
+    const statusLists = await statusListManager.getAllStatusLists();
     const existingStatusList = statusLists.find(sl => sl.credentialType === credentialType);
     
     if (existingStatusList) {
       return existingStatusList.id;
     }
     
-    // Create a new status list for this credential type
-    const newStatusList = statusListManager.createStatusList(1000, 1);
-    newStatusList.credentialType = credentialType; // Add metadata
-    
+    // Create a new status list for this credential type and persist metadata
+    const newStatusList = await statusListManager.createStatusList(1000, 1, { credentialType });
     return newStatusList.id;
   } catch (error) {
     console.error("Error creating status list for credential type:", error);
@@ -1113,7 +1107,7 @@ async function getOrCreateStatusListForCredentialType(credentialType) {
  */
 async function findAvailableStatusListIndex(statusListId) {
   try {
-    const statusList = statusListManager.getStatusList(statusListId);
+    const statusList = await statusListManager.getStatusList(statusListId);
     if (!statusList) {
       return null;
     }

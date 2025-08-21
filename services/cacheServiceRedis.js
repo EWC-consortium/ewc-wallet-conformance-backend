@@ -273,3 +273,76 @@ export function getSessionsAuthorizationDetail() {
 export function getAuthCodeAuthorizationDetail() {
   return authCodeAuthorizationDetail;
 }
+
+// ------------------------------
+// Status List storage (no expiry)
+// Keys layout:
+//   status-lists:<id> -> JSON encoded status list object
+//   status-lists:ids  -> Redis Set of all status list ids
+// ------------------------------
+
+export async function statusListCreate(id, statusListObject) {
+  try {
+    const key = `status-lists:${id}`;
+    await client.set(key, JSON.stringify(statusListObject));
+    await client.sAdd("status-lists:ids", id);
+    console.log(`Status list created under key: ${key}`);
+    return true;
+  } catch (err) {
+    console.error("Error creating status list:", err);
+    return false;
+  }
+}
+
+export async function statusListGet(id) {
+  try {
+    const key = `status-lists:${id}`;
+    const result = await client.get(key);
+    if (!result) return null;
+    return JSON.parse(result);
+  } catch (err) {
+    console.error("Error retrieving status list:", err);
+    return null;
+  }
+}
+
+export async function statusListGetAllIds() {
+  try {
+    const ids = await client.sMembers("status-lists:ids");
+    return ids || [];
+  } catch (err) {
+    console.error("Error retrieving status list ids:", err);
+    return [];
+  }
+}
+
+export async function statusListDelete(id) {
+  try {
+    const key = `status-lists:${id}`;
+    await client.del(key);
+    await client.sRem("status-lists:ids", id);
+    console.log(`Status list deleted for id: ${id}`);
+    return true;
+  } catch (err) {
+    console.error("Error deleting status list:", err);
+    return false;
+  }
+}
+
+export async function statusListUpdateIndex(id, index, status) {
+  try {
+    const key = `status-lists:${id}`;
+    const result = await client.get(key);
+    if (!result) return false;
+    const obj = JSON.parse(result);
+    if (!Array.isArray(obj.statuses)) return false;
+    if (index < 0 || index >= obj.size) return false;
+    obj.statuses[index] = status;
+    obj.updated_at = Math.floor(Date.now() / 1000);
+    await client.set(key, JSON.stringify(obj));
+    return true;
+  } catch (err) {
+    console.error("Error updating status list index:", err);
+    return false;
+  }
+}

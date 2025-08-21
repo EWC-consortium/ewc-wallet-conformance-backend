@@ -320,6 +320,9 @@ export async function handleVcSdJwtFormat(
       exp: Math.floor(expiryDate.getTime() / 1000),
       ...vcPayload,  
       cnf: cnf,
+      ...(requestBody.status_reference
+        ? { status: requestBody.status_reference }
+        : {}),
     };
 
     const disclosureFrame = {
@@ -356,6 +359,9 @@ export async function handleVcSdJwtFormat(
         vct: credType,
         ...credPayload.claims,
         cnf,
+        ...(requestBody.status_reference
+          ? { status: requestBody.status_reference }
+          : {}),
       },
       credPayload.disclosureFrame,
       headerOptions

@@ -42,7 +42,6 @@ metadataRouter.get(
       serverURL + "/credential_deferred";
     issuerConfig.nonce_endpoint = serverURL + "/nonce";
     issuerConfig.notification_endpoint = serverURL + "/notification";
-    issuerConfig.status_list_endpoint = serverURL + "/status-list";
 
     if (issuerConfig.batch_credential_endpoint) {
       console.warn("Warning: batch_credential_endpoint is part of issuerConfig but removed from spec draft -14. Consider removing from data/issuer-config.json");

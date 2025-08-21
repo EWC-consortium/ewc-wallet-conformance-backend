@@ -5,6 +5,13 @@ import jwt from "jsonwebtoken";
 import zlib from "zlib";
 import base64url from "base64url";
 import * as jose from "jose";
+import {
+  statusListCreate,
+  statusListGet,
+  statusListGetAllIds,
+  statusListDelete,
+  statusListUpdateIndex,
+} from "../services/cacheServiceRedis.js";
 
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 
@@ -17,8 +24,16 @@ const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
  */
 class StatusListManager {
   constructor() {
-    this.statusLists = new Map(); // In-memory storage, in production use Redis/database
-    this.statusListTokens = new Map(); // Store status list tokens
+    // In-memory cache for tokens only; source of truth is Redis
+    this.statusListTokens = new Map();
+  }
+
+  async initialize() {
+    // Ensure at least one default list exists
+    const ids = await statusListGetAllIds();
+    if (!ids || ids.length === 0) {
+      await this.createStatusList(1000, 1);
+    }
   }
 
   /**
@@ -27,7 +42,7 @@ class StatusListManager {
    * @param {number} bits - Bits per status (1, 2, 4, or 8)
    * @returns {Object} Status list object
    */
-  createStatusList(size = 1000, bits = 1) {
+  async createStatusList(size = 1000, bits = 1, extra = {}) {
     if (![1, 2, 4, 8].includes(bits)) {
       throw new Error("Bits must be one of: 1, 2, 4, 8");
     }
@@ -39,10 +54,11 @@ class StatusListManager {
       bits,
       statuses: new Array(size).fill(0), // 0 = valid, 1 = revoked
       created_at: Math.floor(Date.now() / 1000),
-      updated_at: Math.floor(Date.now() / 1000)
+      updated_at: Math.floor(Date.now() / 1000),
+      ...extra
     };
 
-    this.statusLists.set(id, statusList);
+    await statusListCreate(id, statusList);
     return statusList;
   }
 
@@ -51,8 +67,8 @@ class StatusListManager {
    * @param {string} id - Status list ID
    * @returns {Object|null} Status list object or null if not found
    */
-  getStatusList(id) {
-    return this.statusLists.get(id) || null;
+  async getStatusList(id) {
+    return await statusListGet(id);
   }
 
   /**
@@ -62,23 +78,10 @@ class StatusListManager {
    * @param {number} status - Status value (0 = valid, 1 = revoked)
    * @returns {boolean} Success status
    */
-  updateTokenStatus(statusListId, index, status) {
-    const statusList = this.statusLists.get(statusListId);
-    if (!statusList) {
-      return false;
-    }
-
-    if (index < 0 || index >= statusList.size) {
-      return false;
-    }
-
-    statusList.statuses[index] = status;
-    statusList.updated_at = Math.floor(Date.now() / 1000);
-    
-    // Invalidate cached status list token
-    this.statusListTokens.delete(statusListId);
-    
-    return true;
+  async updateTokenStatus(statusListId, index, status) {
+    const ok = await statusListUpdateIndex(statusListId, index, status);
+    if (ok) this.statusListTokens.delete(statusListId);
+    return ok;
   }
 
   /**
@@ -87,11 +90,9 @@ class StatusListManager {
    * @param {number} index - Token index in the status list
    * @returns {number|null} Status value or null if not found
    */
-  getTokenStatus(statusListId, index) {
-    const statusList = this.statusLists.get(statusListId);
-    if (!statusList || index < 0 || index >= statusList.size) {
-      return null;
-    }
+  async getTokenStatus(statusListId, index) {
+    const statusList = await statusListGet(statusListId);
+    if (!statusList || index < 0 || index >= statusList.size) return null;
     return statusList.statuses[index];
   }
 
@@ -133,10 +134,8 @@ class StatusListManager {
    * @returns {string} JWT token
    */
   async generateStatusListToken(statusListId) {
-    const statusList = this.statusLists.get(statusListId);
-    if (!statusList) {
-      throw new Error("Status list not found");
-    }
+    const statusList = await statusListGet(statusListId);
+    if (!statusList) throw new Error("Status list not found");
 
     // Check if we have a cached token
     if (this.statusListTokens.has(statusListId)) {
@@ -265,8 +264,14 @@ class StatusListManager {
    * Get all status lists (for admin purposes)
    * @returns {Array} Array of status list objects
    */
-  getAllStatusLists() {
-    return Array.from(this.statusLists.values());
+  async getAllStatusLists() {
+    const ids = await statusListGetAllIds();
+    const lists = [];
+    for (const id of ids) {
+      const sl = await statusListGet(id);
+      if (sl) lists.push(sl);
+    }
+    return lists;
   }
 
   /**
@@ -274,20 +279,16 @@ class StatusListManager {
    * @param {string} id - Status list ID
    * @returns {boolean} Success status
    */
-  deleteStatusList(id) {
-    const deleted = this.statusLists.delete(id);
-    if (deleted) {
-      this.statusListTokens.delete(id);
-    }
-    return deleted;
+  async deleteStatusList(id) {
+    const ok = await statusListDelete(id);
+    if (ok) this.statusListTokens.delete(id);
+    return ok;
   }
 }
 
 // Create a singleton instance
 const statusListManager = new StatusListManager();
-
-// Initialize with a default status list
-const defaultStatusList = statusListManager.createStatusList(1000, 1);
+await statusListManager.initialize();
 
 export default statusListManager;
 
