@@ -51,9 +51,9 @@ const dcql_query_jwt_vc = {
         ]
       },
       "claims": [
-        { "path": ["given_name"] },
-        { "path": ["family_name"] },
-        { "path": ["birth_date"] }
+        { "path": ["credentialSubject", "given_name"] },
+        { "path": ["credentialSubject", "family_name"] },
+        { "path": ["credentialSubject", "birth_date"] }
       ]
     }
   ]

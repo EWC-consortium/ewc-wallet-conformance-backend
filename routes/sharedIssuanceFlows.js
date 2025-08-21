@@ -49,6 +49,7 @@ import {
   handleVcSdJwtFormat,
   handleVcSdJwtFormatDeferred,
 } from "../utils/credGenerationUtils.js";
+import statusListManager from "../utils/statusListUtils.js";
 
 const sharedRouter = express.Router();
 
@@ -436,12 +437,71 @@ sharedRouter.post("/credential", async (req, res) => {
     // Depending on policy, you might allow this and skip specific alg validation or enforce credential_configuration_id for requests needing such validation.
   }
 
-  if (!requestBody || !requestBody.proof || !requestBody.proof.jwt) {
+  // Normalize key proof input according to ID2 (supports 'proof' or 'proofs')
+  // - If both are present, this is invalid
+  if (requestBody.proof && requestBody.proofs) {
+    await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
+    return res.status(400).json({
+      error: "invalid_request",
+      error_description: "'proof' and 'proofs' MUST NOT be present at the same time",
+    });
+  }
+
+  let proofJwt;
+  if (requestBody.proof && requestBody.proof.jwt) {
+    proofJwt = requestBody.proof.jwt;
+  } else if (requestBody.proofs) {
+    // proofs object must contain exactly one key named as the proof type (e.g., 'jwt')
+    const proofTypeKeys = Object.keys(requestBody.proofs);
+    if (proofTypeKeys.length !== 1) {
+      await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
+      return res.status(400).json({
+        error: "invalid_proof",
+        error_description: "'proofs' MUST contain exactly one key naming the proof type",
+      });
+    }
+    const proofType = proofTypeKeys[0];
+    if (proofType !== "jwt") {
+      // This issuer currently supports only JWT key proofs
+      await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
+      return res.status(400).json({
+        error: "invalid_proof",
+        error_description: `Unsupported proof type '${proofType}'. Only 'jwt' is supported`,
+      });
+    }
+    const jwtProofs = requestBody.proofs.jwt;
+    if (!Array.isArray(jwtProofs) || jwtProofs.length === 0) {
+      await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
+      return res.status(400).json({
+        error: "invalid_proof",
+        error_description: "'proofs.jwt' MUST be a non-empty array",
+      });
+    }
+    // Select the appropriate proof:
+    // - If a credential_identifier was used in the request, prefer a proof that references it
+    // - Otherwise, pick the first element
+    const requestedCredentialIdentifier = requestBody.credential_identifier;
+    const selectedProof = requestedCredentialIdentifier
+      ? jwtProofs.find((p) => p && p.credential_identifier === requestedCredentialIdentifier)
+      : jwtProofs[0];
+    if (!selectedProof || !selectedProof.jwt) {
+      await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
+      return res.status(400).json({
+        error: "invalid_proof",
+        error_description: "No usable JWT proof found in 'proofs'",
+      });
+    }
+    proofJwt = selectedProof.jwt;
+    // Normalize downstream handling to singular 'proof'
+    requestBody.proof = { proof_type: "jwt", jwt: proofJwt };
+  }
+
+  if (!proofJwt) {
     /*
-       Object containing the proof of possession of the cryptographic key material the issued Credential would be bound to. 
-       The proof object is REQUIRED if the proof_types_supported parameter is non-empty and present in the credential_configurations_supported parameter 
+       Object containing the proof of possession of the cryptographic key material the issued Credential would be bound to.
+       The proof object is REQUIRED if the proof_types_supported parameter is non-empty and present in the credential_configurations_supported parameter
        of the Issuer metadata for the requested Credential
-  
+
        This issuer atm only supports jwt proof types
       */
     console.log("NO keybinding info found!!!");
@@ -453,7 +513,7 @@ sharedRouter.post("/credential", async (req, res) => {
   }
 
   // Safe to read now after guards above
-  const proofJwt = requestBody.proof.jwt;
+  // proofJwt is already set from normalization above
 
   // New Proof Validation Logic
   if (effectiveConfigurationId) {
@@ -821,6 +881,36 @@ sharedRouter.post("/credential", async (req, res) => {
       format = "mdl";
     }
 
+    // Add status list reference to the credential if supported
+    let statusReference = null;
+    if (credConfig.status_list_supported !== false) {
+      // Get or create a status list for this credential type
+      const statusListId = await getOrCreateStatusListForCredentialType(effectiveConfigurationId);
+      if (statusListId) {
+        // Find an available index in the status list
+        const tokenIndex = await findAvailableStatusListIndex(statusListId);
+        if (tokenIndex !== null) {
+          statusReference = statusListManager.createStatusReference(statusListId, tokenIndex);
+          
+          // Store the status list reference in the session for later use
+          if (!sessionObject.statusListReferences) {
+            sessionObject.statusListReferences = {};
+          }
+          sessionObject.statusListReferences[effectiveConfigurationId] = {
+            statusListId,
+            tokenIndex
+          };
+          
+          // Update session storage
+          if (flowType === "code") {
+            await storeCodeFlowSession(codeSessionKey, sessionObject);
+          } else {
+            await storePreAuthSession(preAuthsessionKey, sessionObject);
+          }
+        }
+      }
+    }
+
     try {
       const credential = await handleVcSdJwtFormat(
         requestBody,
@@ -989,5 +1079,58 @@ export const publicKeyToPem = async (jwk) => {
     throw new Error(`Failed to convert JWK to PEM: ${err.message}`);
   }
 };
+
+/**
+ * Get or create a status list for a specific credential type
+ * @param {string} credentialType - The credential configuration ID
+ * @returns {string|null} Status list ID or null if creation failed
+ */
+async function getOrCreateStatusListForCredentialType(credentialType) {
+  try {
+    // Check if we already have a status list for this credential type
+    const statusLists = statusListManager.getAllStatusLists();
+    const existingStatusList = statusLists.find(sl => sl.credentialType === credentialType);
+    
+    if (existingStatusList) {
+      return existingStatusList.id;
+    }
+    
+    // Create a new status list for this credential type
+    const newStatusList = statusListManager.createStatusList(1000, 1);
+    newStatusList.credentialType = credentialType; // Add metadata
+    
+    return newStatusList.id;
+  } catch (error) {
+    console.error("Error creating status list for credential type:", error);
+    return null;
+  }
+}
+
+/**
+ * Find an available index in a status list
+ * @param {string} statusListId - The status list ID
+ * @returns {number|null} Available index or null if no space available
+ */
+async function findAvailableStatusListIndex(statusListId) {
+  try {
+    const statusList = statusListManager.getStatusList(statusListId);
+    if (!statusList) {
+      return null;
+    }
+    
+    // Find the first available (valid) slot
+    for (let i = 0; i < statusList.size; i++) {
+      if (statusList.statuses[i] === 0) { // 0 = valid/available
+        return i;
+      }
+    }
+    
+    // If no available slots, return null
+    return null;
+  } catch (error) {
+    console.error("Error finding available status list index:", error);
+    return null;
+  }
+}
 
 export default sharedRouter;

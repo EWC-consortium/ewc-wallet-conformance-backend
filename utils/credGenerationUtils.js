@@ -177,13 +177,48 @@ export async function handleVcSdJwtFormat(
 
   // console.log("dc+sd-jwt ", vct);
 
-  if (!requestBody.proof || !requestBody.proof.jwt) {
+  // Normalize key proof input according to ID2 (supports 'proof' or 'proofs')
+  if (requestBody.proof && requestBody.proofs) {
+    const error = new Error("'proof' and 'proofs' MUST NOT both be present");
+    error.status = 400;
+    throw error;
+  }
+  let normalizedProofJwt;
+  if (requestBody.proof && requestBody.proof.jwt) {
+    normalizedProofJwt = requestBody.proof.jwt;
+  } else if (requestBody.proofs) {
+    const proofTypeKeys = Object.keys(requestBody.proofs);
+    if (proofTypeKeys.length !== 1 || proofTypeKeys[0] !== "jwt") {
+      const error = new Error("Unsupported or invalid 'proofs' structure: only 'jwt' is supported and exactly one proof type key is allowed");
+      error.status = 400;
+      throw error;
+    }
+    const jwtProofs = requestBody.proofs.jwt;
+    if (!Array.isArray(jwtProofs) || jwtProofs.length === 0) {
+      const error = new Error("'proofs.jwt' MUST be a non-empty array");
+      error.status = 400;
+      throw error;
+    }
+    const requestedCredentialIdentifier = requestBody.credential_identifier;
+    const selectedProof = requestedCredentialIdentifier
+      ? jwtProofs.find((p) => p && p.credential_identifier === requestedCredentialIdentifier)
+      : jwtProofs[0];
+    if (!selectedProof || !selectedProof.jwt) {
+      const error = new Error("No usable JWT proof found in 'proofs'");
+      error.status = 400;
+      throw error;
+    }
+    normalizedProofJwt = selectedProof.jwt;
+    // Normalize structure for downstream code that reads requestBody.proof.jwt
+    requestBody.proof = { proof_type: "jwt", jwt: normalizedProofJwt };
+  }
+  if (!normalizedProofJwt) {
     const error = new Error("proof not found");
     error.status = 400;
     throw error;
   }
 
-  const decodedWithHeader = jwt.decode(requestBody.proof.jwt, {
+  const decodedWithHeader = jwt.decode(normalizedProofJwt, {
     complete: true,
   });
   const holderJWKS = decodedWithHeader.header;
@@ -422,13 +457,48 @@ export async function handleVcSdJwtFormatDeferred(sessionObject, serverURL) {
   );
   console.log("vc+sd-jwt ", vct);
 
-  if (!requestBody.proof || !requestBody.proof.jwt) {
+  // Normalize key proof input according to ID2 (supports 'proof' or 'proofs')
+  if (requestBody.proof && requestBody.proofs) {
+    const error = new Error("'proof' and 'proofs' MUST NOT both be present");
+    error.status = 400;
+    throw error;
+  }
+  let normalizedProofJwt;
+  if (requestBody.proof && requestBody.proof.jwt) {
+    normalizedProofJwt = requestBody.proof.jwt;
+  } else if (requestBody.proofs) {
+    const proofTypeKeys = Object.keys(requestBody.proofs);
+    if (proofTypeKeys.length !== 1 || proofTypeKeys[0] !== "jwt") {
+      const error = new Error("Unsupported or invalid 'proofs' structure: only 'jwt' is supported and exactly one proof type key is allowed");
+      error.status = 400;
+      throw error;
+    }
+    const jwtProofs = requestBody.proofs.jwt;
+    if (!Array.isArray(jwtProofs) || jwtProofs.length === 0) {
+      const error = new Error("'proofs.jwt' MUST be a non-empty array");
+      error.status = 400;
+      throw error;
+    }
+    const requestedCredentialIdentifier = requestBody.credential_identifier;
+    const selectedProof = requestedCredentialIdentifier
+      ? jwtProofs.find((p) => p && p.credential_identifier === requestedCredentialIdentifier)
+      : jwtProofs[0];
+    if (!selectedProof || !selectedProof.jwt) {
+      const error = new Error("No usable JWT proof found in 'proofs'");
+      error.status = 400;
+      throw error;
+    }
+    normalizedProofJwt = selectedProof.jwt;
+    // Normalize structure for downstream code that reads requestBody.proof.jwt
+    requestBody.proof = { proof_type: "jwt", jwt: normalizedProofJwt };
+  }
+  if (!normalizedProofJwt) {
     const error = new Error("proof not found");
     error.status = 400;
     throw error;
   }
 
-  const decodedWithHeader = jwt.decode(requestBody.proof.jwt, {
+  const decodedWithHeader = jwt.decode(normalizedProofJwt, {
     complete: true,
   });
   const holderJWKS = decodedWithHeader.header;
