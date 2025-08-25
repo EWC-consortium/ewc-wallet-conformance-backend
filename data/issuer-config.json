@@ -46,7 +46,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk"],
       "display": [
         {
           "name": "SD-JWT Portable Document A1",
@@ -96,7 +96,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk"],
       "display": [
         {
           "name": "SD-JWT Portable Document A2",
@@ -192,7 +192,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk"],
       "display": [
         {
           "name": "Verifiable ID Card (jwt_vc)",
@@ -296,7 +296,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk"],
       "display": [
         {
           "name": "PID",
@@ -477,7 +477,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk"],
       "display": [
         {
           "name": "ePassportCredential",
@@ -639,7 +639,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk"],
       "display": [
         {
           "name": "Student ID",
@@ -792,7 +792,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk"],
       "display": [
         {
           "name": "Fast Ferries Boarding Pass",
@@ -953,7 +953,7 @@
           "display": [{ "name": "Business ID", "locale": "en-GB" }]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk"],
       "display": [
         {
           "name": "vReceipt",
@@ -1052,7 +1052,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk", "jwk"],
       "display": [
         {
           "name": "Person Identification Data",
@@ -1157,7 +1157,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk", "jwk"],
       "display": [
         {
           "name": "Person Identification Data (mDoc)",
@@ -1304,7 +1304,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk", "jwk"],
       "display": [
         {
           "name": "PSP Credentials",
@@ -1859,7 +1859,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk", "jwk"],
       "display": [
         {
           "name": "Photo ID",
@@ -1950,7 +1950,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk", "jwk"],
       "display": [
         {
           "name": "Personal Contact Details",
@@ -2148,7 +2148,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["did:jwk", "jwk"],
       "display": [
         {
           "name": "Fast Friends Card",

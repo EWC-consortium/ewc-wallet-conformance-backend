@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import zlib from "zlib";
 import base64url from "base64url";
 import * as jose from "jose";
+import { didKeyToJwks } from "../utils/cryptoUtils.js";
 import {
   statusListCreate,
   statusListGet,
@@ -14,9 +15,64 @@ import {
 } from "../services/cacheServiceRedis.js";
 
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
+const proxyPath = process.env.PROXY_PATH || null;
+const issuerSignatureType = process.env.ISSUER_SIGNATURE_TYPE || "did:web"; // one of: did:web | did:jwk | x509
 
-// Load private key for signing status list tokens
+// Load private key(s) for signing status list tokens
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
+let certificatePemX509 = null;
+let privateKeyPemX509 = null;
+try {
+  certificatePemX509 = fs.readFileSync("./x509EC/client_certificate.crt", "utf8");
+  privateKeyPemX509 = fs.readFileSync("./x509EC/ec_private_pkcs8.key", "utf8");
+} catch (e) {
+  // optional, only required in x509 mode
+}
+
+function computeDidWebFromServer() {
+  let controller = serverURL;
+  if (proxyPath) {
+    controller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
+  }
+  controller = controller.replace("https://", "").replace("http://", "");
+  const did = `did:web:${controller}`;
+  const kid = `${did}#keys-1`;
+  return { did, kid };
+}
+
+async function computeDidJwkFromPublic() {
+  const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
+  // Convert PEM to JWK using the same logic as credential generation
+  const publicJwkForSigning = await (async () => {
+    try {
+      // Import the PEM and export as JWK
+      const crypto = await import('crypto');
+      const key = crypto.createPublicKey(publicKeyPem);
+      const jwk = key.export({ format: 'jwk' });
+      return jwk;
+    } catch (e) {
+      console.error("Error converting PEM to JWK:", e);
+      // Fallback: return a basic JWK structure
+      return {
+        kty: "EC",
+        crv: "P-256",
+        x: "placeholder",
+        y: "placeholder"
+      };
+    }
+  })();
+  
+  const did = `did:jwk:${Buffer.from(JSON.stringify(publicJwkForSigning)).toString("base64url")}`;
+  const kid = `${did}#0`;
+  return { did, kid };
+}
+
+function certToBase64(certPem) {
+  return certPem
+    .replace("-----BEGIN CERTIFICATE-----", "")
+    .replace("-----END CERTIFICATE-----", "")
+    .replace(/\s+/g, "");
+}
 
 /**
  * Status List Token Manager
@@ -34,6 +90,67 @@ class StatusListManager {
     if (!ids || ids.length === 0) {
       await this.createStatusList(1000, 1);
     }
+  }
+
+  /**
+   * Create a status list aligned with credential issuance configuration
+   * This ensures the status list uses the same issuer and key as credentials
+   * @param {number} size - Number of tokens in the status list
+   * @param {number} bits - Bits per status (1, 2, 4, or 8)
+   * @param {Object} extra - Additional metadata
+   * @param {Object} sessionObject - Session object containing signature type info (optional)
+   * @returns {Object} Status list object
+   */
+  async createAlignedStatusList(size = 1000, bits = 1, extra = {}, sessionObject = null) {
+    if (![1, 2, 4, 8].includes(bits)) {
+      throw new Error("Bits must be one of: 1, 2, 4, 8");
+    }
+
+    // Determine signature type using same logic as credential generation
+    let effectiveSignatureType;
+    if (sessionObject) {
+      // Use the same logic as credential generation
+      effectiveSignatureType = sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509"
+        ? "x509"
+        : sessionObject.signatureType;
+    } else {
+      // Fallback to environment variable
+      effectiveSignatureType = process.env.ISSUER_SIGNATURE_TYPE || "did:web";
+    }
+
+    // Determine issuer and key configuration based on current settings
+    let alignedIss, alignedKid, alignedX5c;
+    
+    if (effectiveSignatureType === "x509" && certificatePemX509) {
+      alignedIss = serverURL;
+      alignedX5c = certToBase64(certificatePemX509);
+    } else if (effectiveSignatureType === "did:jwk") {
+      const { did, kid } = await computeDidJwkFromPublic();
+      alignedIss = did;
+      alignedKid = kid;
+    } else {
+      // Default did:web
+      const { did, kid } = computeDidWebFromServer();
+      alignedIss = did;
+      alignedKid = kid;
+    }
+
+    const id = uuidv4();
+    const statusList = {
+      id,
+      size,
+      bits,
+      statuses: new Array(size).fill(0), // 0 = valid, 1 = revoked
+      created_at: Math.floor(Date.now() / 1000),
+      updated_at: Math.floor(Date.now() / 1000),
+      iss: alignedIss,
+      kid: alignedKid,
+      x5c: alignedX5c,
+      ...extra
+    };
+
+    await statusListCreate(id, statusList);
+    return statusList;
   }
 
   /**
@@ -131,9 +248,10 @@ class StatusListManager {
   /**
    * Generate a Status List Token JWT
    * @param {string} statusListId - Status list ID
+   * @param {Object} sessionObject - Session object containing signature type info (optional)
    * @returns {string} JWT token
    */
-  async generateStatusListToken(statusListId) {
+  async generateStatusListToken(statusListId, sessionObject = null) {
     const statusList = await statusListGet(statusListId);
     if (!statusList) throw new Error("Status list not found");
 
@@ -149,24 +267,67 @@ class StatusListManager {
     const compressedBuffer = this.statusesToCompressedBuffer(statusList.statuses, statusList.bits);
     const compressedBase64 = base64url.encode(compressedBuffer);
 
-    // Create JWT payload
+    // Determine signature type using same logic as credential generation
+    let effectiveSignatureType;
+    if (sessionObject) {
+      // Use the same logic as credential generation
+      effectiveSignatureType = sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509"
+        ? "x509"
+        : sessionObject.signatureType;
+    } else {
+      // Fallback to environment variable
+      effectiveSignatureType = process.env.ISSUER_SIGNATURE_TYPE || "did:web";
+    }
+
+    // Build issuer and JOSE header aligned with credential issuance
+    // Following IETF spec recommendation: use same key as referenced token when same entity
+    let issuerForPayload;
+    let protectedHeader;
+    const configuredIss = statusList.iss;
+    const configuredKid = statusList.kid;
+    const configuredX5c = statusList.x5c;
+
+    if (configuredX5c) {
+      // Explicit x5c configured for this list
+      issuerForPayload = configuredIss || serverURL;
+      protectedHeader = { alg: "ES256", typ: "statuslist+jwt", x5c: [configuredX5c] };
+    } else if (configuredKid) {
+      // Explicit kid configured for this list
+      issuerForPayload = configuredIss || configuredKid.split("#")[0];
+      protectedHeader = { alg: "ES256", typ: "statuslist+jwt", kid: configuredKid };
+    } else if (effectiveSignatureType === "x509" && certificatePemX509 && privateKeyPemX509) {
+      // X.509 mode: use same certificate as credentials
+      issuerForPayload = serverURL; // keep HTTPS URL for x509 ecosystems
+      protectedHeader = { alg: "ES256", typ: "statuslist+jwt", x5c: [certToBase64(certificatePemX509)] };
+    } else if (effectiveSignatureType === "did:jwk") {
+      // did:jwk mode: use same DID and key as credentials
+      const { did, kid } = await computeDidJwkFromPublic();
+      issuerForPayload = did;
+      protectedHeader = { alg: "ES256", typ: "statuslist+jwt", kid };
+    } else {
+      // Default did:web: use same DID and key as credentials
+      const { did, kid } = computeDidWebFromServer();
+      issuerForPayload = did;
+      protectedHeader = { alg: "ES256", typ: "statuslist+jwt", kid };
+    }
+
     const payload = {
-      iss: serverURL,
+      iss: issuerForPayload,
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 86400, // 24 hours
       status_list: {
         bits: statusList.bits,
-        lst: compressedBase64
-      }
+        lst: compressedBase64,
+      },
     };
 
-    // Sign the JWT
-    const token = jwt.sign(payload, privateKey, { 
-      algorithm: 'ES256',
-      header: {
-        typ: 'statuslist+jwt'
-      }
-    });
+    // Sign the JWT with jose to ensure correct protected header
+    const privateKeyForSign = (effectiveSignatureType === "x509" && privateKeyPemX509)
+      ? await jose.importPKCS8(privateKeyPemX509, "ES256")
+      : await jose.importPKCS8(privateKey, "ES256");
+    const token = await new jose.SignJWT(payload)
+      .setProtectedHeader(protectedHeader)
+      .sign(privateKeyForSign);
 
     // Cache the token
     this.statusListTokens.set(statusListId, {
@@ -180,18 +341,75 @@ class StatusListManager {
   /**
    * Verify a Status List Token
    * @param {string} token - JWT token
+   * @param {Object} sessionObject - Session object containing signature type info (optional)
    * @returns {Object|null} Decoded payload or null if invalid
    */
-  verifyStatusListToken(token) {
+  async verifyStatusListToken(token, sessionObject = null) {
     try {
+      // Determine signature type using same logic as credential generation
+      let effectiveSignatureType;
+      if (sessionObject) {
+        effectiveSignatureType = sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509"
+          ? "x509"
+          : sessionObject.signatureType;
+      } else {
+        effectiveSignatureType = process.env.ISSUER_SIGNATURE_TYPE || "did:web";
+      }
+
+      // Compute expected issuer aligned with generation
+      let expectedIssuer;
+      if (effectiveSignatureType === "x509") {
+        expectedIssuer = serverURL;
+      } else if (effectiveSignatureType === "did:jwk") {
+        expectedIssuer = (await computeDidJwkFromPublic()).did;
+      } else {
+        expectedIssuer = computeDidWebFromServer().did;
+      }
       const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
-      const decoded = jwt.verify(token, publicKeyPem, { 
-        algorithms: ['ES256'],
-        issuer: serverURL
+      const decoded = jwt.verify(token, publicKeyPem, {
+        algorithms: ["ES256"],
+        issuer: expectedIssuer,
       });
       return decoded;
     } catch (error) {
       console.error("Status list token verification failed:", error);
+      return null;
+    }
+  }
+
+  async verifyStatusListTokenResolved(token) {
+    try {
+      const header = jose.decodeProtectedHeader(token);
+      let keyLike = null;
+
+      if (header && header.x5c && header.x5c.length > 0) {
+        const certPem = `-----BEGIN CERTIFICATE-----\n${header.x5c[0]}\n-----END CERTIFICATE-----\n`;
+        keyLike = await jose.importX509(certPem, header.alg || "ES256");
+      } else if (header && header.kid && header.kid.startsWith("did:")) {
+        const did = header.kid.split("#")[0];
+        try {
+          const jwks = await didKeyToJwks(did);
+          if (!jwks) throw new Error("No JWKS from DID resolution");
+          const jwk = jwks.keys.find((k) => k.kid === header.kid) || jwks.keys[0];
+          if (!jwk) throw new Error("No matching JWK for kid");
+          keyLike = await jose.importJWK(jwk, header.alg || "ES256");
+        } catch (e) {
+          // Local fallback for dev/test (e.g., localhost without HTTPS DID hosting)
+          const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
+          keyLike = await jose.importSPKI(publicKeyPem, header.alg || "ES256");
+        }
+      } else {
+        // Fallback to local public key
+        const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
+        keyLike = await jose.importSPKI(publicKeyPem, header.alg || "ES256");
+      }
+
+      const { payload } = await jose.jwtVerify(token, keyLike, {
+        algorithms: ["ES256", "ES384"],
+      });
+      return payload;
+    } catch (error) {
+      console.error("Status list token verification (resolved) failed:", error);
       return null;
     }
   }

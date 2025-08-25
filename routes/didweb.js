@@ -17,23 +17,26 @@ didWebRouter.get(["/.well-known/did.json","/did.json"], async (req, res) => {
     serviceURL = serverURL //+ "/" + proxyPath;
   }
   
-  contorller = contorller.replace("https://","")
+  contorller = contorller.replace("https://","").replace("http://","")
+  const did = `did:web:${contorller}`;
+  
   let didDoc = {
     "@context": "https://www.w3.org/ns/did/v1",
-    id: `did:web:${contorller}`,
+    id: did,
     verificationMethod: [
       {
-        id: `did:web:${contorller}#keys-1`, //"did:web:example.com#keys-1",
+        id: `${did}#keys-1`,
         type: "JsonWebKey2020",
-        controller: `${contorller}`,
+        controller: did,
         publicKeyJwk: jwks,
       },
     ],
-    authentication: [`${contorller}#keys-1`],
+    authentication: [`${did}#keys-1`],
+    assertionMethod: [`${did}#keys-1`],
 
     service: [
       {
-        id: `did:web:${contorller}#jwks`,
+        id: `${did}#jwks`,
         type: "JsonWebKey2020",
         serviceEndpoint: `${serviceURL}/.well-known/jwks.json`,
       },
@@ -48,10 +51,12 @@ didWebRouter.get(["/.well-known/jwks.json"], async (req, res) => {
   if (proxyPath) {
     contorller = serverURL.replace("/"+proxyPath,"") + ":" + proxyPath;
   }
-  contorller = contorller.replace("https://","")
+  contorller = contorller.replace("https://","").replace("http://","")
+  const did = `did:web:${contorller}`;
+  
   let jwks = await convertPemToJwk();
   let result = {
-    keys: [{ ...jwks, use: "sig", kid: `${contorller}#keys-1` }],
+    keys: [{ ...jwks, use: "sig", kid: `${did}#keys-1` }],
   };
 
   res.json(result);

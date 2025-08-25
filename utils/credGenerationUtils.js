@@ -108,6 +108,26 @@ export async function handleVcSdJwtFormat(
   let signer, verifier;
   let headerOptions; // Define headerOptions here to be populated based on sig type
 
+  // Helpers to compute issuer DID and KID based on selected signature type
+  const computeDidWebFromServer = () => {
+    const proxyPath = process.env.PROXY_PATH || null;
+    let controller = serverURL;
+    if (proxyPath) {
+      controller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
+    }
+    controller = controller.replace("https://", "").replace("http://", "");
+    const did = `did:web:${controller}`;
+    const kid = `${did}#keys-1`;
+    return { did, kid };
+  };
+
+  const computeDidJwkFromPublic = () => {
+    const publicJwkForSigning = pemToJWK(publicKeyPem, "public");
+    const did = `did:jwk:${Buffer.from(JSON.stringify(publicJwkForSigning)).toString("base64url")}`;
+    const kid = `${did}#0`;
+    return { did, kid };
+  };
+
   const effectiveSignatureType = sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509"
     ? "x509"
     : sessionObject.signatureType;
@@ -124,7 +144,7 @@ export async function handleVcSdJwtFormat(
         typ: format
       },
     };
-  } else { // Covers "jwk" and "kid-jwk"
+  } else { // Covers did:web and did:jwk (and legacy jwk/kid-jwk)
     const publicJwkForSigning = pemToJWK(publicKeyPem, "public");
     ({ signer, verifier } = await createSignerVerifier(
       pemToJWK(privateKey, "private"),
@@ -132,42 +152,20 @@ export async function handleVcSdJwtFormat(
     ));
 
     let joseHeader = {};
-    if (effectiveSignatureType === "jwk") {
-      console.log("jwk signature type selected: Using embedded JWK in header.");
-      joseHeader = { 
-        jwk: publicJwkForSigning,
-        alg: "ES256",
-        typ: format // Algorithm must be specified when jwk is used in header
-      };
-    } else if (effectiveSignatureType === "kid-jwk") { // Assuming "kid-jwk" as the type for kid-based JWK signing
-      console.log(`kid-jwk signature type selected: Using KID: ${defaultSigningKid} in header.`);
-      joseHeader = { 
-        kid: defaultSigningKid,
-        alg: "ES256" // alg is also typically included with kid for clarity, though not strictly required by RFC7515 if kid is enough for resolution
-      };
-    } else if (effectiveSignatureType === "did:web") {
+    if (effectiveSignatureType === "did:web") {
       console.log("did:web signature type selected.");
-      const proxyPath = process.env.PROXY_PATH || null;
-      let controller = serverURL;
-      if (proxyPath) {
-        controller = serverURL.replace("/"+proxyPath,"") + ":" + proxyPath;
-      }
-      controller = controller.replace("https://","").replace("http://","");
-      const kid = `did:web:${controller}#keys-1`;
-      console.log(`Using KID: ${kid} for did:web signing.`);
-      console.log("format", format);
-      joseHeader = { 
+      const { kid } = computeDidWebFromServer();
+      joseHeader = {
         kid: kid,
         alg: "ES256",
         typ: format
       };
     } else {
-      // Fallback or default if signatureType is something else (e.g., a generic 'jwk' without specific instruction)
-      // For now, defaulting to KID if not explicitly 'jwk' for direct embedding.
-      // This matches the previous default behavior when jwkHeaderPreference was 'kid'.
-      console.warn(`Unspecified or unrecognized JWK signature type '${effectiveSignatureType}', defaulting to KID: ${defaultSigningKid}.`);
-      joseHeader = { 
-        kid: defaultSigningKid,
+      // Default to did:jwk for DIIP compliance when not using did:web/x509
+      console.log("did:jwk signature type selected (or legacy jwk/kid-jwk coerced to did:jwk).");
+      const { kid } = computeDidJwkFromPublic();
+      joseHeader = {
+        kid: kid,
         alg: "ES256",
         typ: format
       };
@@ -283,11 +281,30 @@ export async function handleVcSdJwtFormat(
       throw new Error(`Unsupported credential type: ${credType}`);
   }
 
-  // Handle holder binding
-  let cnf = { jwk: holderJWKS.jwk };
-  if (!cnf.jwk) {
-    const keys = await didKeyToJwks(holderJWKS.kid);
-    cnf = {jwk: keys.keys[0]};
+  // Handle holder binding per DIIP: MUST include cnf.kid as DID URL from Holder's authentication VM
+  let cnf;
+  if (holderJWKS && holderJWKS.kid && holderJWKS.kid.startsWith("did:")) {
+    cnf = { kid: holderJWKS.kid };
+  } else if (holderJWKS && holderJWKS.jwk) {
+    // Derive did:jwk from embedded JWK
+    const holderDid = `did:jwk:${Buffer.from(JSON.stringify(holderJWKS.jwk)).toString("base64url")}#0`;
+    cnf = { kid: holderDid };
+  } else if (holderJWKS && holderJWKS.kid && holderJWKS.kid.startsWith("did:key:")) {
+    // Non-required by DIIP, but attempt resolution and fallback to first JWK -> derive did:jwk kid
+    try {
+      const keys = await didKeyToJwks(holderJWKS.kid);
+      if (keys && keys.keys && keys.keys[0]) {
+        const holderDid = `did:jwk:${Buffer.from(JSON.stringify(keys.keys[0])).toString("base64url")}#0`;
+        cnf = { kid: holderDid };
+      }
+    } catch (e) {
+      // Fallback to embedding JWK if resolution fails (non-DIIP compliant)
+      cnf = { jwk: (await didKeyToJwks(holderJWKS.kid)).keys[0] };
+    }
+  }
+  if (!cnf) {
+    // As a last resort, keep old behavior but this is not DIIP-compliant
+    cnf = { jwk: holderJWKS?.jwk };
   }
 
   const now = new Date();
@@ -296,11 +313,21 @@ export async function handleVcSdJwtFormat(
 
   if (format === "jwt_vc_json" || format === "vc+sd-jwt") {
     console.log("Issuing a jwt_vc format credential");
+    // Compute issuer DID and kid for header already done; compute issuer DID for payload as well
+    let issuerDidForPayload;
+    if (effectiveSignatureType === "x509") {
+      // X.509 mode: keep existing issuer as server URL (out of DIIP scope)
+      issuerDidForPayload = serverURL;
+    } else if (effectiveSignatureType === "did:web") {
+      issuerDidForPayload = computeDidWebFromServer().did;
+    } else {
+      issuerDidForPayload = computeDidJwkFromPublic().did;
+    }
     const vcPayload = {
       "@context": ["https://www.w3.org/ns/credentials/v2"],
       type: ["VerifiableCredential", vct],
       credentialSubject: credPayload.claims,
-      issuer: serverURL,
+      issuer: issuerDidForPayload,
       validFrom: now.toISOString(),
       validUntil: expiryDate.toISOString(),
     };
@@ -314,7 +341,7 @@ export async function handleVcSdJwtFormat(
       saltGenerator: generateSalt,
     });
     const sdPayload = {
-      iss: serverURL,
+      iss: issuerDidForPayload,
       iat: Math.floor(now.getTime() / 1000),
       nbf: Math.floor(now.getTime() / 1000),
       exp: Math.floor(expiryDate.getTime() / 1000),
@@ -341,6 +368,15 @@ export async function handleVcSdJwtFormat(
   
   } else if (format === "dc+sd-jwt") {
     console.log("Issuing a dc+sd-jwt format credential");
+    // Compute issuer DID for payload
+    let issuerDidForPayload;
+    if (effectiveSignatureType === "x509") {
+      issuerDidForPayload = serverURL;
+    } else if (effectiveSignatureType === "did:web") {
+      issuerDidForPayload = computeDidWebFromServer().did;
+    } else {
+      issuerDidForPayload = computeDidJwkFromPublic().did;
+    }
     const sdjwt = new SDJwtVcInstance({
       signer,
       verifier,
@@ -352,7 +388,7 @@ export async function handleVcSdJwtFormat(
     // Issue credential
     const credential = await sdjwt.issue(
       {
-        iss: serverURL,
+        iss: issuerDidForPayload,
         iat: Math.floor(Date.now() / 1000),
         nbf: Math.floor(Date.now() / 1000),
         exp: Math.floor(expiryDate.getTime() / 1000),
@@ -578,32 +614,78 @@ export async function handleVcSdJwtFormatDeferred(sessionObject, serverURL) {
       throw new Error(`Unsupported credential type: ${credType}`);
   }
 
-  // Handle holder binding
-  let cnf = { jwk: holderJWKS.jwk };
-  if (!cnf.jwk) {
-    cnf = { jwk: await didKeyToJwks(holderJWKS.kid) };
+  // Handle holder binding (DIIP): prefer DID URL in cnf.kid
+  let cnf;
+  if (holderJWKS && holderJWKS.kid && holderJWKS.kid.startsWith("did:")) {
+    cnf = { kid: holderJWKS.kid };
+  } else if (holderJWKS && holderJWKS.jwk) {
+    const holderDid = `did:jwk:${Buffer.from(JSON.stringify(holderJWKS.jwk)).toString("base64url")}#0`;
+    cnf = { kid: holderDid };
+  } else if (holderJWKS && holderJWKS.kid && holderJWKS.kid.startsWith("did:key:")) {
+    try {
+      const keys = await didKeyToJwks(holderJWKS.kid);
+      if (keys && keys.keys && keys.keys[0]) {
+        const holderDid = `did:jwk:${Buffer.from(JSON.stringify(keys.keys[0])).toString("base64url")}#0`;
+        cnf = { kid: holderDid };
+      }
+    } catch (e) {
+      cnf = { jwk: (await didKeyToJwks(holderJWKS.kid)).keys[0] };
+    }
+  }
+  if (!cnf) {
+    cnf = { jwk: holderJWKS?.jwk };
   }
 
-  // Prepare issuance headers
-  const headerOptions = isHaip
-    ? {
-        header: {
-          x5c: [pemToBase64Der(certificatePemX509)],
-        },
-      }
-    : {
-        header: {
-          kid: "aegean#authentication-key",
-        },
-      };
+  // Prepare issuance headers per DIIP
+  const computeDidWebFromServer = () => {
+    const proxyPath = process.env.PROXY_PATH || null;
+    let controller = serverURL;
+    if (proxyPath) {
+      controller = serverURL.replace("/" + proxyPath, "") + ":" + proxyPath;
+    }
+    controller = controller.replace("https://", "").replace("http://", "");
+    const did = `did:web:${controller}`;
+    const kid = `${did}#keys-1`;
+    return { did, kid };
+  };
+  const computeDidJwkFromPublic = () => {
+    const publicJwkForSigning = pemToJWK(publicKeyPem, "public");
+    const did = `did:jwk:${Buffer.from(JSON.stringify(publicJwkForSigning)).toString("base64url")}`;
+    const kid = `${did}#0`;
+    return { did, kid };
+  };
+  let headerOptions;
+  if (isHaip || process.env.ISSUER_SIGNATURE_TYPE === "x509") {
+    headerOptions = {
+      header: {
+        x5c: [pemToBase64Der(certificatePemX509)],
+        typ: "vc+sd-jwt",
+      },
+    };
+  } else if (sessionObject.signatureType === "did:web") {
+    const { kid } = computeDidWebFromServer();
+    headerOptions = { header: { kid, alg: "ES256", typ: "vc+sd-jwt" } };
+  } else {
+    const { kid } = computeDidJwkFromPublic();
+    headerOptions = { header: { kid, alg: "ES256", typ: "vc+sd-jwt" } };
+  }
 
   const now = new Date();
   const expiryDate = new Date(now);
   expiryDate.setMonth(now.getMonth() + 6);
+  // Compute issuer DID for payload
+  let issuerDidForPayload;
+  if (isHaip || process.env.ISSUER_SIGNATURE_TYPE === "x509") {
+    issuerDidForPayload = serverURL;
+  } else if (sessionObject.signatureType === "did:web") {
+    issuerDidForPayload = computeDidWebFromServer().did;
+  } else {
+    issuerDidForPayload = computeDidJwkFromPublic().did;
+  }
   // Issue credential
   const credential = await sdjwt.issue(
     {
-      iss: serverURL,
+      iss: issuerDidForPayload,
       iat: Math.floor(Date.now() / 1000),
       nbf: Math.floor(Date.now() / 1000),
       exp: Math.floor(expiryDate.getTime() / 1000),

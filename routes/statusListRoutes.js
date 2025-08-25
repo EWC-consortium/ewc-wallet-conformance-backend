@@ -21,8 +21,17 @@ statusListRouter.get("/status-list/:id", async (req, res) => {
       });
     }
 
-    // Generate status list token
-    const statusListToken = await statusListManager.generateStatusListToken(statusListId);
+    // Get session object from query parameters or headers if available
+    let sessionObject = null;
+    if (req.query.session_type) {
+      sessionObject = {
+        signatureType: req.query.session_type,
+        isHaip: req.query.is_haip === 'true'
+      };
+    }
+
+    // Generate status list token with session alignment
+    const statusListToken = await statusListManager.generateStatusListToken(statusListId, sessionObject);
     
     // Set appropriate headers
     res.set({
@@ -85,7 +94,7 @@ statusListRouter.get("/status-list/:id/info", async (req, res) => {
  */
 statusListRouter.post("/status-list", async (req, res) => {
   try {
-    const { size = 1000, bits = 1 } = req.body;
+    const { size = 1000, bits = 1, iss, kid, x5c, align_with_credentials = false } = req.body;
     
     if (![1, 2, 4, 8].includes(bits)) {
       return res.status(400).json({
@@ -101,20 +110,98 @@ statusListRouter.post("/status-list", async (req, res) => {
       });
     }
 
-    const statusList = await statusListManager.createStatusList(size, bits);
+    let statusList;
+    if (align_with_credentials) {
+      // Create aligned status list using same issuer and key as credentials
+      const extra = {};
+      if (iss) extra.iss = iss;
+      if (kid) extra.kid = kid;
+      if (x5c) extra.x5c = x5c;
+      statusList = await statusListManager.createAlignedStatusList(size, bits, extra);
+    } else {
+      // Create status list with explicit configuration
+      const extra = {};
+      if (iss) extra.iss = iss;
+      if (kid) extra.kid = kid;
+      if (x5c) extra.x5c = x5c;
+      statusList = await statusListManager.createStatusList(size, bits, extra);
+    }
     
     res.status(201).json({
       id: statusList.id,
       size: statusList.size,
       bits: statusList.bits,
       created_at: statusList.created_at,
-      status_list_uri: `${req.protocol}://${req.get('host')}/status-list/${statusList.id}`
+      status_list_uri: `${req.protocol}://${req.get('host')}/status-list/${statusList.id}`,
+      iss: statusList.iss || null,
+      kid: statusList.kid || null,
+      x5c: statusList.x5c || null,
+      aligned_with_credentials: align_with_credentials
     });
   } catch (error) {
     console.error("Error creating status list:", error);
     res.status(500).json({
       error: "server_error",
       error_description: "Failed to create status list"
+    });
+  }
+});
+
+/**
+ * POST /status-list/aligned
+ * Create a new status list aligned with credential issuance (admin endpoint)
+ * This ensures the status list uses the same issuer and key as credentials
+ */
+statusListRouter.post("/status-list/aligned", async (req, res) => {
+  try {
+    const { size = 1000, bits = 1, credentialType, session_type, is_haip } = req.body;
+    
+    if (![1, 2, 4, 8].includes(bits)) {
+      return res.status(400).json({
+        error: "invalid_bits",
+        error_description: "Bits must be one of: 1, 2, 4, 8"
+      });
+    }
+
+    if (size <= 0 || size > 100000) {
+      return res.status(400).json({
+        error: "invalid_size",
+        error_description: "Size must be between 1 and 100000"
+      });
+    }
+
+    const extra = {};
+    if (credentialType) extra.credentialType = credentialType;
+    
+    // Create session object for signature type alignment
+    let sessionObject = null;
+    if (session_type) {
+      sessionObject = {
+        signatureType: session_type,
+        isHaip: is_haip === true
+      };
+    }
+    
+    const statusList = await statusListManager.createAlignedStatusList(size, bits, extra, sessionObject);
+    
+    res.status(201).json({
+      id: statusList.id,
+      size: statusList.size,
+      bits: statusList.bits,
+      created_at: statusList.created_at,
+      status_list_uri: `${req.protocol}://${req.get('host')}/status-list/${statusList.id}`,
+      iss: statusList.iss || null,
+      kid: statusList.kid || null,
+      x5c: statusList.x5c || null,
+      credentialType: statusList.credentialType || null,
+      aligned_with_credentials: true,
+      signature_type: session_type || null
+    });
+  } catch (error) {
+    console.error("Error creating aligned status list:", error);
+    res.status(500).json({
+      error: "server_error",
+      error_description: "Failed to create aligned status list"
     });
   }
 });

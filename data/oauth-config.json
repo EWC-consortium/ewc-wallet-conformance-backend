@@ -21,20 +21,7 @@
   "request_authentication_methods_supported": {
     "authorization_endpoint": ["request_object"]
   },
-  "vp_formats_supported": {
-    "jwt_vp": {
-      "alg_values_supported": ["ES256"]
-    },
-    "jwt_vc_json": {
-      "alg_values_supported": ["ES256"]
-    }
-  },
-  "subject_syntax_types_supported": [
-    "did:key:jwk_jcs-pub",
-    "did:ebsi:v1",
-    "did:ebsi:v2",
-    "did:jwk"
-  ],
+  
   "subject_trust_frameworks_supported": ["ebsi", "ewc-issuer-trust-list"],
   "id_token_types_supported": [
     "subject_signed_id_token",

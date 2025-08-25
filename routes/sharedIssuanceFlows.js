@@ -611,7 +611,11 @@ sharedRouter.post("/credential", async (req, res) => {
           ) {
             try {
               const didJwk = decodedProofHeader.kid;
-              const jwkPart = didJwk.substring("did:jwk:".length);
+              let jwkPart = didJwk.substring("did:jwk:".length);
+              // Strip optional fragment (e.g., #0) per did:jwk convention
+              if (jwkPart.includes("#")) {
+                jwkPart = jwkPart.split("#")[0];
+              }
               const jwkString = Buffer.from(jwkPart, "base64url").toString(
                 "utf8"
               );
@@ -762,6 +766,17 @@ sharedRouter.post("/credential", async (req, res) => {
             });
           }
 
+          // For pre-authorized flows, the iss claim MUST be omitted according to OpenID4VC spec
+          if (proofPayload.iss && flowType == "pre-auth") {
+            console.log("Proof JWT contains 'iss' claim in pre-authorized flow, which is not allowed.");
+            await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
+            return res.status(400).json({
+              error: "invalid_proof",
+              error_description:
+                "Proof JWT must not contain 'iss' claim in pre-authorized code flow.",
+            });
+          }
+
           // c_nonce check - CRITICAL for replay protection
           // Check if the nonce exists in Redis cache
           const nonceExists = await checkNonce(proofPayload.nonce);
@@ -780,10 +795,16 @@ sharedRouter.post("/credential", async (req, res) => {
           // Delete the nonce from cache to prevent replay attacks
           await deleteNonce(proofPayload.nonce);
 
-          // Optional: Log iss for tracking
-          console.log(
-            `Proof JWT validated. Issuer (Wallet): ${proofPayload.iss}, Nonce verified.`
-          );
+          // Optional: Log iss for tracking (only for code flows)
+          if (flowType == "code") {
+            console.log(
+              `Proof JWT validated. Issuer (Wallet): ${proofPayload.iss}, Nonce verified.`
+            );
+          } else {
+            console.log(
+              `Proof JWT validated for pre-authorized flow (no iss claim required), Nonce verified.`
+            );
+          }
 
           // --- End Full Signature and Claim Verification ---
         } else {
@@ -884,7 +905,7 @@ sharedRouter.post("/credential", async (req, res) => {
 
     // Always add a status list reference to the credential (per desired behavior)
     let statusReference = null;
-    const statusListId = await getOrCreateStatusListForCredentialType(effectiveConfigurationId);
+    const statusListId = await getOrCreateStatusListForCredentialType(effectiveConfigurationId, sessionObject);
     if (statusListId) {
       const tokenIndex = await findAvailableStatusListIndex(statusListId);
       if (tokenIndex !== null) {
@@ -1094,9 +1115,10 @@ export const publicKeyToPem = async (jwk) => {
 /**
  * Get or create a status list for a specific credential type
  * @param {string} credentialType - The credential configuration ID
+ * @param {Object} sessionObject - Session object containing signature type info
  * @returns {string|null} Status list ID or null if creation failed
  */
-async function getOrCreateStatusListForCredentialType(credentialType) {
+async function getOrCreateStatusListForCredentialType(credentialType, sessionObject) {
   try {
     // Check if we already have a status list for this credential type
     const statusLists = await statusListManager.getAllStatusLists();
@@ -1106,8 +1128,9 @@ async function getOrCreateStatusListForCredentialType(credentialType) {
       return existingStatusList.id;
     }
     
-    // Create a new status list for this credential type and persist metadata
-    const newStatusList = await statusListManager.createStatusList(1000, 1, { credentialType });
+    // Create a new aligned status list for this credential type
+    // This ensures the status list uses the same issuer and key as credentials
+    const newStatusList = await statusListManager.createAlignedStatusList(1000, 1, { credentialType }, sessionObject);
     return newStatusList.id;
   } catch (error) {
     console.error("Error creating status list for credential type:", error);
