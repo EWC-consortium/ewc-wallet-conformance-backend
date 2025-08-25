@@ -3,6 +3,7 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import fetch from "node-fetch";
 import { createProofJwt, generateDidJwkFromPrivateJwk, ensureOrCreateEcKeyPair } from "./lib/crypto.js";
+import { storeWalletCredentialByType } from "./lib/cache.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -98,6 +99,7 @@ async function main() {
   });
 
   if (credRes.status === 202) {
+    //deferred issuance
     const { transaction_id } = await credRes.json();
     const start = Date.now();
     while (Date.now() - start < argv["poll-timeout"]) {
@@ -105,6 +107,12 @@ async function main() {
       const defRes = await httpPostJson(`${issuerBase}/credential_deferred`, { transaction_id });
       if (defRes.ok) {
         const body = await defRes.json();
+        // store credential and key-binding material using preAuthorizedCode as session key
+        await storeWalletCredentialByType(configurationId, {
+          credential: body,
+          keyBinding: { privateJwk, publicJwk, didJwk },
+          metadata: { configurationId, c_nonce },
+        });
         console.log(JSON.stringify(body, null, 2));
         return;
       }
@@ -118,6 +126,12 @@ async function main() {
   }
 
   const credBody = await credRes.json();
+  // store credential and key-binding material using preAuthorizedCode as session key
+  await storeWalletCredentialByType(configurationId, {
+    credential: credBody,
+    keyBinding: { privateJwk, publicJwk, didJwk },
+    metadata: { configurationId, c_nonce },
+  });
   console.log(JSON.stringify(credBody, null, 2));
 }
 

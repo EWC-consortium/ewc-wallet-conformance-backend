@@ -1,6 +1,8 @@
 import express from "express";
 import fetch from "node-fetch";
 import { createProofJwt, generateDidJwkFromPrivateJwk, ensureOrCreateEcKeyPair, createPkcePair } from "./lib/crypto.js";
+import { performPresentation, resolveDeepLinkFromEndpoint } from "./lib/presentation.js";
+import { storeWalletCredentialByType } from "./lib/cache.js";
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -70,6 +72,11 @@ app.post("/issue", async (req, res) => {
         const defRes = await httpPostJson(`${apiBase}/credential_deferred`, { transaction_id });
         if (defRes.ok) {
           const body = await defRes.json();
+          await storeWalletCredentialByType(configurationId, {
+            credential: body,
+            keyBinding: { privateJwk, publicJwk, didJwk },
+            metadata: { configurationId, c_nonce },
+          });
           return res.json(body);
         }
       }
@@ -78,6 +85,11 @@ app.post("/issue", async (req, res) => {
 
     if (!credRes.ok) return forwardError(res, credRes, "credential_error");
     const credBody = await credRes.json();
+    await storeWalletCredentialByType(configurationId, {
+      credential: credBody,
+      keyBinding: { privateJwk, publicJwk, didJwk },
+      metadata: { configurationId, c_nonce },
+    });
     return res.json(credBody);
   } catch (e) {
     console.error(e);
@@ -86,6 +98,26 @@ app.post("/issue", async (req, res) => {
 });
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));
+
+// POST /present
+// body: { verifier?: string (default http://localhost:3000), deepLink?: string, fetchPath?: string, credential?: string (optional), keyPath?: string }
+app.post("/present", async (req, res) => {
+  try {
+    const verifierBase = (req.body.verifier || "http://localhost:3000").replace(/\/$/, "");
+    const deepLink = req.body.deepLink || (req.body.fetchPath ? await resolveDeepLinkFromEndpoint(verifierBase, req.body.fetchPath) : undefined);
+    if (!deepLink) return res.status(400).json({ error: "invalid_request", error_description: "Missing deepLink or fetchPath" });
+
+    console.log("[/present] resolved deepLink:", deepLink);
+    if (req.body.credential) console.log("[/present] hint credential:", req.body.credential);
+    if (req.body.keyPath) console.log("[/present] keyPath provided");
+
+    const result = await performPresentation({ deepLink, verifierBase, credentialType: req.body.credential, keyPath: req.body.keyPath });
+    return res.json(result || { status: "ok" });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "server_error", error_description: e.message || String(e) });
+  }
+});
 
 // Authorization Code Flow endpoint
 // body: { issuer?: string, offer?: string, fetchOfferPath?: string, credential?: string, clientIdScheme?: string }
@@ -177,13 +209,27 @@ app.post("/issue-codeflow", async (req, res) => {
       while (Date.now() - start < timeout) {
         await sleep(interval);
         const defRes = await httpPostJson(`${apiBase}/credential_deferred`, { transaction_id });
-        if (defRes.ok) return res.json(await defRes.json());
+        if (defRes.ok) {
+          const body = await defRes.json();
+          await storeWalletCredentialByType(configurationId, {
+            credential: body,
+            keyBinding: { privateJwk, publicJwk, didJwk },
+            metadata: { configurationId, c_nonce },
+          });
+          return res.json(body);
+        }
       }
       return res.status(504).json({ error: "timeout", error_description: "Deferred issuance timed out" });
     }
 
     if (!credRes.ok) return forwardError(res, credRes, "credential_error");
-    return res.json(await credRes.json());
+    const credBody2 = await credRes.json();
+    await storeWalletCredentialByType(configurationId, {
+      credential: credBody2,
+      keyBinding: { privateJwk, publicJwk, didJwk },
+      metadata: { configurationId, c_nonce },
+    });
+    return res.json(credBody2);
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "server_error", error_description: e.message || String(e) });
