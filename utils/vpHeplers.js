@@ -116,8 +116,13 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
           ) {
             const decodedSdJwt = await decodeSdJwt(credString, digest);
             if (decodedSdJwt.kbJwt) {
-              // Check if kbJwt exists
-              keybindJwt = decodedSdJwt.kbJwt; // Assign if present. Note: overwrites if multiple SD-JWTs have kbJwt.
+              // Decode kb-jwt so downstream can read payload.nonce
+              try {
+                keybindJwt = jwt.decode(decodedSdJwt.kbJwt, { complete: true });
+              } catch (e) {
+                console.warn("Failed to decode kbJwt, passing raw string.");
+                keybindJwt = decodedSdJwt.kbJwt;
+              }
             }
             const claims = await getClaims(
               decodedSdJwt.jwt.payload,
@@ -188,7 +193,12 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
           if (token.includes("~")) { // Heuristic for SD-JWT
             const decodedSdJwt = await decodeSdJwt(token, digest);
             if (decodedSdJwt.kbJwt) {
-              keybindJwt = decodedSdJwt.kbJwt;
+              try {
+                keybindJwt = jwt.decode(decodedSdJwt.kbJwt, { complete: true });
+              } catch (e) {
+                console.warn("Failed to decode kbJwt, passing raw string.");
+                keybindJwt = decodedSdJwt.kbJwt;
+              }
             }
             const claims = await getClaims(decodedSdJwt.jwt.payload, decodedSdJwt.disclosures, digest);
 
