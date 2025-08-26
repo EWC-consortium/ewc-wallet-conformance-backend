@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import jwt from "jsonwebtoken";
 import zlib from "zlib";
@@ -106,16 +107,16 @@ class StatusListManager {
       throw new Error("Bits must be one of: 1, 2, 4, 8");
     }
 
-    // Determine signature type using same logic as credential generation
-    let effectiveSignatureType;
-    if (sessionObject) {
-      // Use the same logic as credential generation
-      effectiveSignatureType = sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509"
-        ? "x509"
-        : sessionObject.signatureType;
-    } else {
-      // Fallback to environment variable
-      effectiveSignatureType = process.env.ISSUER_SIGNATURE_TYPE || "did:web";
+    // Determine signature type, preferring stored signature_type on the list, then session, then env
+    let effectiveSignatureType = statusList.signature_type;
+    if (!effectiveSignatureType) {
+      if (sessionObject) {
+        effectiveSignatureType = sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509"
+          ? "x509"
+          : sessionObject.signatureType;
+      } else {
+        effectiveSignatureType = process.env.ISSUER_SIGNATURE_TYPE || "did:web";
+      }
     }
 
     // Determine issuer and key configuration based on current settings
@@ -143,6 +144,7 @@ class StatusListManager {
       statuses: new Array(size).fill(0), // 0 = valid, 1 = revoked
       created_at: Math.floor(Date.now() / 1000),
       updated_at: Math.floor(Date.now() / 1000),
+      signature_type: effectiveSignatureType,
       iss: alignedIss,
       kid: alignedKid,
       x5c: alignedX5c,
@@ -159,7 +161,7 @@ class StatusListManager {
    * @param {number} bits - Bits per status (1, 2, 4, or 8)
    * @returns {Object} Status list object
    */
-  async createStatusList(size = 1000, bits = 1, extra = {}) {
+  async createStatusList(size = 1000, bits = 1, extra = {}, signatureType = null) {
     if (![1, 2, 4, 8].includes(bits)) {
       throw new Error("Bits must be one of: 1, 2, 4, 8");
     }
@@ -172,6 +174,7 @@ class StatusListManager {
       statuses: new Array(size).fill(0), // 0 = valid, 1 = revoked
       created_at: Math.floor(Date.now() / 1000),
       updated_at: Math.floor(Date.now() / 1000),
+      signature_type: signatureType || extra.signature_type || process.env.ISSUER_SIGNATURE_TYPE || "did:web",
       ...extra
     };
 
@@ -321,10 +324,24 @@ class StatusListManager {
       },
     };
 
+    // Helper to import private key supporting both PKCS#8 and SEC1 PEM
+    const getKeyLikeFromPem = async (pem) => {
+      try {
+        return await jose.importPKCS8(pem, "ES256");
+      } catch (e) {
+        try {
+          return crypto.createPrivateKey({ key: pem, format: "pem" });
+        } catch (e2) {
+          console.error("Failed to load private key (PKCS#8/SEC1)", e2);
+          throw e;
+        }
+      }
+    };
+
     // Sign the JWT with jose to ensure correct protected header
     const privateKeyForSign = (effectiveSignatureType === "x509" && privateKeyPemX509)
-      ? await jose.importPKCS8(privateKeyPemX509, "ES256")
-      : await jose.importPKCS8(privateKey, "ES256");
+      ? await getKeyLikeFromPem(privateKeyPemX509)
+      : await getKeyLikeFromPem(privateKey);
     const token = await new jose.SignJWT(payload)
       .setProtectedHeader(protectedHeader)
       .sign(privateKeyForSign);

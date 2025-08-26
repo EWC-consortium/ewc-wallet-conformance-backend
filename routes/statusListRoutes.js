@@ -94,7 +94,7 @@ statusListRouter.get("/status-list/:id/info", async (req, res) => {
  */
 statusListRouter.post("/status-list", async (req, res) => {
   try {
-    const { size = 1000, bits = 1, iss, kid, x5c, align_with_credentials = false } = req.body;
+    const { size = 1000, bits = 1, iss, kid, x5c, align_with_credentials = false, signature_type = null } = req.body;
     
     if (![1, 2, 4, 8].includes(bits)) {
       return res.status(400).json({
@@ -124,7 +124,7 @@ statusListRouter.post("/status-list", async (req, res) => {
       if (iss) extra.iss = iss;
       if (kid) extra.kid = kid;
       if (x5c) extra.x5c = x5c;
-      statusList = await statusListManager.createStatusList(size, bits, extra);
+      statusList = await statusListManager.createStatusList(size, bits, extra, signature_type);
     }
     
     res.status(201).json({
