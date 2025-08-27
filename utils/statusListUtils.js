@@ -23,11 +23,18 @@ const issuerSignatureType = process.env.ISSUER_SIGNATURE_TYPE || "did:web"; // o
 const privateKey = fs.readFileSync("./private-key.pem", "utf-8");
 let certificatePemX509 = null;
 let privateKeyPemX509 = null;
+let privateKeyPemDidWeb = null;
 try {
   certificatePemX509 = fs.readFileSync("./x509EC/client_certificate.crt", "utf8");
   privateKeyPemX509 = fs.readFileSync("./x509EC/ec_private_pkcs8.key", "utf8");
 } catch (e) {
   // optional, only required in x509 mode
+}
+try {
+  // DID:web private key to align with did:web DID document served by didweb routes
+  privateKeyPemDidWeb = fs.readFileSync("./didjwks/did_private_pkcs8.key", "utf8");
+} catch (e) {
+  // optional, used when did:web is active and separate key material is provided
 }
 
 function computeDidWebFromServer() {
@@ -338,10 +345,20 @@ class StatusListManager {
       }
     };
 
+    // Choose the correct private key based on header/type to avoid mismatches
+    let pemToUse = privateKey;
+    if (protectedHeader && protectedHeader.x5c && privateKeyPemX509) {
+      pemToUse = privateKeyPemX509;
+    } else if (
+      protectedHeader && protectedHeader.kid && protectedHeader.kid.startsWith("did:web:") && privateKeyPemDidWeb
+    ) {
+      pemToUse = privateKeyPemDidWeb;
+    } else if (effectiveSignatureType === "x509" && privateKeyPemX509) {
+      pemToUse = privateKeyPemX509;
+    }
+
     // Sign the JWT with jose to ensure correct protected header
-    const privateKeyForSign = (effectiveSignatureType === "x509" && privateKeyPemX509)
-      ? await getKeyLikeFromPem(privateKeyPemX509)
-      : await getKeyLikeFromPem(privateKey);
+    const privateKeyForSign = await getKeyLikeFromPem(pemToUse);
     const token = await new jose.SignJWT(payload)
       .setProtectedHeader(protectedHeader)
       .sign(privateKeyForSign);
