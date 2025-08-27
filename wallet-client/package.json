@@ -11,7 +11,9 @@
     "jose": "^5.2.4",
     "node-fetch": "^3.3.2",
     "express": "^4.19.2",
-    "redis": "^4.7.0"
+    "redis": "^4.7.0",
+    "@sd-jwt/decode": "^0.6.1",
+    "@sd-jwt/crypto-nodejs": "^0.7.2"
   }
 }
 
