@@ -115,7 +115,7 @@ class StatusListManager {
     }
 
     // Determine signature type, preferring stored signature_type on the list, then session, then env
-    let effectiveSignatureType = statusList.signature_type;
+    let effectiveSignatureType = extra.signature_type;
     if (!effectiveSignatureType) {
       if (sessionObject) {
         effectiveSignatureType = sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509"
