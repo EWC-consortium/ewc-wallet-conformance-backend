@@ -55,6 +55,30 @@ app.post("/issue", async (req, res) => {
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
+// GET /session-status/:sessionId
+// Returns the current status of a session from Redis
+app.get("/session-status/:sessionId", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    if (!sessionId) {
+      return res.status(400).json({ error: "invalid_request", error_description: "sessionId is required" });
+    }
+
+    const key = `wallet:test-session:${sessionId}`;
+    const sessionData = await walletRedisClient.get(key);
+    
+    if (!sessionData) {
+      return res.status(404).json({ error: "not_found", error_description: "Session not found" });
+    }
+
+    const session = JSON.parse(sessionData);
+    return res.json(session);
+  } catch (e) {
+    console.error("[session-status] error:", e);
+    return res.status(500).json({ error: "server_error", error_description: e.message || String(e) });
+  }
+});
+
 // POST /session
 // body: { deepLink: string, sessionId: string, issuer?: string, verifier?: string, credential?: string, keyPath?: string, fetchOfferPath?: string, clientIdScheme?: string }
 // - Initializes a test session in Redis with status "pending"
