@@ -15,6 +15,37 @@ async function decodeJwtVC(jwtString) {
 }
 
 /**
+ * Extracts the compact token from a data: URL used by Enveloped VC/VP objects.
+ * Accepts forms like:
+ *  - data:application/vc+sd-jwt,<token>
+ *  - data:application/vp+sd-jwt,<token>
+ *  - data:application/vc+jwt,<token>
+ * Returns null if not a supported data URL.
+ */
+function extractTokenFromDataUrl(dataUrl) {
+  if (typeof dataUrl !== 'string') return null;
+  if (!dataUrl.startsWith('data:')) return null;
+  const commaIdx = dataUrl.indexOf(',');
+  if (commaIdx < 0) return null;
+  const mediatype = dataUrl.substring(5, commaIdx); // between 'data:' and ','
+  const payload = dataUrl.substring(commaIdx + 1);
+  // Accept known media types; allow both vc/vp and sd-jwt/jwt variants
+  const allowed = [
+    'application/vc+sd-jwt',
+    'application/vp+sd-jwt',
+    'application/vc+jwt',
+    'application/vp+jwt'
+  ];
+  if (!allowed.some((mt) => mediatype.startsWith(mt))) return null;
+  try {
+    // data URL payload may be percent-encoded; decode safely
+    return decodeURIComponent(payload);
+  } catch {
+    return payload;
+  }
+}
+
+/**
  * Extracts claims from the request body.
  *
  * @param {Object} req - The Express request object.
@@ -72,20 +103,41 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
       // It could also be the original vpToken if it's a root jwt_vc_json or sd-jwt.
       // Normalize to an array of credential strings to process.
       let credentialStringsToProcess = [];
+      let credentialObjectsToProcess = [];
       if (typeof vpResult === "string") {
         // If it's a root JWT (either sd-jwt or plain jwt_vc_json) or a single nested result
         credentialStringsToProcess.push(vpResult);
       } else if (Array.isArray(vpResult)) {
         // If jp.query returned an array of JWT strings (nested case)
-        credentialStringsToProcess = vpResult.filter(
-          (item) => typeof item === "string"
-        );
+        for (const item of vpResult) {
+          if (typeof item === 'string') {
+            credentialStringsToProcess.push(item);
+          } else if (item && typeof item === 'object') {
+            credentialObjectsToProcess.push(item);
+          }
+        }
       } else {
         console.warn(
           `vpResult for descriptor id '${descriptor.id}' is neither a string nor an array of strings. Skipping.`,
           vpResult
         );
         continue;
+      }
+
+      // Prefer EnvelopedVerifiableCredential objects when present by extracting their data: URLs
+      for (const obj of credentialObjectsToProcess) {
+        try {
+          const objType = Array.isArray(obj.type) ? obj.type : [obj.type];
+          const isEnvelopedVC = objType && objType.includes('EnvelopedVerifiableCredential') && typeof obj.id === 'string';
+          if (isEnvelopedVC) {
+            const tokenFromData = extractTokenFromDataUrl(obj.id);
+            if (tokenFromData) {
+              credentialStringsToProcess.push(tokenFromData);
+            }
+          }
+        } catch (e) {
+          // ignore malformed objects and continue
+        }
       }
 
       if (
@@ -124,6 +176,79 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
               decodedSdJwt.disclosures,
               digest
             );
+            // If this SD-JWT is a VP (typ=vp+sd-jwt and cty=vp), prefer enveloped structures
+            const hdr = decodedSdJwt.jwt.header || {};
+            const isVpSdJwt = hdr.typ === 'vp+sd-jwt' && hdr.cty === 'vp';
+            if (isVpSdJwt) {
+              // Handle EnvelopedVerifiablePresentation wrapping another VP token
+              const claimsType = Array.isArray(claims.type) ? claims.type : [claims.type];
+              if (claimsType && claimsType.includes('EnvelopedVerifiablePresentation') && typeof claims.id === 'string') {
+                const innerVpToken = extractTokenFromDataUrl(claims.id);
+                if (innerVpToken) {
+                  try {
+                    const innerDecoded = await decodeSdJwt(innerVpToken, digest);
+                    const innerClaims = await getClaims(innerDecoded.jwt.payload, innerDecoded.disclosures, digest);
+                    // Process inner VP's verifiableCredential array (which may include EnvelopedVerifiableCredential)
+                    if (innerClaims.vp && Array.isArray(innerClaims.vp.verifiableCredential)) {
+                      for (const vcEntry of innerClaims.vp.verifiableCredential) {
+                        if (typeof vcEntry === 'string') {
+                          // sd-jwt or jwt string
+                          if (vcEntry.includes('~')) {
+                            const decVc = await decodeSdJwt(vcEntry, digest);
+                            const vcClaims = await getClaims(decVc.jwt.payload, decVc.disclosures, digest);
+                            extractedClaims.push(vcClaims);
+                          } else {
+                            const decVc = await decodeJwtVC(vcEntry);
+                            if (decVc && decVc.payload) extractedClaims.push(decVc.payload);
+                          }
+                        } else if (vcEntry && typeof vcEntry === 'object') {
+                          const tokenFromData = extractTokenFromDataUrl(vcEntry.id);
+                          if (tokenFromData) {
+                            if (tokenFromData.includes('~')) {
+                              const decVc = await decodeSdJwt(tokenFromData, digest);
+                              const vcClaims = await getClaims(decVc.jwt.payload, decVc.disclosures, digest);
+                              extractedClaims.push(vcClaims);
+                            } else {
+                              const decVc = await decodeJwtVC(tokenFromData);
+                              if (decVc && decVc.payload) extractedClaims.push(decVc.payload);
+                            }
+                          }
+                        }
+                      }
+                      continue; // handled
+                    }
+                  } catch (e) {
+                    // fall through to handle claims below
+                  }
+                }
+              }
+
+              // If no EnvelopedVerifiablePresentation, prefer EnvelopedVerifiableCredential entries if present
+              if (claims.vp && Array.isArray(claims.vp.verifiableCredential)) {
+                let handledAny = false;
+                for (const vcEntry of claims.vp.verifiableCredential) {
+                  if (vcEntry && typeof vcEntry === 'object') {
+                    const objType = Array.isArray(vcEntry.type) ? vcEntry.type : [vcEntry.type];
+                    const isEnvelopedVC = objType && objType.includes('EnvelopedVerifiableCredential') && typeof vcEntry.id === 'string';
+                    if (isEnvelopedVC) {
+                      const tokenFromData = extractTokenFromDataUrl(vcEntry.id);
+                      if (tokenFromData) {
+                        handledAny = true;
+                        if (tokenFromData.includes('~')) {
+                          const decVc = await decodeSdJwt(tokenFromData, digest);
+                          const vcClaims = await getClaims(decVc.jwt.payload, decVc.disclosures, digest);
+                          extractedClaims.push(vcClaims);
+                        } else {
+                          const decVc = await decodeJwtVC(tokenFromData);
+                          if (decVc && decVc.payload) extractedClaims.push(decVc.payload);
+                        }
+                      }
+                    }
+                  }
+                }
+                if (handledAny) continue; // prefer enveloped; already pushed claims
+              }
+            }
             extractedClaims.push(claims);
           } else if (descriptor.format === "jwt_vc_json") {
             const decodedJwt = await decodeJwtVC(credString); // Using your existing decodeJwtVC
@@ -208,6 +333,79 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
             }
             const claims = await getClaims(decodedSdJwt.jwt.payload, decodedSdJwt.disclosures, digest);
 
+            // Check header to prefer enveloped structures for VP SD-JWT
+            const hdr = decodedSdJwt.jwt.header || {};
+            const isVpSdJwt = hdr.typ === 'vp+sd-jwt' && hdr.cty === 'vp';
+            if (isVpSdJwt) {
+              const claimsType = Array.isArray(claims.type) ? claims.type : [claims.type];
+              // Handle EnvelopedVerifiablePresentation
+              if (claimsType && claimsType.includes('EnvelopedVerifiablePresentation') && typeof claims.id === 'string') {
+                const innerVpToken = extractTokenFromDataUrl(claims.id);
+                if (innerVpToken) {
+                  try {
+                    const innerDecoded = await decodeSdJwt(innerVpToken, digest);
+                    const innerClaims = await getClaims(innerDecoded.jwt.payload, innerDecoded.disclosures, digest);
+                    if (innerClaims.vp && Array.isArray(innerClaims.vp.verifiableCredential)) {
+                      for (const vcEntry of innerClaims.vp.verifiableCredential) {
+                        if (typeof vcEntry === 'string') {
+                          if (vcEntry.includes('~')) {
+                            const decVc = await decodeSdJwt(vcEntry, digest);
+                            const vcClaims = await getClaims(decVc.jwt.payload, decVc.disclosures, digest);
+                            extractedClaims.push(vcClaims);
+                          } else {
+                            const decVc = await decodeJwtVC(vcEntry);
+                            if (decVc && decVc.payload) extractedClaims.push(decVc.payload);
+                          }
+                        } else if (vcEntry && typeof vcEntry === 'object') {
+                          const tokenFromData = extractTokenFromDataUrl(vcEntry.id);
+                          if (tokenFromData) {
+                            if (tokenFromData.includes('~')) {
+                              const decVc = await decodeSdJwt(tokenFromData, digest);
+                              const vcClaims = await getClaims(decVc.jwt.payload, decVc.disclosures, digest);
+                              extractedClaims.push(vcClaims);
+                            } else {
+                              const decVc = await decodeJwtVC(tokenFromData);
+                              if (decVc && decVc.payload) extractedClaims.push(decVc.payload);
+                            }
+                          }
+                        }
+                      }
+                      continue; // handled enveloped VP
+                    }
+                  } catch (e) {
+                    // fall through
+                  }
+                }
+              }
+
+              // Prefer EnvelopedVerifiableCredential entries when present
+              if (claims.vp && Array.isArray(claims.vp.verifiableCredential)) {
+                let handledAny = false;
+                for (const vcEntry of claims.vp.verifiableCredential) {
+                  if (vcEntry && typeof vcEntry === 'object') {
+                    const objType = Array.isArray(vcEntry.type) ? vcEntry.type : [vcEntry.type];
+                    const isEnvelopedVC = objType && objType.includes('EnvelopedVerifiableCredential') && typeof vcEntry.id === 'string';
+                    if (isEnvelopedVC) {
+                      const tokenFromData = extractTokenFromDataUrl(vcEntry.id);
+                      if (tokenFromData) {
+                        handledAny = true;
+                        if (tokenFromData.includes('~')) {
+                          const decVc = await decodeSdJwt(tokenFromData, digest);
+                          const vcClaims = await getClaims(decVc.jwt.payload, decVc.disclosures, digest);
+                          extractedClaims.push(vcClaims);
+                        } else {
+                          const decVc = await decodeJwtVC(tokenFromData);
+                          if (decVc && decVc.payload) extractedClaims.push(decVc.payload);
+                        }
+                      }
+                    }
+                  }
+                }
+                if (handledAny) continue; // prefer enveloped
+              }
+            }
+
+            // Fallbacks: original behavior (strings or single VC claims)
             if (claims.vp && Array.isArray(claims.vp.verifiableCredential)) {
               for (const vcJwt of claims.vp.verifiableCredential) {
                 if (typeof vcJwt !== 'string') continue;
