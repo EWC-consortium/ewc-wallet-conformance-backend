@@ -325,6 +325,8 @@ class StatusListManager {
       iss: issuerForPayload,
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 86400, // 24 hours
+      // Per OAuth Token Status List spec (Section 5.1), sub MUST be the URI of the Status List Token
+      sub: `${serverURL}/status-list/${statusListId}`,
       status_list: {
         bits: statusList.bits,
         lst: compressedBase64,
