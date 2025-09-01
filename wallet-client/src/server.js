@@ -452,6 +452,11 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   if (userPin) {
     txCode = userPin;
     console.log("[preauth] using provided userPin for tx_code");
+  }else{
+    if(txCodeConfig){ //in case a pin is required by the issuer but not provided by the user fake one
+      txCode = makeTxCode(txCodeConfig);
+      console.log("[preauth] generated tx_code from config");
+    }
   }
   // If no userPin, don't send tx_code (issuer will handle missing tx_code appropriately)
   let tokenEndpoint = issuerMeta.token_endpoint || null;
