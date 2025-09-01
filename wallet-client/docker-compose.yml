@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  wallet-client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wallet-client
+    ports:
+      - "4000:4000"
+    environment:
+      # Server configuration
+      - PORT=4000
+      - NODE_ENV=production
+      
+      # Redis configuration
+      - WALLET_REDIS=redis:6379
+      - WALLET_CREDENTIAL_TTL=86400
+      - WALLET_TEST_SESSION_TTL=86400
+      
+      # Debug and logging
+      - WALLET_DEBUG_CREDENTIAL=false
+      - WALLET_MDL_STRICT=false
+      
+      # Timeout configurations
+      - WALLET_POLL_TIMEOUT_MS=30000
+      - WALLET_POLL_INTERVAL_MS=2000
+      
+      
+
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - wallet-network
+    volumes:
+      # Optional: Mount for persistent key storage
+      - ./keys:/app/keys:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    container_name: wallet-redis
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_PASSWORD=wallet_redis_password
+    command: redis-server --requirepass wallet_redis_password
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - wallet-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  wallet-network:
+    driver: bridge

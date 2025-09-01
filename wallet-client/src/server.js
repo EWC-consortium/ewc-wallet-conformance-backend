@@ -6,7 +6,7 @@ import { storeWalletCredentialByType, walletRedisClient } from "./lib/cache.js";
 import { jwtVerify, decodeJwt, decodeProtectedHeader, createLocalJWKSet, importJWK, importX509 } from "jose";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
 import { digest } from "@sd-jwt/crypto-nodejs";
-import { verifyMdlToken } from "../../utils/mdlVerification.js";
+import { verifyMdlToken } from "../utils/mdlVerification.js";
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -19,32 +19,51 @@ app.post("/issue", async (req, res) => {
   try {
     const issuerBase = (req.body.issuer || "http://localhost:3000").replace(/\/$/, "");
     const deepLink = req.body.offer || (await getOfferDeepLink(issuerBase, req.body.fetchOfferPath, req.body.credential));
+    console.log("[/issue] deepLink:", deepLink || "<none>");
     if (!deepLink) {
       return res.status(400).json({ error: "invalid_request", error_description: "Missing offer or fetchOfferPath" });
     }
 
     const offerConfig = await resolveOfferConfig(deepLink);
+    try {
+      console.log("[/issue] offer.credential_issuer=", offerConfig?.credential_issuer);
+      console.log("[/issue] offer.config_ids=", offerConfig?.credential_configuration_ids);
+      console.log("[/issue] offer.grants=", Object.keys(offerConfig?.grants || {}));
+      console.log("[/issue] offer full structure:", JSON.stringify(offerConfig, null, 2));
+    } catch {}
     const { credential_configuration_ids, grants } = offerConfig;
     const apiBase = (offerConfig.credential_issuer || issuerBase).replace(/\/$/, "");
     const issuerMeta = await discoverIssuerMetadata(apiBase);
+    try {
+      console.log("[/issue] issuerMeta.token_endpoint=", issuerMeta?.token_endpoint);
+      console.log("[/issue] issuerMeta.credential_endpoint=", issuerMeta?.credential_endpoint);
+      console.log("[/issue] issuerMeta.nonce_endpoint=", issuerMeta?.nonce_endpoint);
+      const cfgKeys = Object.keys(issuerMeta?.credential_configurations_supported || {});
+      console.log("[/issue] issuerMeta.credential_configurations_supported keys=", cfgKeys.slice(0, 5), cfgKeys.length > 5 ? `(+${cfgKeys.length - 5} more)` : "");
+    } catch {}
     const configurationId = req.body.credential || credential_configuration_ids?.[0];
     if (!configurationId) {
+      console.warn("[/issue] no credential_configuration_id available in offer or request.");
       return res.status(400).json({ error: "invalid_request", error_description: "No credential_configuration_id available" });
     }
 
     const preAuthGrant = grants?.["urn:ietf:params:oauth:grant-type:pre-authorized_code"];
     if (!preAuthGrant) {
+      console.error("[/issue] OIDC4VCI DRAFT 15 VIOLATION: Only pre-authorized_code grant type supported in this endpoint. Found grants:", Object.keys(grants || {}));
       return res.status(400).json({ error: "unsupported_grant_type", error_description: "Only pre-authorized_code supported" });
     }
+    
+    console.log("[/issue] invoking pre-authorized issuance. configurationId=", configurationId);
     const result = await runPreAuthorizedIssuance({
       apiBase,
       issuerMeta,
       configurationId,
       preAuthorizedCode: preAuthGrant["pre-authorized_code"],
-      txCodeConfig: preAuthGrant.tx_code,
+      txCodeConfig: preAuthGrant.tx_code, // Pass original config
       keyPath: req.body.keyPath,
       pollTimeoutMs: req.body.pollTimeoutMs,
       pollIntervalMs: req.body.pollIntervalMs,
+      userPin: req.body.pin, // Pass the pin directly
     });
     return res.json(result);
   } catch (e) {
@@ -80,15 +99,15 @@ app.get("/session-status/:sessionId", async (req, res) => {
 });
 
 // POST /session
-// body: { deepLink: string, sessionId: string, issuer?: string, verifier?: string, credential?: string, keyPath?: string, fetchOfferPath?: string, clientIdScheme?: string }
+// body: { deepLink: string, sessionId: string, issuer?: string, verifier?: string, credential?: string, keyPath?: string, fetchOfferPath?: string, clientIdScheme?: string, pin?: string }
 // - Initializes a test session in Redis with status "pending"
 // - If deepLink is openid4vp, runs VP flow (similar to /present)
 // - If deepLink is openid-credential-offer (VCI):
-//   - If pre-authorized_code grant → run /issue flow
+//   - If pre-authorized_code grant → run /issue flow (pin used as tx_code if user_pin_required)
 //   - If authorization_code grant → run /issue-codeflow flow
 // - Updates Redis status to "ok" on success, "failed" on error
 app.post("/session", async (req, res) => {
-  const { deepLink, sessionId } = req.body || {};
+  const { deepLink, sessionId, pin } = req.body || {};
   if (!deepLink || !sessionId) {
     return res.status(400).json({ error: "invalid_request", error_description: "deepLink and sessionId are required" });
   }
@@ -116,12 +135,25 @@ app.post("/session", async (req, res) => {
     // VCI request (credential offer)
     if (/^(openid-credential-offer:\/\/|haip:\/\/)/.test(deepLink)) {
       const issuerBaseDefault = (req.body.issuer || "http://localhost:3000").replace(/\/$/, "");
+      console.log("[/session] VCI deepLink:", deepLink);
       const offerCfg = await resolveOfferConfig(deepLink);
       const { credential_configuration_ids, grants } = offerCfg;
       const apiBase = (offerCfg.credential_issuer || issuerBaseDefault).replace(/\/$/, "");
       const issuerMeta = await discoverIssuerMetadata(apiBase);
+      try {
+        console.log("[/session] offer.credential_issuer=", offerCfg?.credential_issuer);
+        console.log("[/session] offer.config_ids=", credential_configuration_ids);
+        console.log("[/session] offer.grants=", Object.keys(grants || {}));
+        console.log("[/session] offer full structure:", JSON.stringify(offerCfg, null, 2));
+        console.log("[/session] issuerMeta.token_endpoint=", issuerMeta?.token_endpoint);
+        console.log("[/session] issuerMeta.credential_endpoint=", issuerMeta?.credential_endpoint);
+        console.log("[/session] issuerMeta.nonce_endpoint=", issuerMeta?.nonce_endpoint);
+        const cfgKeys = Object.keys(issuerMeta?.credential_configurations_supported || {});
+        console.log("[/session] issuerMeta.credential_configurations_supported keys=", cfgKeys.slice(0, 5), cfgKeys.length > 5 ? `(+${cfgKeys.length - 5} more)` : "");
+      } catch {}
       const configurationId = req.body.credential || credential_configuration_ids?.[0];
       if (!configurationId) {
+        console.warn("[/session] no credential_configuration_id available in offer or request. Aborting.");
         const failed = await setStatus("failed", { error: "No credential_configuration_id available" });
         return res.status(400).json({ error: "invalid_request", error_description: "No credential_configuration_id available", state: failed });
       }
@@ -130,15 +162,18 @@ app.post("/session", async (req, res) => {
       if (grants?.["urn:ietf:params:oauth:grant-type:pre-authorized_code"]) {
         try {
           const preAuthGrant = grants["urn:ietf:params:oauth:grant-type:pre-authorized_code"]; 
+          console.log("[/session] invoking pre-authorized issuance. configurationId=", configurationId);
+          
           const result = await runPreAuthorizedIssuance({
             apiBase,
             issuerMeta,
             configurationId,
             preAuthorizedCode: preAuthGrant["pre-authorized_code"],
-            txCodeConfig: preAuthGrant.tx_code,
+            txCodeConfig: preAuthGrant.tx_code, // Pass original config
             keyPath: req.body.keyPath,
             pollTimeoutMs: req.body.pollTimeoutMs,
             pollIntervalMs: req.body.pollIntervalMs,
+            userPin: pin, // Pass the pin directly
           });
           const okPayload = await setStatus("ok", { result });
           return res.json(okPayload);
@@ -149,9 +184,15 @@ app.post("/session", async (req, res) => {
       }
 
       // Authorization code flow
-      if (grants?.authorization_code?.issuer_state) {
+      if (grants?.authorization_code) {
+        if (!grants.authorization_code.issuer_state) {
+          console.error("[/session] OIDC4VCI DRAFT 15 VIOLATION: authorization_code grant missing required 'issuer_state' field");
+          const failed = await setStatus("failed", { error: "OIDC4VCI DRAFT 15 VIOLATION: authorization_code grant missing required 'issuer_state' field" });
+          return res.status(400).json({ error: "invalid_grant", error_description: "OIDC4VCI DRAFT 15 VIOLATION: authorization_code grant missing required 'issuer_state' field", state: failed });
+        }
         try {
           const authGrant = grants.authorization_code;
+          console.log("[/session] invoking authorization code issuance. configurationId=", configurationId);
           const result = await runAuthorizationCodeIssuance({
             apiBase,
             issuerMeta,
@@ -169,8 +210,9 @@ app.post("/session", async (req, res) => {
         }
       }
 
-      const failed = await setStatus("failed", { error: "Unsupported or missing grant in credential offer" });
-      return res.status(400).json({ error: "unsupported_grant_type", error_description: "Unsupported or missing grant in credential offer", state: failed });
+      console.error("[/session] OIDC4VCI DRAFT 15 VIOLATION: No supported grant types found. Supported grants: urn:ietf:params:oauth:grant-type:pre-authorized_code, authorization_code (with issuer_state)");
+      const failed = await setStatus("failed", { error: "OIDC4VCI DRAFT 15 VIOLATION: No supported grant types found" });
+      return res.status(400).json({ error: "unsupported_grant_type", error_description: "OIDC4VCI DRAFT 15 VIOLATION: No supported grant types found. Supported grants: urn:ietf:params:oauth:grant-type:pre-authorized_code, authorization_code (with issuer_state)", state: failed });
     }
 
     // Unknown deep link scheme
@@ -209,16 +251,37 @@ app.post("/issue-codeflow", async (req, res) => {
   try {
     const issuerBaseInput = (req.body.issuer || "http://localhost:3000").replace(/\/$/, "");
     const deepLink = req.body.offer || (await getOfferDeepLink(issuerBaseInput, req.body.fetchOfferPath, req.body.credential));
+    console.log("[/issue-codeflow] deepLink:", deepLink || "<none>");
     if (!deepLink) return res.status(400).json({ error: "invalid_request", error_description: "Missing offer or fetchOfferPath" });
 
     const offerCfg = await resolveOfferConfig(deepLink);
+    try {
+      console.log("[/issue-codeflow] offer.credential_issuer=", offerCfg?.credential_issuer);
+      console.log("[/issue-codeflow] offer.config_ids=", offerCfg?.credential_configuration_ids);
+      console.log("[/issue-codeflow] offer.grants=", Object.keys(offerCfg?.grants || {}));
+      console.log("[/issue-codeflow] offer full structure:", JSON.stringify(offerCfg, null, 2));
+    } catch {}
     const { credential_configuration_ids, grants } = offerCfg;
     const apiBase = (offerCfg.credential_issuer || issuerBaseInput).replace(/\/$/, "");
     const issuerMeta = await discoverIssuerMetadata(apiBase);
+    try {
+      console.log("[/issue-codeflow] issuerMeta.token_endpoint=", issuerMeta?.token_endpoint);
+      console.log("[/issue-codeflow] issuerMeta.credential_endpoint=", issuerMeta?.credential_endpoint);
+      console.log("[/issue-codeflow] issuerMeta.nonce_endpoint=", issuerMeta?.nonce_endpoint);
+      const cfgKeys = Object.keys(issuerMeta?.credential_configurations_supported || {});
+      console.log("[/issue-codeflow] issuerMeta.credential_configurations_supported keys=", cfgKeys.slice(0, 5), cfgKeys.length > 5 ? `(+${cfgKeys.length - 5} more)` : "");
+    } catch {}
 
     // Expect authorization_code grant
     const authGrant = grants?.authorization_code;
-    if (!authGrant?.issuer_state) return res.status(400).json({ error: "unsupported_grant_type", error_description: "authorization_code grant with issuer_state required" });
+    if (!authGrant) {
+      console.error("[/issue-codeflow] OIDC4VCI DRAFT 15 VIOLATION: authorization_code grant type required in this endpoint. Found grants:", Object.keys(grants || {}));
+      return res.status(400).json({ error: "unsupported_grant_type", error_description: "authorization_code grant required" });
+    }
+    if (!authGrant.issuer_state) {
+      console.error("[/issue-codeflow] OIDC4VCI DRAFT 15 VIOLATION: authorization_code grant missing required 'issuer_state' field");
+      return res.status(400).json({ error: "unsupported_grant_type", error_description: "authorization_code grant with issuer_state required" });
+    }
 
     const configurationId = req.body.credential || credential_configuration_ids?.[0];
     if (!configurationId) return res.status(400).json({ error: "invalid_request", error_description: "No credential_configuration_id available" });
@@ -246,7 +309,9 @@ async function getOfferDeepLink(issuerBase, path, credentialType) {
   if (!path) return undefined;
   const url = new URL(issuerBase + path);
   if (credentialType) url.searchParams.set("type", credentialType);
+  console.log("[offer] GET", url.toString());
   const res = await fetch(url.toString());
+  console.log("[offer] <-", res.status);
   if (!res.ok) throw new Error(`Fetch-offer error ${res.status}`);
   const body = await res.json();
   return body.deepLink;
@@ -258,7 +323,9 @@ async function resolveOfferConfig(deepLink) {
   const encoded = url.searchParams.get("credential_offer_uri");
   if (!encoded) throw new Error("Missing credential_offer_uri in offer");
   const offerUri = decodeURIComponent(encoded);
+  console.log("[offer] fetching credential_offer_uri:", offerUri);
   const res = await fetch(offerUri);
+  console.log("[offer] credential_offer_uri status:", res.status);
   if (!res.ok) throw new Error(`Offer-config error ${res.status}`);
   return res.json();
 }
@@ -298,6 +365,9 @@ async function discoverIssuerMetadata(credentialIssuerBase) {
   if (!meta.authorization_server && Array.isArray(meta.authorization_servers) && meta.authorization_servers.length > 0) {
     meta.authorization_server = meta.authorization_servers[0];
   }
+  try {
+    console.log("[issuer-meta] summary: token=", meta?.token_endpoint, "credential=", meta?.credential_endpoint, "nonce=", meta?.nonce_endpoint, "deferred=", meta?.credential_deferred_endpoint, "authz_server=", meta?.authorization_server);
+  } catch {}
   return meta;
 }
 
@@ -345,13 +415,21 @@ function makeTxCode(cfg) {
 }
 
 async function httpPostJson(url, body) {
-  return fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
+  const start = Date.now();
+  try { console.log("[http] POST JSON ->", url); } catch {}
+  const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
+  try { console.log("[http] <-", url, res.status, (Date.now() - start) + "ms"); } catch {}
+  return res;
 }
 
 async function httpPostForm(url, params) {
   const form = new URLSearchParams();
   Object.entries(params || {}).forEach(([k, v]) => { if (typeof v !== 'undefined' && v !== null) form.set(k, String(v)); });
-  return fetch(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString() });
+  const start = Date.now();
+  try { console.log("[http] POST FORM ->", url); } catch {}
+  const res = await fetch(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString() });
+  try { console.log("[http] <-", url, res.status, (Date.now() - start) + "ms"); } catch {}
+  return res;
 }
 
 async function forwardError(res, upstreamResponse, defaultCode) {
@@ -368,8 +446,14 @@ function safeParseJson(str) {
   try { return JSON.parse(str); } catch { return null; }
 }
 
-async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, preAuthorizedCode, txCodeConfig, keyPath, pollTimeoutMs, pollIntervalMs }) {
-  const txCode = txCodeConfig ? makeTxCode(txCodeConfig) : undefined;
+async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, preAuthorizedCode, txCodeConfig, keyPath, pollTimeoutMs, pollIntervalMs, userPin }) {
+  // Only use tx_code if userPin is provided (per OIDC4VCI spec)
+  let txCode = undefined;
+  if (userPin) {
+    txCode = userPin;
+    console.log("[preauth] using provided userPin for tx_code");
+  }
+  // If no userPin, don't send tx_code (issuer will handle missing tx_code appropriately)
   let tokenEndpoint = issuerMeta.token_endpoint || null;
   // If token_endpoint is not in issuer metadata, try authorization server metadata per RFC 8414
   if (!tokenEndpoint && (issuerMeta.authorization_server || (Array.isArray(issuerMeta.authorization_servers) && issuerMeta.authorization_servers.length))) {
@@ -385,11 +469,13 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   tokenEndpoint = tokenEndpoint || `${apiBase}/token_endpoint`;
   console.log("[preauth] apiBase=", apiBase, "configurationId=", configurationId);
   console.log("[preauth] tokenEndpoint=", tokenEndpoint);
+  console.log("[preauth] requesting token...");
   const tokenRes = await httpPostForm(tokenEndpoint, {
     grant_type: "urn:ietf:params:oauth:grant-type:pre-authorized_code",
     "pre-authorized_code": preAuthorizedCode,
     ...(txCode ? { tx_code: txCode } : {}),
   });
+  console.log("[preauth] tokenRes.status=", tokenRes.status);
   if (!tokenRes.ok) {
     const text = await tokenRes.text().catch(() => "");
     console.error("[preauth] token error", tokenRes.status, text?.slice(0, 500));
@@ -400,6 +486,7 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   const tokenBody = await tokenRes.json();
   const accessToken = tokenBody.access_token;
   let c_nonce = tokenBody.c_nonce;
+  console.log("[preauth] got access_token=", accessToken ? "yes" : "no", "c_nonce=", c_nonce ? "yes" : "no");
   if (c_nonce) {
     console.log("[preauth] using c_nonce from token response");
   } else if (issuerMeta.nonce_endpoint) {
@@ -422,15 +509,38 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(keyPath);
   const didJwk = generateDidJwkFromPrivateJwk(publicJwk);
   const proofJwt = await createProofJwt({ privateJwk, publicJwk, audience: apiBase, nonce: c_nonce, issuer: didJwk });
+  try { console.log("[preauth] proof JWT created. len=", proofJwt?.length || 0); } catch {}
 
   const credentialEndpoint = issuerMeta.credential_endpoint || `${apiBase}/credential`;
   console.log("[preauth] credentialEndpoint=", credentialEndpoint);
+  console.log("[preauth] requesting credential...");
   const credReq = { credential_configuration_id: configurationId, proof: { proof_type: "jwt", jwt: proofJwt } };
+  console.log("[preauth] credential request:", JSON.stringify(credReq, null, 2));
+  console.log("[preauth] access_token preview:", accessToken.substring(0, 20) + "...");
+  
   const credRes = await fetch(credentialEndpoint, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
     body: JSON.stringify(credReq),
   });
+  console.log("[preauth] credentialRes.status=", credRes.status);
+
+  if (!credRes.ok) {
+    const text = await credRes.text().catch(() => "");
+    console.error("[preauth] credential error", credRes.status);
+    console.error("[preauth] credential error response headers:", Object.fromEntries(credRes.headers.entries()));
+    console.error("[preauth] credential error response body:", text);
+    
+    let err = {};
+    try { 
+      err = JSON.parse(text); 
+      console.error("[preauth] credential error parsed JSON:", JSON.stringify(err, null, 2));
+    } catch (parseErr) {
+      console.error("[preauth] credential error response is not JSON, raw text:", text);
+    }
+    
+    throw new Error(`credential_error ${credRes.status}: ${JSON.stringify(err)}`);
+  }
 
   if (credRes.status === 202) {
     const { transaction_id } = await credRes.json();
@@ -441,6 +551,7 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
     while (Date.now() - start < timeout) {
       await sleep(interval);
       const defRes = await httpPostJson(deferredEndpoint, { transaction_id });
+      console.log("[preauth] deferred poll ->", defRes.status);
       if (defRes.ok) {
         const body = await defRes.json();
         await validateAndStoreCredential({ configurationId, credential: body, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce } });
@@ -482,15 +593,28 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   authorizeUrl.searchParams.set("code_challenge_method", codeChallengeMethod);
   authorizeUrl.searchParams.set("scope", configurationId);
 
+  console.log("[codeflow] authorizeUrl:", authorizeUrl.toString());
   const authRes = await fetch(authorizeUrl.toString(), { redirect: "manual" });
+  console.log("[codeflow] authRes.status:", authRes.status);
+  console.log("[codeflow] authRes.headers:", Object.fromEntries(authRes.headers.entries()));
+  
   let redirectUrl = authRes.headers.get("location");
+  console.log("[codeflow] redirectUrl from headers:", redirectUrl);
+  
   if (!redirectUrl) {
     const bodyText = await authRes.text().catch(() => "");
+    console.log("[codeflow] authRes body:", bodyText);
     const redirectPayload = safeParseJson(bodyText);
+    console.log("[codeflow] parsed redirect payload:", redirectPayload);
     if (redirectPayload?.redirect_uri) redirectUrl = redirectPayload.redirect_uri;
     else if (/^openid4vp:\/\//.test(bodyText)) redirectUrl = bodyText;
   }
-  if (!redirectUrl) throw new Error(`authorize_error ${authRes.status}`);
+  
+  if (!redirectUrl) {
+    console.error("[codeflow] No redirect URL found. Status:", authRes.status);
+    throw new Error(`authorize_error ${authRes.status}: No redirect URL found`);
+  }
+  console.log("[codeflow] redirectUrl:", redirectUrl);
   const redirect = new URL(redirectUrl);
   const code = redirect.searchParams.get("code");
   if (!code) throw new Error("invalid_response: Authorization code missing");
@@ -498,7 +622,9 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   let tokenEndpoint = issuerMeta.token_endpoint || tokenEndpointFromAS || `${apiBase}/token_endpoint`;
   console.log("[codeflow] apiBase=", apiBase, "configurationId=", configurationId);
   console.log("[codeflow] tokenEndpoint=", tokenEndpoint);
+  console.log("[codeflow] requesting token...");
   const tokenRes = await httpPostForm(tokenEndpoint, { grant_type: "authorization_code", code, code_verifier: codeVerifier });
+  console.log("[codeflow] tokenRes.status=", tokenRes.status);
   if (!tokenRes.ok) {
     const text = await tokenRes.text().catch(() => "");
     console.error("[codeflow] token error", tokenRes.status, text?.slice(0, 500));
@@ -509,6 +635,7 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   const tokenBody = await tokenRes.json();
   const accessToken = tokenBody.access_token;
   let c_nonce = tokenBody.c_nonce;
+  console.log("[codeflow] got access_token=", accessToken ? "yes" : "no", "c_nonce=", c_nonce ? "yes" : "no");
   if (c_nonce) {
     console.log("[codeflow] using c_nonce from token response");
   } else if (issuerMeta.nonce_endpoint) {
@@ -534,12 +661,14 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
 
   const credentialEndpoint = issuerMeta.credential_endpoint || `${apiBase}/credential`;
   console.log("[codeflow] credentialEndpoint=", credentialEndpoint);
+  console.log("[codeflow] requesting credential...");
   const credReq = { credential_configuration_id: configurationId, proof: { proof_type: "jwt", jwt: proofJwt } };
   const credRes = await fetch(credentialEndpoint, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
     body: JSON.stringify(credReq),
   });
+  console.log("[codeflow] credentialRes.status=", credRes.status);
 
   if (credRes.status === 202) {
     const { transaction_id } = await credRes.json();

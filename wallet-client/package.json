@@ -13,7 +13,9 @@
     "express": "^4.19.2",
     "redis": "^4.7.0",
     "@sd-jwt/decode": "^0.6.1",
-    "@sd-jwt/crypto-nodejs": "^0.7.2"
+    "@sd-jwt/crypto-nodejs": "^0.7.2",
+    "cbor-x": "^1.6.0",
+    "base64url": "^3.0.1"
   }
 }
 
