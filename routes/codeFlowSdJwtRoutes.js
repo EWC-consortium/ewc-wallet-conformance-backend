@@ -829,7 +829,9 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
   } else {
     console.log("no jwt presented");
     return res.status(400).json({ error: "invalid_request", error_description: "no vp_token" });
-});
+}
+}
+);
 
 // Function to fetch either vct or credential_configuration_id
 function fetchVCTorCredentialConfigId(data) {

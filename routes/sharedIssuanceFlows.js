@@ -50,7 +50,7 @@ import {
   handleVcSdJwtFormatDeferred,
 } from "../utils/credGenerationUtils.js";
 import statusListManager from "../utils/statusListUtils.js";
-import { statusListUpdateIndex } from "../services/cacheServiceRedis.js";
+import { statusListTryAllocateIndex } from "../services/cacheServiceRedis.js";
 
 const sharedRouter = express.Router();
 
@@ -933,8 +933,12 @@ sharedRouter.post("/credential", async (req, res) => {
           // Simple in-memory timeout-based revocation after 5 minutes
           setTimeout(async () => {
             try {
-              await statusListUpdateIndex(statusListId, tokenIndex, 1);
-              console.log(`Timeout revoked ${statusListId}#${tokenIndex}`);
+              const ok = await statusListManager.updateTokenStatus(statusListId, tokenIndex, 1);
+              if (ok) {
+                console.log(`Timeout revoked ${statusListId}#${tokenIndex}`);
+              } else {
+                console.error("Timeout revocation failed: updateTokenStatus returned false");
+              }
             } catch (e) {
               console.error("Timeout revocation failed", e);
             }
@@ -1149,14 +1153,18 @@ async function findAvailableStatusListIndex(statusListId) {
     if (!statusList) {
       return null;
     }
-    
-    // Find the first available (valid) slot
+
+    // Scan for first valid slot and attempt atomic allocation in Redis
     for (let i = 0; i < statusList.size; i++) {
       if (statusList.statuses[i] === 0) { // 0 = valid/available
-        return i;
+        const claimed = await statusListTryAllocateIndex(statusListId, i);
+        if (claimed) {
+          return i; // allocated successfully and will not be reused
+        }
+        // else: already claimed by another process, continue searching
       }
     }
-    
+
     // If no available slots, return null
     return null;
   } catch (error) {

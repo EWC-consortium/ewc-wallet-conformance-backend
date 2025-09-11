@@ -456,9 +456,9 @@ class StatusListManager {
    * @param {number} tokenIndex - Index of the token to check
    * @returns {boolean} True if token is revoked, false if valid
    */
-  isTokenRevoked(statusListToken, tokenIndex) {
+  async isTokenRevoked(statusListToken, tokenIndex) {
     try {
-      const decoded = this.verifyStatusListToken(statusListToken);
+      const decoded = await this.verifyStatusListToken(statusListToken);
       if (!decoded || !decoded.status_list) {
         return false;
       }

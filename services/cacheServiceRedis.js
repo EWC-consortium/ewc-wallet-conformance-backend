@@ -346,3 +346,29 @@ export async function statusListUpdateIndex(id, index, status) {
     return false;
   }
 }
+
+// ---------------------------------------------
+// Allocation helpers to ensure one-time index use
+// Keys layout per list:
+//   status-lists:<id>:allocated  -> Redis Set of allocated indices (as strings)
+// ---------------------------------------------
+
+/**
+ * Attempt to allocate an index for a status list.
+ * Uses Redis SADD for atomic, race-free claiming. Returns true only if this
+ * call actually added the member (not previously allocated by another process).
+ * @param {string} id
+ * @param {number} index
+ * @returns {Promise<boolean>}
+ */
+export async function statusListTryAllocateIndex(id, index) {
+  try {
+    const setKey = `status-lists:${id}:allocated`;
+    const added = await client.sAdd(setKey, String(index));
+    // sAdd returns 1 if element was added, 0 if it already existed
+    return added === 1;
+  } catch (err) {
+    console.error("Error allocating status list index:", err);
+    return false;
+  }
+}

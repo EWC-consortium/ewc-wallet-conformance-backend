@@ -396,7 +396,7 @@ statusListRouter.post("/status-list/verify", async (req, res) => {
       });
     }
 
-    const isRevoked = statusListManager.isTokenRevoked(status_list_token, token_index);
+    const isRevoked = await statusListManager.isTokenRevoked(status_list_token, token_index);
     
     res.json({
       token_index,
