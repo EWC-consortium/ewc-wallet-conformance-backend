@@ -70,7 +70,8 @@ async function main() {
   const { c_nonce } = await nonceRes.json();
 
   // key management
-  const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(argv.key);
+  // In CLI mode we don't fetch issuerMeta; default to ES256 or allow override later if needed
+  const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(argv.key, "ES256");
   const didJwk = generateDidJwkFromPrivateJwk(publicJwk);
 
   // build proof JWT
@@ -80,6 +81,8 @@ async function main() {
     audience: issuerBase,
     nonce: c_nonce,
     issuer: didJwk,
+    typ: "openid4vci-proof+jwt",
+    alg: "ES256",
   });
 
   // credential request

@@ -7,6 +7,7 @@ import { jwtVerify, decodeJwt, decodeProtectedHeader, createLocalJWKSet, importJ
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
 import { digest } from "@sd-jwt/crypto-nodejs";
 import { verifyMdlToken } from "../utils/mdlVerification.js";
+import { didKeyToJwks } from "../utils/cryptoUtils.js";
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -447,18 +448,15 @@ function safeParseJson(str) {
 }
 
 async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, preAuthorizedCode, txCodeConfig, keyPath, pollTimeoutMs, pollIntervalMs, userPin }) {
-  // Only use tx_code if userPin is provided (per OIDC4VCI spec)
+  // Draft-15: If tx_code is indicated in offer and not provided by user, do NOT fabricate. Require user input.
   let txCode = undefined;
   if (userPin) {
     txCode = userPin;
     console.log("[preauth] using provided userPin for tx_code");
-  }else{
-    if(txCodeConfig){ //in case a pin is required by the issuer but not provided by the user fake one
-      txCode = makeTxCode(txCodeConfig);
-      console.log("[preauth] generated tx_code from config");
-    }
+  } else if (txCodeConfig) {
+    console.warn("[preauth] tx_code indicated in offer but no user PIN provided. Aborting per draft-15.");
+    throw new Error("tx_code_required: offer indicates tx_code; provide 'pin' in request body");
   }
-  // If no userPin, don't send tx_code (issuer will handle missing tx_code appropriately)
   let tokenEndpoint = issuerMeta.token_endpoint || null;
   // If token_endpoint is not in issuer metadata, try authorization server metadata per RFC 8414
   if (!tokenEndpoint && (issuerMeta.authorization_server || (Array.isArray(issuerMeta.authorization_servers) && issuerMeta.authorization_servers.length))) {
@@ -490,11 +488,9 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   }
   const tokenBody = await tokenRes.json();
   const accessToken = tokenBody.access_token;
-  let c_nonce = tokenBody.c_nonce;
-  console.log("[preauth] got access_token=", accessToken ? "yes" : "no", "c_nonce=", c_nonce ? "yes" : "no");
-  if (c_nonce) {
-    console.log("[preauth] using c_nonce from token response");
-  } else if (issuerMeta.nonce_endpoint) {
+  let c_nonce;
+  console.log("[preauth] got access_token=", accessToken ? "yes" : "no");
+  if (issuerMeta.nonce_endpoint) {
     const nonceEndpoint = issuerMeta.nonce_endpoint;
     console.log("[preauth] nonceEndpoint=", nonceEndpoint);
     const nonceRes = await httpPostJson(nonceEndpoint, {});
@@ -507,13 +503,28 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
     }
     const nonceJson = await nonceRes.json();
     c_nonce = nonceJson.c_nonce;
+    console.log("[preauth] obtained c_nonce from nonce endpoint");
+  } else if (tokenBody.c_nonce) {
+    c_nonce = tokenBody.c_nonce;
+    console.log("[preauth] using c_nonce from token response (legacy)");
   } else {
-    console.log("[preauth] no c_nonce in token and no nonce_endpoint; proceeding without nonce");
+    console.warn("[preauth] no nonce endpoint and no c_nonce from token; proceeding without nonce (may be rejected)");
   }
 
-  const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(keyPath);
+  // Algorithm negotiation
+  const supportedAlgs = issuerMeta?.proof_types_supported?.jwt?.proof_signing_alg_values_supported || issuerMeta?.credential_configurations_supported?.[configurationId]?.proof_types_supported?.jwt?.proof_signing_alg_values_supported || [];
+  const preferredOrder = ["ES256", "ES384", "ES512", "EdDSA"];
+  const selectedAlg = (Array.isArray(supportedAlgs) && supportedAlgs.length)
+    ? (preferredOrder.find((a) => supportedAlgs.includes(a)) || supportedAlgs[0])
+    : "ES256";
+  console.log("[preauth] issuer supported proof algs:", supportedAlgs);
+  console.log("[preauth] selected proof alg:", selectedAlg);
+
+  const aud = issuerMeta?.credential_issuer || apiBase;
+  console.log("[preauth] proof audience:", aud, issuerMeta?.credential_issuer ? "(from issuerMeta.credential_issuer)" : "(fallback apiBase)");
+  const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(keyPath, selectedAlg);
   const didJwk = generateDidJwkFromPrivateJwk(publicJwk);
-  const proofJwt = await createProofJwt({ privateJwk, publicJwk, audience: apiBase, nonce: c_nonce, issuer: didJwk });
+  const proofJwt = await createProofJwt({ privateJwk, publicJwk, audience: aud, nonce: c_nonce, issuer: didJwk, typ: "openid4vci-proof+jwt", alg: selectedAlg });
   try { console.log("[preauth] proof JWT created. len=", proofJwt?.length || 0); } catch {}
 
   const credentialEndpoint = issuerMeta.credential_endpoint || `${apiBase}/credential`;
@@ -576,30 +587,79 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
 }
 
 async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configurationId, issuerState, keyPath, pollTimeoutMs, pollIntervalMs }) {
-  // Discover authorization endpoint
+  // Discover authorization server metadata to enable PAR when available
   let authorizeEndpoint = issuerMeta.authorization_endpoint || null;
   let tokenEndpointFromAS = null;
-  if (!authorizeEndpoint && issuerMeta.authorization_server) {
-    const asMeta = await discoverAuthorizationServerMetadata(issuerMeta.authorization_server);
-    authorizeEndpoint = asMeta.authorization_endpoint;
-    tokenEndpointFromAS = asMeta.token_endpoint;
+  let parEndpoint = null;
+  if (issuerMeta.authorization_server) {
+    try {
+      const asMeta = await discoverAuthorizationServerMetadata(issuerMeta.authorization_server);
+      authorizeEndpoint = authorizeEndpoint || asMeta.authorization_endpoint;
+      tokenEndpointFromAS = asMeta.token_endpoint || tokenEndpointFromAS;
+      parEndpoint = asMeta.pushed_authorization_request_endpoint || null;
+      try { console.log("[codeflow] AS meta: authorize=", asMeta.authorization_endpoint, "token=", asMeta.token_endpoint, "par=", parEndpoint); } catch {}
+    } catch (e) {
+      console.warn("[codeflow] AS metadata discovery failed:", e?.message || e);
+    }
   }
   const authorizeUrl = new URL((authorizeEndpoint || apiBase + "/authorize"));
   const { codeVerifier, codeChallenge, codeChallengeMethod } = createPkcePair();
   const state = randomState();
   const redirectUri = "openid4vp://";
 
-  authorizeUrl.searchParams.set("response_type", "code");
-  authorizeUrl.searchParams.set("issuer_state", issuerState);
-  authorizeUrl.searchParams.set("state", state);
-  authorizeUrl.searchParams.set("client_id", "wallet-client");
-  authorizeUrl.searchParams.set("redirect_uri", redirectUri);
-  authorizeUrl.searchParams.set("code_challenge", codeChallenge);
-  authorizeUrl.searchParams.set("code_challenge_method", codeChallengeMethod);
-  authorizeUrl.searchParams.set("scope", configurationId);
+  // Build common authorization request parameters
+  const authzDetails = [
+    {
+      type: "openid_credential",
+      credential_configuration_id: configurationId,
+      ...(issuerMeta?.credential_issuer ? { locations: [issuerMeta.credential_issuer] } : {}),
+    },
+  ];
+  const authzParams = {
+    response_type: "code",
+    issuer_state: issuerState,
+    state,
+    client_id: "wallet-client",
+    redirect_uri: redirectUri,
+    code_challenge: codeChallenge,
+    code_challenge_method: codeChallengeMethod,
+    scope: configurationId,
+    authorization_details: JSON.stringify(authzDetails),
+  };
 
-  console.log("[codeflow] authorizeUrl:", authorizeUrl.toString());
-  const authRes = await fetch(authorizeUrl.toString(), { redirect: "manual" });
+  // Prefer PAR when endpoint available; fallback to direct GET otherwise
+  let finalAuthorizeUrl = authorizeUrl.toString();
+  if (parEndpoint) {
+    try {
+      const parRes = await httpPostForm(parEndpoint, authzParams);
+      console.log("[codeflow][par] endpoint=", parEndpoint, "status=", parRes.status);
+      if (parRes.ok) {
+        const parBody = await parRes.json().catch(() => ({}));
+        const requestUri = parBody.request_uri;
+        console.log("[codeflow][par] request_uri=", requestUri, "expires_in=", parBody.expires_in);
+        if (requestUri) {
+          const url = new URL((authorizeEndpoint || apiBase + "/authorize"));
+          url.searchParams.set("client_id", authzParams.client_id);
+          url.searchParams.set("request_uri", requestUri);
+          finalAuthorizeUrl = url.toString();
+        }
+      } else {
+        const text = await parRes.text().catch(() => "");
+        console.warn("[codeflow][par] failed status=", parRes.status, "body:", text?.slice(0, 300));
+      }
+    } catch (e) {
+      console.warn("[codeflow][par] error:", e?.message || e);
+    }
+  }
+
+  if (finalAuthorizeUrl === authorizeUrl.toString()) {
+    // No PAR or PAR failed; append params to authorization URL directly
+    Object.entries(authzParams).forEach(([k, v]) => authorizeUrl.searchParams.set(k, v));
+    finalAuthorizeUrl = authorizeUrl.toString();
+  }
+
+  console.log("[codeflow] authorizeUrl:", finalAuthorizeUrl);
+  const authRes = await fetch(finalAuthorizeUrl, { redirect: "manual" });
   console.log("[codeflow] authRes.status:", authRes.status);
   console.log("[codeflow] authRes.headers:", Object.fromEntries(authRes.headers.entries()));
   
@@ -628,7 +688,22 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   console.log("[codeflow] apiBase=", apiBase, "configurationId=", configurationId);
   console.log("[codeflow] tokenEndpoint=", tokenEndpoint);
   console.log("[codeflow] requesting token...");
-  const tokenRes = await httpPostForm(tokenEndpoint, { grant_type: "authorization_code", code, code_verifier: codeVerifier });
+  // Mirror authorization_details in token request (many issuers expect it)
+  const tokenAuthzDetails = [
+    {
+      type: "openid_credential",
+      credential_configuration_id: configurationId,
+      ...(issuerMeta?.credential_issuer ? { locations: [issuerMeta.credential_issuer] } : {}),
+    },
+  ];
+  const tokenRes = await httpPostForm(tokenEndpoint, {
+    grant_type: "authorization_code",
+    code,
+    code_verifier: codeVerifier,
+    client_id: "wallet-client",
+    redirect_uri: redirectUri,
+    authorization_details: JSON.stringify(tokenAuthzDetails),
+  });
   console.log("[codeflow] tokenRes.status=", tokenRes.status);
   if (!tokenRes.ok) {
     const text = await tokenRes.text().catch(() => "");
@@ -660,9 +735,20 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
     console.log("[codeflow] no c_nonce in token and no nonce_endpoint; proceeding without nonce");
   }
 
-  const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(keyPath);
+  // Algorithm negotiation
+  const supportedAlgs2 = issuerMeta?.proof_types_supported?.jwt?.proof_signing_alg_values_supported || issuerMeta?.credential_configurations_supported?.[configurationId]?.proof_types_supported?.jwt?.proof_signing_alg_values_supported || [];
+  const preferredOrder2 = ["ES256", "ES384", "ES512", "EdDSA"];
+  const selectedAlg2 = (Array.isArray(supportedAlgs2) && supportedAlgs2.length)
+    ? (preferredOrder2.find((a) => supportedAlgs2.includes(a)) || supportedAlgs2[0])
+    : "ES256";
+  console.log("[codeflow] issuer supported proof algs:", supportedAlgs2);
+  console.log("[codeflow] selected proof alg:", selectedAlg2);
+
+  const aud2 = issuerMeta?.credential_issuer || apiBase;
+  console.log("[codeflow] proof audience:", aud2, issuerMeta?.credential_issuer ? "(from issuerMeta.credential_issuer)" : "(fallback apiBase)");
+  const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(keyPath, selectedAlg2);
   const didJwk = generateDidJwkFromPrivateJwk(publicJwk);
-  const proofJwt = await createProofJwt({ privateJwk, publicJwk, audience: apiBase, nonce: c_nonce, issuer: didJwk });
+  const proofJwt = await createProofJwt({ privateJwk, publicJwk, audience: aud2, nonce: c_nonce, issuer: didJwk, typ: "openid4vci-proof+jwt", alg: selectedAlg2 });
 
   const credentialEndpoint = issuerMeta.credential_endpoint || `${apiBase}/credential`;
   console.log("[codeflow] credentialEndpoint=", credentialEndpoint);
@@ -786,7 +872,7 @@ async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonc
     const pem = base64DerToPem(hdr.x5c[0]);
     try {
       const certKey = await importX509(pem, hdr.alg || 'ES256');
-      await jwtVerify(jws, certKey);
+      await jwtVerify(jws, certKey, { clockTolerance: 300 });
       console.log("[sd-jwt] JWS signature verified via x5c certificate");
       signatureVerified = true;
     } catch (e) {
@@ -809,7 +895,7 @@ async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonc
         console.log("[sd-jwt] JWS header.alg=", hdr.alg, "kid=", hdr.kid);
         const JWKS = createLocalJWKSet(jwks);
         try {
-          await jwtVerify(jws, JWKS);
+          await jwtVerify(jws, JWKS, { clockTolerance: 300 });
           console.log("[sd-jwt] JWS signature verified");
           signatureVerified = true;
         } catch (e) {
@@ -824,7 +910,7 @@ async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonc
               try {
                 console.log(`[sd-jwt] Trying key[${idx}] kid=${jwk.kid || 'none'} crv=${jwk.crv}`);
                 const key = await importJWK(jwk, hdr.alg || 'ES256');
-                await jwtVerify(jws, key);
+                await jwtVerify(jws, key, { clockTolerance: 300 });
                 console.log(`[sd-jwt] Verified with key[${idx}]`);
                 verified = true;
                 break;
@@ -893,7 +979,7 @@ async function validateJwtVc({ jwtVc, issuerMeta, apiBase, configurationId, publ
       const pem = base64DerToPem(hdr.x5c[0]);
       try {
         const certKey = await importX509(pem, hdr.alg || 'ES256');
-        const verified = await jwtVerify(jwtVc, certKey);
+        const verified = await jwtVerify(jwtVc, certKey, { clockTolerance: 300 });
         console.log("[jwt-vc] signature verified via x5c certificate");
         // Use payload from verified path
         var payloadFromX5c = verified.payload;
@@ -916,7 +1002,7 @@ async function validateJwtVc({ jwtVc, issuerMeta, apiBase, configurationId, publ
       if (!payload) {
         const JWKS = createLocalJWKSet(jwks.keys ? jwks : { keys: jwks.keys || [] });
         try {
-          const verified = await jwtVerify(jwtVc, JWKS);
+          const verified = await jwtVerify(jwtVc, JWKS, { clockTolerance: 300 });
           payload = verified.payload;
           console.log("[jwt-vc] signature verified");
         } catch (e) {
@@ -930,7 +1016,7 @@ async function validateJwtVc({ jwtVc, issuerMeta, apiBase, configurationId, publ
               try {
                 console.log(`[jwt-vc] Trying key[${idx}] kid=${jwk.kid || 'none'} alg=${hdr2.alg}`);
                 const key = await importJWK(jwk, hdr2.alg || 'ES256');
-                const verified = await jwtVerify(jwtVc, key);
+                const verified = await jwtVerify(jwtVc, key, { clockTolerance: 300 });
                 payload = verified.payload;
                 console.log(`[jwt-vc] Verified with key[${idx}]`);
                 break;
@@ -1029,6 +1115,19 @@ async function resolveDidDocument(did) {
       throw new Error('did:jwk decode failed');
     }
   }
+  if (did.startsWith('did:key:')) {
+    // Use shared crypto utility to resolve did:key to JWKS
+    try {
+      const jwks = await didKeyToJwks(did);
+      const first = Array.isArray(jwks?.keys) && jwks.keys.length ? jwks.keys[0] : null;
+      if (first) {
+        return { verificationMethod: [{ id: did + '#0', type: 'JsonWebKey2020', publicKeyJwk: first }] };
+      }
+      throw new Error('did:key resolution returned no keys');
+    } catch (e) {
+      throw new Error('did:key resolution failed');
+    }
+  }
   throw new Error('Unsupported DID method');
 }
 
@@ -1043,7 +1142,7 @@ async function verifyJwsWithDid(jws, header, didOrIss) {
     if (!jwk) continue;
     try {
       const key = await importJWK(jwk, header?.alg || 'ES256');
-      const verified = await jwtVerify(jws, key);
+      const verified = await jwtVerify(jws, key, { clockTolerance: 300 });
       return verified;
     } catch (e) {
       lastErr = e;

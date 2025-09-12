@@ -2,7 +2,7 @@ import fs from "fs";
 import { importJWK, exportJWK, SignJWT, generateKeyPair } from "jose";
 import crypto from "node:crypto";
 
-export async function ensureOrCreateEcKeyPair(optionalPath) {
+export async function ensureOrCreateEcKeyPair(optionalPath, alg = "ES256") {
   if (optionalPath && fs.existsSync(optionalPath)) {
     const raw = JSON.parse(fs.readFileSync(optionalPath, "utf8"));
     const privateJwk = raw.kty ? raw : raw.privateJwk;
@@ -11,11 +11,12 @@ export async function ensureOrCreateEcKeyPair(optionalPath) {
     return { privateJwk, publicJwk };
   }
 
-  const { publicKey, privateKey } = await generateKeyPair("ES256");
+  // Use JOSE's generateKeyPair with the JWT alg identifier (e.g., ES256, ES384, ES512, EdDSA)
+  const { publicKey, privateKey } = await generateKeyPair(alg);
   const privateJwk = await exportJWK(privateKey);
-  privateJwk.alg = "ES256";
+  privateJwk.alg = alg;
   const publicJwk = await exportJWK(publicKey);
-  publicJwk.alg = "ES256";
+  publicJwk.alg = alg;
   return { privateJwk, publicJwk };
 }
 
@@ -24,8 +25,8 @@ export function generateDidJwkFromPrivateJwk(publicJwk) {
   return `did:jwk:${jwkStr}`;
 }
 
-export async function createProofJwt({ privateJwk, publicJwk, audience, nonce, issuer }) {
-  const header = { alg: "ES256", typ: "JWT", jwk: publicJwk };
+export async function createProofJwt({ privateJwk, publicJwk, audience, nonce, issuer, typ = "JWT", alg = "ES256" }) {
+  const header = { alg, typ, jwk: publicJwk };
   const now = Math.floor(Date.now() / 1000);
   const payload = {
     iss: issuer,
@@ -34,9 +35,10 @@ export async function createProofJwt({ privateJwk, publicJwk, audience, nonce, i
     nbf: now - 5,
     exp: now + 300,
     nonce,
+    jti: base64url(crypto.randomBytes(16)),
   };
 
-  const key = await importJWK(privateJwk, "ES256");
+  const key = await importJWK(privateJwk, alg);
   const jwt = await new SignJWT(payload).setProtectedHeader(header).sign(key);
   return jwt;
 }
