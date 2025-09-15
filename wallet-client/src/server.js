@@ -2,7 +2,7 @@ import express from "express";
 import fetch from "node-fetch";
 import { createProofJwt, generateDidJwkFromPrivateJwk, ensureOrCreateEcKeyPair, createPkcePair } from "./lib/crypto.js";
 import { performPresentation, resolveDeepLinkFromEndpoint } from "./lib/presentation.js";
-import { storeWalletCredentialByType, walletRedisClient } from "./lib/cache.js";
+import { storeWalletCredentialByType, walletRedisClient, appendWalletLog, getWalletLogs } from "./lib/cache.js";
 import { jwtVerify, decodeJwt, decodeProtectedHeader, createLocalJWKSet, importJWK, importX509 } from "jose";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
 import { digest } from "@sd-jwt/crypto-nodejs";
@@ -13,6 +13,19 @@ const app = express();
 app.use(express.json({ limit: "2mb" }));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function makeSessionLogger(sessionId) {
+  return function sessionLog(...args) {
+    try { console.log(...args); } catch {}
+    try {
+      const message = args.map((a) => {
+        if (typeof a === 'string') return a;
+        try { return JSON.stringify(a); } catch { return String(a); }
+      }).join(' ');
+      appendWalletLog(sessionId, { level: 'info', message }).catch(() => {});
+    } catch {}
+  };
+}
 
 // POST /issue
 // body: { issuer: string (default http://localhost:3000), offer?: string, fetchOfferPath?: string, credential?: string }
@@ -75,6 +88,25 @@ app.post("/issue", async (req, res) => {
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
+// GET /logs/:sessionId
+// Returns all logs stored for a session from Redis
+app.get("/logs/:sessionId", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    if (!sessionId) {
+      return res.status(400).json({ error: "invalid_request", error_description: "sessionId is required" });
+    }
+    const logs = await getWalletLogs(sessionId);
+    if (!logs) {
+      return res.status(404).json({ error: "not_found", error_description: "No logs for session" });
+    }
+    return res.json({ sessionId, logs });
+  } catch (e) {
+    console.error("[logs] error:", e);
+    return res.status(500).json({ error: "server_error", error_description: e.message || String(e) });
+  }
+});
+
 // GET /session-status/:sessionId
 // Returns the current status of a session from Redis
 app.get("/session-status/:sessionId", async (req, res) => {
@@ -122,13 +154,15 @@ app.post("/session", async (req, res) => {
     return payload;
   }
 
+  const sessionLog = makeSessionLogger(sessionId);
+
   await setStatus("pending");
 
   try {
     // VP request
     if (/^openid4vp:\/\//.test(deepLink)) {
       const verifierBase = (req.body.verifier || "http://localhost:3000").replace(/\/$/, "");
-      const result = await performPresentation({ deepLink, verifierBase, credentialType: req.body.credential, keyPath: req.body.keyPath });
+      const result = await performPresentation({ deepLink, verifierBase, credentialType: req.body.credential, keyPath: req.body.keyPath }, sessionId);
       const okPayload = await setStatus("ok", { result: result || { status: "ok" } });
       return res.json(okPayload);
     }
@@ -136,21 +170,21 @@ app.post("/session", async (req, res) => {
     // VCI request (credential offer)
     if (/^(openid-credential-offer:\/\/|haip:\/\/)/.test(deepLink)) {
       const issuerBaseDefault = (req.body.issuer || "http://localhost:3000").replace(/\/$/, "");
-      console.log("[/session] VCI deepLink:", deepLink);
-      const offerCfg = await resolveOfferConfig(deepLink);
+      sessionLog("[/session] VCI deepLink:", deepLink);
+      const offerCfg = await resolveOfferConfig(deepLink, sessionId);
       const { credential_configuration_ids, grants } = offerCfg;
       const apiBase = (offerCfg.credential_issuer || issuerBaseDefault).replace(/\/$/, "");
-      const issuerMeta = await discoverIssuerMetadata(apiBase);
+      const issuerMeta = await discoverIssuerMetadata(apiBase, sessionId);
       try {
-        console.log("[/session] offer.credential_issuer=", offerCfg?.credential_issuer);
-        console.log("[/session] offer.config_ids=", credential_configuration_ids);
-        console.log("[/session] offer.grants=", Object.keys(grants || {}));
-        console.log("[/session] offer full structure:", JSON.stringify(offerCfg, null, 2));
-        console.log("[/session] issuerMeta.token_endpoint=", issuerMeta?.token_endpoint);
-        console.log("[/session] issuerMeta.credential_endpoint=", issuerMeta?.credential_endpoint);
-        console.log("[/session] issuerMeta.nonce_endpoint=", issuerMeta?.nonce_endpoint);
+        sessionLog("[/session] offer.credential_issuer=", offerCfg?.credential_issuer);
+        sessionLog("[/session] offer.config_ids=", credential_configuration_ids);
+        sessionLog("[/session] offer.grants=", Object.keys(grants || {}));
+        sessionLog("[/session] offer full structure:", JSON.stringify(offerCfg, null, 2));
+        sessionLog("[/session] issuerMeta.token_endpoint=", issuerMeta?.token_endpoint);
+        sessionLog("[/session] issuerMeta.credential_endpoint=", issuerMeta?.credential_endpoint);
+        sessionLog("[/session] issuerMeta.nonce_endpoint=", issuerMeta?.nonce_endpoint);
         const cfgKeys = Object.keys(issuerMeta?.credential_configurations_supported || {});
-        console.log("[/session] issuerMeta.credential_configurations_supported keys=", cfgKeys.slice(0, 5), cfgKeys.length > 5 ? `(+${cfgKeys.length - 5} more)` : "");
+        sessionLog("[/session] issuerMeta.credential_configurations_supported keys=", cfgKeys.slice(0, 5), cfgKeys.length > 5 ? `(+${cfgKeys.length - 5} more)` : "");
       } catch {}
       const configurationId = req.body.credential || credential_configuration_ids?.[0];
       if (!configurationId) {
@@ -163,7 +197,7 @@ app.post("/session", async (req, res) => {
       if (grants?.["urn:ietf:params:oauth:grant-type:pre-authorized_code"]) {
         try {
           const preAuthGrant = grants["urn:ietf:params:oauth:grant-type:pre-authorized_code"]; 
-          console.log("[/session] invoking pre-authorized issuance. configurationId=", configurationId);
+          sessionLog("[/session] invoking pre-authorized issuance. configurationId=", configurationId);
           
           const result = await runPreAuthorizedIssuance({
             apiBase,
@@ -175,7 +209,7 @@ app.post("/session", async (req, res) => {
             pollTimeoutMs: req.body.pollTimeoutMs,
             pollIntervalMs: req.body.pollIntervalMs,
             userPin: pin, // Pass the pin directly
-          });
+          }, sessionId);
           const okPayload = await setStatus("ok", { result });
           return res.json(okPayload);
         } catch (err) {
@@ -193,7 +227,7 @@ app.post("/session", async (req, res) => {
         }
         try {
           const authGrant = grants.authorization_code;
-          console.log("[/session] invoking authorization code issuance. configurationId=", configurationId);
+          sessionLog("[/session] invoking authorization code issuance. configurationId=", configurationId);
           const result = await runAuthorizationCodeIssuance({
             apiBase,
             issuerMeta,
@@ -202,7 +236,7 @@ app.post("/session", async (req, res) => {
             keyPath: req.body.keyPath,
             pollTimeoutMs: req.body.pollTimeoutMs,
             pollIntervalMs: req.body.pollIntervalMs,
-          });
+          }, sessionId);
           const okPayload = await setStatus("ok", { result });
           return res.json(okPayload);
         } catch (err) {
@@ -318,20 +352,24 @@ async function getOfferDeepLink(issuerBase, path, credentialType) {
   return body.deepLink;
 }
 
-async function resolveOfferConfig(deepLink) {
+async function resolveOfferConfig(deepLink, logSessionId) {
+  const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   const url = new URL(deepLink.replace(/^haip:\/\//, "openid-credential-offer://"));
   if (url.protocol !== "openid-credential-offer:") throw new Error("Unsupported offer scheme");
   const encoded = url.searchParams.get("credential_offer_uri");
   if (!encoded) throw new Error("Missing credential_offer_uri in offer");
   const offerUri = decodeURIComponent(encoded);
-  console.log("[offer] fetching credential_offer_uri:", offerUri);
+  console.log("[offer] fetching credential_offer_uri:", offerUri); try { slog("[offer] fetching offer", { offerUri }); } catch {}
   const res = await fetch(offerUri);
-  console.log("[offer] credential_offer_uri status:", res.status);
+  console.log("[offer] credential_offer_uri status:", res.status); try { slog("[offer] offer status", { status: res.status }); } catch {}
   if (!res.ok) throw new Error(`Offer-config error ${res.status}`);
-  return res.json();
+  const json = await res.json();
+  try { slog("[offer] offer fetched", { hasCredentialIssuer: !!json?.credential_issuer, cfgCount: (json?.credential_configuration_ids || []).length }); } catch {}
+  return json;
 }
 
-async function discoverIssuerMetadata(credentialIssuerBase) {
+async function discoverIssuerMetadata(credentialIssuerBase, logSessionId) {
+  const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   const base = credentialIssuerBase.replace(/\/$/, "");
   // RFC: if credential_issuer contains a path, well-known URI keeps path suffix
   let origin, path;
@@ -347,11 +385,11 @@ async function discoverIssuerMetadata(credentialIssuerBase) {
     `${base}/.well-known/openid-credential-issuer`,
   ];
   let meta = null; let lastErr = null;
-  console.log("[issuer-meta] trying candidates:", candidates);
+  console.log("[issuer-meta] trying candidates:", candidates); try { slog("[issuer-meta] candidates", { candidates }); } catch {}
   for (const url of candidates) {
     try {
       const res = await fetch(url);
-      console.log("[issuer-meta]", url, "->", res.status);
+      console.log("[issuer-meta]", url, "->", res.status); try { slog("[issuer-meta] fetch", { url, status: res.status }); } catch {}
       if (res.ok) { meta = await res.json(); console.log("[issuer-meta] selected:", url); break; }
       lastErr = res.status;
     } catch (e) { lastErr = e.message || String(e); }
@@ -368,11 +406,13 @@ async function discoverIssuerMetadata(credentialIssuerBase) {
   }
   try {
     console.log("[issuer-meta] summary: token=", meta?.token_endpoint, "credential=", meta?.credential_endpoint, "nonce=", meta?.nonce_endpoint, "deferred=", meta?.credential_deferred_endpoint, "authz_server=", meta?.authorization_server);
+    slog("[issuer-meta] summary", { token: !!meta?.token_endpoint, credential: !!meta?.credential_endpoint, nonce: !!meta?.nonce_endpoint, deferred: !!meta?.credential_deferred_endpoint, authz: !!meta?.authorization_server });
   } catch {}
   return meta;
 }
 
-async function discoverAuthorizationServerMetadata(authorizationServerBase) {
+async function discoverAuthorizationServerMetadata(authorizationServerBase, logSessionId) {
+  const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   // RFC 8414: If issuer has path component, well-known is host + '/.well-known/oauth-authorization-server' + path
   const baseStr = authorizationServerBase.replace(/\/$/, "");
   let origin, path;
@@ -394,17 +434,22 @@ async function discoverAuthorizationServerMetadata(authorizationServerBase) {
   ];
 
   let lastErr = null;
-  console.log("[as-meta] trying candidates:", candidates);
+  console.log("[as-meta] trying candidates:", candidates); try { slog("[as-meta] candidates", { candidates }); } catch {}
   for (const url of candidates) {
     try {
       const res = await fetch(url);
-      console.log("[as-meta]", url, "->", res.status);
-      if (res.ok) { console.log("[as-meta] selected:", url); return res.json(); }
+      console.log("[as-meta]", url, "->", res.status); try { slog("[as-meta] fetch", { url, status: res.status }); } catch {}
+      if (res.ok) { 
+        console.log("[as-meta] selected:", url); 
+        try { slog("[as-meta] selected", { url }); } catch {}
+        return res.json(); 
+      }
       lastErr = res.status;
     } catch (e) {
       lastErr = e.message || String(e);
     }
   }
+  try { slog("[as-meta] failed", { lastErr }); } catch {}
   throw new Error(`AS metadata fetch error ${lastErr}`);
 }
 
@@ -415,21 +460,29 @@ function makeTxCode(cfg) {
   return undefined;
 }
 
-async function httpPostJson(url, body) {
+async function httpPostJson(url, body, logSessionId) {
+  const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   const start = Date.now();
   try { console.log("[http] POST JSON ->", url); } catch {}
+  try { slog("[http] POST JSON", { url }); } catch {}
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
-  try { console.log("[http] <-", url, res.status, (Date.now() - start) + "ms"); } catch {}
+  const duration = Date.now() - start;
+  try { console.log("[http] <-", url, res.status, duration + "ms"); } catch {}
+  try { slog("[http] response", { url, status: res.status, duration }); } catch {}
   return res;
 }
 
-async function httpPostForm(url, params) {
+async function httpPostForm(url, params, logSessionId) {
+  const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   const form = new URLSearchParams();
   Object.entries(params || {}).forEach(([k, v]) => { if (typeof v !== 'undefined' && v !== null) form.set(k, String(v)); });
   const start = Date.now();
   try { console.log("[http] POST FORM ->", url); } catch {}
+  try { slog("[http] POST FORM", { url }); } catch {}
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString() });
-  try { console.log("[http] <-", url, res.status, (Date.now() - start) + "ms"); } catch {}
+  const duration = Date.now() - start;
+  try { console.log("[http] <-", url, res.status, duration + "ms"); } catch {}
+  try { slog("[http] response", { url, status: res.status, duration }); } catch {}
   return res;
 }
 
@@ -447,14 +500,16 @@ function safeParseJson(str) {
   try { return JSON.parse(str); } catch { return null; }
 }
 
-async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, preAuthorizedCode, txCodeConfig, keyPath, pollTimeoutMs, pollIntervalMs, userPin }) {
+async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, preAuthorizedCode, txCodeConfig, keyPath, pollTimeoutMs, pollIntervalMs, userPin }, logSessionId) {
+  const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
+  try { slog("[preauth] start", { configurationId, hasTxCodeCfg: !!txCodeConfig }); } catch {}
   // Draft-15: If tx_code is indicated in offer and not provided by user, do NOT fabricate. Require user input.
   let txCode = undefined;
   if (userPin) {
     txCode = userPin;
-    console.log("[preauth] using provided userPin for tx_code");
+    console.log("[preauth] using provided userPin for tx_code"); try { slog("[preauth] using userPin for tx_code"); } catch {}
   } else if (txCodeConfig) {
-    console.warn("[preauth] tx_code indicated in offer but no user PIN provided. Aborting per draft-15.");
+    console.warn("[preauth] tx_code indicated in offer but no user PIN provided. Aborting per draft-15."); try { slog("[preauth] tx_code required but pin missing"); } catch {}
     throw new Error("tx_code_required: offer indicates tx_code; provide 'pin' in request body");
   }
   let tokenEndpoint = issuerMeta.token_endpoint || null;
@@ -462,53 +517,55 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   if (!tokenEndpoint && (issuerMeta.authorization_server || (Array.isArray(issuerMeta.authorization_servers) && issuerMeta.authorization_servers.length))) {
     const asBase = issuerMeta.authorization_server || issuerMeta.authorization_servers[0];
     try {
-      const asMeta = await discoverAuthorizationServerMetadata(asBase);
+      const asMeta = await discoverAuthorizationServerMetadata(asBase, logSessionId);
       tokenEndpoint = asMeta.token_endpoint;
-      console.log("[preauth] tokenEndpoint discovered via AS:", tokenEndpoint);
+      console.log("[preauth] tokenEndpoint discovered via AS:", tokenEndpoint); try { slog("[preauth] tokenEndpoint discovered via AS", { tokenEndpoint }); } catch {}
     } catch (e) {
-      console.warn("[preauth] AS metadata discovery failed:", e?.message || e);
+      console.warn("[preauth] AS metadata discovery failed:", e?.message || e); try { slog("[preauth] AS metadata discovery failed", { error: e?.message || String(e) }); } catch {}
     }
   }
   tokenEndpoint = tokenEndpoint || `${apiBase}/token_endpoint`;
-  console.log("[preauth] apiBase=", apiBase, "configurationId=", configurationId);
-  console.log("[preauth] tokenEndpoint=", tokenEndpoint);
-  console.log("[preauth] requesting token...");
+  console.log("[preauth] apiBase=", apiBase, "configurationId=", configurationId); try { slog("[preauth] apiBase", { apiBase, configurationId }); } catch {}
+  console.log("[preauth] tokenEndpoint=", tokenEndpoint); try { slog("[preauth] tokenEndpoint", { tokenEndpoint }); } catch {}
+  console.log("[preauth] requesting token..."); try { slog("[preauth] requesting token"); } catch {}
   const tokenRes = await httpPostForm(tokenEndpoint, {
     grant_type: "urn:ietf:params:oauth:grant-type:pre-authorized_code",
     "pre-authorized_code": preAuthorizedCode,
     ...(txCode ? { tx_code: txCode } : {}),
-  });
-  console.log("[preauth] tokenRes.status=", tokenRes.status);
+  }, logSessionId);
+  console.log("[preauth] tokenRes.status=", tokenRes.status); try { slog("[preauth] tokenRes.status", { status: tokenRes.status }); } catch {}
   if (!tokenRes.ok) {
     const text = await tokenRes.text().catch(() => "");
     console.error("[preauth] token error", tokenRes.status, text?.slice(0, 500));
     let err = {};
     try { err = JSON.parse(text); } catch {}
+    try { slog("[preauth] token error", { status: tokenRes.status, err }); } catch {}
     throw new Error(`token_error ${tokenRes.status}: ${JSON.stringify(err)}`);
   }
   const tokenBody = await tokenRes.json();
   const accessToken = tokenBody.access_token;
   let c_nonce;
-  console.log("[preauth] got access_token=", accessToken ? "yes" : "no");
+  console.log("[preauth] got access_token=", accessToken ? "yes" : "no"); try { slog("[preauth] token received", { hasAccessToken: !!accessToken }); } catch {}
   if (issuerMeta.nonce_endpoint) {
     const nonceEndpoint = issuerMeta.nonce_endpoint;
-    console.log("[preauth] nonceEndpoint=", nonceEndpoint);
-    const nonceRes = await httpPostJson(nonceEndpoint, {});
+    console.log("[preauth] nonceEndpoint=", nonceEndpoint); try { slog("[preauth] nonceEndpoint", { nonceEndpoint }); } catch {}
+    const nonceRes = await httpPostJson(nonceEndpoint, {}, logSessionId); try { slog("[preauth] nonce request", { endpoint: nonceEndpoint, status: nonceRes.status }); } catch {}
     if (!nonceRes.ok) {
       const text = await nonceRes.text().catch(() => "");
       console.error("[preauth] nonce error", nonceRes.status, text?.slice(0, 500));
       let err = {};
       try { err = JSON.parse(text); } catch {}
+      try { slog("[preauth] nonce error", { status: nonceRes.status, err }); } catch {}
       throw new Error(`nonce_error ${nonceRes.status}: ${JSON.stringify(err)}`);
     }
     const nonceJson = await nonceRes.json();
     c_nonce = nonceJson.c_nonce;
-    console.log("[preauth] obtained c_nonce from nonce endpoint");
+    console.log("[preauth] obtained c_nonce from nonce endpoint"); try { slog("[preauth] obtained c_nonce from nonce endpoint"); } catch {}
   } else if (tokenBody.c_nonce) {
     c_nonce = tokenBody.c_nonce;
-    console.log("[preauth] using c_nonce from token response (legacy)");
+    console.log("[preauth] using c_nonce from token response (legacy)"); try { slog("[preauth] using c_nonce from token response (legacy)"); } catch {}
   } else {
-    console.warn("[preauth] no nonce endpoint and no c_nonce from token; proceeding without nonce (may be rejected)");
+    console.warn("[preauth] no nonce endpoint and no c_nonce from token; proceeding without nonce (may be rejected)"); try { slog("[preauth] no c_nonce available"); } catch {}
   }
 
   // Algorithm negotiation
@@ -517,89 +574,98 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   const selectedAlg = (Array.isArray(supportedAlgs) && supportedAlgs.length)
     ? (preferredOrder.find((a) => supportedAlgs.includes(a)) || supportedAlgs[0])
     : "ES256";
-  console.log("[preauth] issuer supported proof algs:", supportedAlgs);
-  console.log("[preauth] selected proof alg:", selectedAlg);
+  console.log("[preauth] issuer supported proof algs:", supportedAlgs); try { slog("[preauth] supported algs", { supportedAlgs }); } catch {}
+  console.log("[preauth] selected proof alg:", selectedAlg); try { slog("[preauth] selected alg", { selectedAlg }); } catch {}
 
   const aud = issuerMeta?.credential_issuer || apiBase;
-  console.log("[preauth] proof audience:", aud, issuerMeta?.credential_issuer ? "(from issuerMeta.credential_issuer)" : "(fallback apiBase)");
+  console.log("[preauth] proof audience:", aud, issuerMeta?.credential_issuer ? "(from issuerMeta.credential_issuer)" : "(fallback apiBase)"); try { slog("[preauth] proof audience", { aud }); } catch {}
   const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(keyPath, selectedAlg);
   const didJwk = generateDidJwkFromPrivateJwk(publicJwk);
   const proofJwt = await createProofJwt({ privateJwk, publicJwk, audience: aud, nonce: c_nonce, issuer: didJwk, typ: "openid4vci-proof+jwt", alg: selectedAlg });
-  try { console.log("[preauth] proof JWT created. len=", proofJwt?.length || 0); } catch {}
+  try { console.log("[preauth] proof JWT created. len=", proofJwt?.length || 0); slog("[preauth] proof created", { length: proofJwt?.length || 0 }); } catch {}
 
   const credentialEndpoint = issuerMeta.credential_endpoint || `${apiBase}/credential`;
-  console.log("[preauth] credentialEndpoint=", credentialEndpoint);
-  console.log("[preauth] requesting credential...");
+  console.log("[preauth] credentialEndpoint=", credentialEndpoint); try { slog("[preauth] credentialEndpoint", { credentialEndpoint }); } catch {}
+  console.log("[preauth] requesting credential..."); try { slog("[preauth] requesting credential"); } catch {}
   const credReq = { credential_configuration_id: configurationId, proof: { proof_type: "jwt", jwt: proofJwt } };
-  console.log("[preauth] credential request:", JSON.stringify(credReq, null, 2));
-  console.log("[preauth] access_token preview:", accessToken.substring(0, 20) + "...");
+  console.log("[preauth] credential request:", JSON.stringify(credReq, null, 2)); try { slog("[preauth] credential request body", { hasBody: true }); } catch {}
+  console.log("[preauth] access_token preview:", accessToken.substring(0, 20) + "..."); try { slog("[preauth] access_token preview", { preview: accessToken.substring(0, 20) + "..." }); } catch {}
+  try { slog("[preauth] credential request", { configurationId, hasProof: !!proofJwt }); } catch {}
   
   const credRes = await fetch(credentialEndpoint, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
     body: JSON.stringify(credReq),
   });
-  console.log("[preauth] credentialRes.status=", credRes.status);
+  console.log("[preauth] credentialRes.status=", credRes.status); try { slog("[preauth] credentialRes.status", { status: credRes.status }); } catch {}
 
   if (!credRes.ok) {
     const text = await credRes.text().catch(() => "");
-    console.error("[preauth] credential error", credRes.status);
+    console.error("[preauth] credential error", credRes.status); try { slog("[preauth] credential error start", { status: credRes.status }); } catch {}
     console.error("[preauth] credential error response headers:", Object.fromEntries(credRes.headers.entries()));
     console.error("[preauth] credential error response body:", text);
     
     let err = {};
     try { 
       err = JSON.parse(text); 
-      console.error("[preauth] credential error parsed JSON:", JSON.stringify(err, null, 2));
+      console.error("[preauth] credential error parsed JSON:", JSON.stringify(err, null, 2)); try { slog("[preauth] credential error parsed", { err }); } catch {}
     } catch (parseErr) {
-      console.error("[preauth] credential error response is not JSON, raw text:", text);
+      console.error("[preauth] credential error response is not JSON, raw text:", text); try { slog("[preauth] credential error not JSON", { text: text?.slice(0, 200) }); } catch {}
     }
     
+    try { slog("[preauth] credential error", { status: credRes.status, err }); } catch {}
     throw new Error(`credential_error ${credRes.status}: ${JSON.stringify(err)}`);
   }
 
   if (credRes.status === 202) {
     const { transaction_id } = await credRes.json();
+    try { slog("[preauth] deferred issuance", { transaction_id }); } catch {}
     const start = Date.now();
     const timeout = pollTimeoutMs ?? 30000;
     const interval = pollIntervalMs ?? 2000;
     const deferredEndpoint = issuerMeta.credential_deferred_endpoint || `${apiBase}/credential_deferred`;
     while (Date.now() - start < timeout) {
       await sleep(interval);
-      const defRes = await httpPostJson(deferredEndpoint, { transaction_id });
-      console.log("[preauth] deferred poll ->", defRes.status);
+      const defRes = await httpPostJson(deferredEndpoint, { transaction_id }, logSessionId);
+      console.log("[preauth] deferred poll ->", defRes.status); try { slog("[preauth] deferred poll", { status: defRes.status }); } catch {}
       if (defRes.ok) {
         const body = await defRes.json();
-        await validateAndStoreCredential({ configurationId, credential: body, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce } });
+        try { slog("[preauth] deferred ready"); } catch {}
+        await validateAndStoreCredential({ configurationId, credential: body, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce } }, logSessionId);
         return body;
       }
     }
+    try { slog("[preauth] deferred timeout"); } catch {}
     throw new Error("timeout: Deferred issuance timed out");
   }
 
   if (!credRes.ok) {
     const err = await credRes.json().catch(() => ({}));
+    try { slog("[preauth] credential final error", { status: credRes.status, err }); } catch {}
     throw new Error(`credential_error ${credRes.status}: ${JSON.stringify(err)}`);
   }
   const credBody = await credRes.json();
-  await validateAndStoreCredential({ configurationId, credential: credBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce } });
+  try { slog("[preauth] credential received"); } catch {}
+  await validateAndStoreCredential({ configurationId, credential: credBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce } }, logSessionId);
   return credBody;
 }
 
-async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configurationId, issuerState, keyPath, pollTimeoutMs, pollIntervalMs }) {
+async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configurationId, issuerState, keyPath, pollTimeoutMs, pollIntervalMs }, logSessionId) {
+  const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
+  try { slog("[codeflow] start", { configurationId }); } catch {}
   // Discover authorization server metadata to enable PAR when available
   let authorizeEndpoint = issuerMeta.authorization_endpoint || null;
   let tokenEndpointFromAS = null;
   let parEndpoint = null;
   if (issuerMeta.authorization_server) {
     try {
-      const asMeta = await discoverAuthorizationServerMetadata(issuerMeta.authorization_server);
+      const asMeta = await discoverAuthorizationServerMetadata(issuerMeta.authorization_server, logSessionId);
       authorizeEndpoint = authorizeEndpoint || asMeta.authorization_endpoint;
       tokenEndpointFromAS = asMeta.token_endpoint || tokenEndpointFromAS;
       parEndpoint = asMeta.pushed_authorization_request_endpoint || null;
-      try { console.log("[codeflow] AS meta: authorize=", asMeta.authorization_endpoint, "token=", asMeta.token_endpoint, "par=", parEndpoint); } catch {}
+      try { console.log("[codeflow] AS meta: authorize=", asMeta.authorization_endpoint, "token=", asMeta.token_endpoint, "par=", parEndpoint); slog("[codeflow] AS meta", { authorize: asMeta.authorization_endpoint, token: asMeta.token_endpoint, par: parEndpoint }); } catch {}
     } catch (e) {
-      console.warn("[codeflow] AS metadata discovery failed:", e?.message || e);
+      console.warn("[codeflow] AS metadata discovery failed:", e?.message || e); try { slog("[codeflow] AS metadata discovery failed", { error: e?.message || String(e) }); } catch {}
     }
   }
   const authorizeUrl = new URL((authorizeEndpoint || apiBase + "/authorize"));
@@ -631,12 +697,12 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   let finalAuthorizeUrl = authorizeUrl.toString();
   if (parEndpoint) {
     try {
-      const parRes = await httpPostForm(parEndpoint, authzParams);
-      console.log("[codeflow][par] endpoint=", parEndpoint, "status=", parRes.status);
+      const parRes = await httpPostForm(parEndpoint, authzParams, logSessionId);
+      console.log("[codeflow][par] endpoint=", parEndpoint, "status=", parRes.status); try { slog("[codeflow][par] endpoint", { endpoint: parEndpoint, status: parRes.status }); } catch {}
       if (parRes.ok) {
         const parBody = await parRes.json().catch(() => ({}));
         const requestUri = parBody.request_uri;
-        console.log("[codeflow][par] request_uri=", requestUri, "expires_in=", parBody.expires_in);
+        console.log("[codeflow][par] request_uri=", requestUri, "expires_in=", parBody.expires_in); try { slog("[codeflow][par] request_uri", { requestUri, expiresIn: parBody.expires_in }); } catch {}
         if (requestUri) {
           const url = new URL((authorizeEndpoint || apiBase + "/authorize"));
           url.searchParams.set("client_id", authzParams.client_id);
@@ -645,10 +711,10 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
         }
       } else {
         const text = await parRes.text().catch(() => "");
-        console.warn("[codeflow][par] failed status=", parRes.status, "body:", text?.slice(0, 300));
+        console.warn("[codeflow][par] failed status=", parRes.status, "body:", text?.slice(0, 300)); try { slog("[codeflow][par] failed", { status: parRes.status, body: text?.slice(0, 300) }); } catch {}
       }
     } catch (e) {
-      console.warn("[codeflow][par] error:", e?.message || e);
+      console.warn("[codeflow][par] error:", e?.message || e); try { slog("[codeflow][par] error", { error: e?.message || String(e) }); } catch {}
     }
   }
 
@@ -658,36 +724,36 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
     finalAuthorizeUrl = authorizeUrl.toString();
   }
 
-  console.log("[codeflow] authorizeUrl:", finalAuthorizeUrl);
+  console.log("[codeflow] authorizeUrl:", finalAuthorizeUrl); try { slog("[codeflow] authorizeUrl", { url: finalAuthorizeUrl }); } catch {}
   const authRes = await fetch(finalAuthorizeUrl, { redirect: "manual" });
-  console.log("[codeflow] authRes.status:", authRes.status);
-  console.log("[codeflow] authRes.headers:", Object.fromEntries(authRes.headers.entries()));
+  console.log("[codeflow] authRes.status:", authRes.status); try { slog("[codeflow] authRes.status", { status: authRes.status }); } catch {}
+  console.log("[codeflow] authRes.headers:", Object.fromEntries(authRes.headers.entries())); try { slog("[codeflow] authRes.headers", { headers: Object.fromEntries(authRes.headers.entries()) }); } catch {}
   
   let redirectUrl = authRes.headers.get("location");
-  console.log("[codeflow] redirectUrl from headers:", redirectUrl);
+  console.log("[codeflow] redirectUrl from headers:", redirectUrl); try { slog("[codeflow] redirectUrl from headers", { url: redirectUrl }); } catch {}
   
   if (!redirectUrl) {
     const bodyText = await authRes.text().catch(() => "");
-    console.log("[codeflow] authRes body:", bodyText);
+    console.log("[codeflow] authRes body:", bodyText); try { slog("[codeflow] authRes body", { body: bodyText?.slice(0, 200) }); } catch {}
     const redirectPayload = safeParseJson(bodyText);
-    console.log("[codeflow] parsed redirect payload:", redirectPayload);
+    console.log("[codeflow] parsed redirect payload:", redirectPayload); try { slog("[codeflow] parsed redirect payload", { payload: redirectPayload }); } catch {}
     if (redirectPayload?.redirect_uri) redirectUrl = redirectPayload.redirect_uri;
     else if (/^openid4vp:\/\//.test(bodyText)) redirectUrl = bodyText;
   }
   
   if (!redirectUrl) {
-    console.error("[codeflow] No redirect URL found. Status:", authRes.status);
+    console.error("[codeflow] No redirect URL found. Status:", authRes.status); try { slog("[codeflow] no redirect URL found", { status: authRes.status }); } catch {}
     throw new Error(`authorize_error ${authRes.status}: No redirect URL found`);
   }
-  console.log("[codeflow] redirectUrl:", redirectUrl);
+  console.log("[codeflow] redirectUrl:", redirectUrl); try { slog("[codeflow] redirectUrl", { url: redirectUrl }); } catch {}
   const redirect = new URL(redirectUrl);
   const code = redirect.searchParams.get("code");
   if (!code) throw new Error("invalid_response: Authorization code missing");
 
   let tokenEndpoint = issuerMeta.token_endpoint || tokenEndpointFromAS || `${apiBase}/token_endpoint`;
-  console.log("[codeflow] apiBase=", apiBase, "configurationId=", configurationId);
-  console.log("[codeflow] tokenEndpoint=", tokenEndpoint);
-  console.log("[codeflow] requesting token...");
+  console.log("[codeflow] apiBase=", apiBase, "configurationId=", configurationId); try { slog("[codeflow] apiBase", { apiBase, configurationId }); } catch {}
+  console.log("[codeflow] tokenEndpoint=", tokenEndpoint); try { slog("[codeflow] tokenEndpoint", { tokenEndpoint }); } catch {}
+  console.log("[codeflow] requesting token..."); try { slog("[codeflow] requesting token"); } catch {}
   // Mirror authorization_details in token request (many issuers expect it)
   const tokenAuthzDetails = [
     {
@@ -703,28 +769,29 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
     client_id: "wallet-client",
     redirect_uri: redirectUri,
     authorization_details: JSON.stringify(tokenAuthzDetails),
-  });
-  console.log("[codeflow] tokenRes.status=", tokenRes.status);
+  }, logSessionId);
+  console.log("[codeflow] tokenRes.status=", tokenRes.status); try { slog("[codeflow] tokenRes.status", { status: tokenRes.status }); } catch {}
   if (!tokenRes.ok) {
     const text = await tokenRes.text().catch(() => "");
     console.error("[codeflow] token error", tokenRes.status, text?.slice(0, 500));
     let err = {};
     try { err = JSON.parse(text); } catch {}
+    try { slog("[codeflow] token error", { status: tokenRes.status, err }); } catch {}
     throw new Error(`token_error ${tokenRes.status}: ${JSON.stringify(err)}`);
   }
   const tokenBody = await tokenRes.json();
   const accessToken = tokenBody.access_token;
   let c_nonce = tokenBody.c_nonce;
-  console.log("[codeflow] got access_token=", accessToken ? "yes" : "no", "c_nonce=", c_nonce ? "yes" : "no");
+  console.log("[codeflow] got access_token=", accessToken ? "yes" : "no", "c_nonce=", c_nonce ? "yes" : "no"); try { slog("[codeflow] token received", { hasAccessToken: !!accessToken, hasCNonce: !!c_nonce }); } catch {}
   if (c_nonce) {
-    console.log("[codeflow] using c_nonce from token response");
+    console.log("[codeflow] using c_nonce from token response"); try { slog("[codeflow] using c_nonce from token"); } catch {}
   } else if (issuerMeta.nonce_endpoint) {
     const nonceEndpoint = issuerMeta.nonce_endpoint;
-    console.log("[codeflow] nonceEndpoint=", nonceEndpoint);
-    const nonceRes = await httpPostJson(nonceEndpoint, {});
+    console.log("[codeflow] nonceEndpoint=", nonceEndpoint); try { slog("[codeflow] nonceEndpoint", { nonceEndpoint }); } catch {}
+    const nonceRes = await httpPostJson(nonceEndpoint, {}, logSessionId); try { slog("[codeflow] nonce request", { endpoint: nonceEndpoint, status: nonceRes.status }); } catch {}
     if (!nonceRes.ok) {
       const text = await nonceRes.text().catch(() => "");
-      console.error("[codeflow] nonce error", nonceRes.status, text?.slice(0, 500));
+      console.error("[codeflow] nonce error", nonceRes.status, text?.slice(0, 500)); try { slog("[codeflow] nonce error", { status: nonceRes.status, error: text?.slice(0, 200) }); } catch {}
       let err = {};
       try { err = JSON.parse(text); } catch {}
       throw new Error(`nonce_error ${nonceRes.status}: ${JSON.stringify(err)}`);
@@ -732,7 +799,7 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
     const nonceJson = await nonceRes.json();
     c_nonce = nonceJson.c_nonce;
   } else {
-    console.log("[codeflow] no c_nonce in token and no nonce_endpoint; proceeding without nonce");
+    console.log("[codeflow] no c_nonce in token and no nonce_endpoint; proceeding without nonce"); try { slog("[codeflow] no c_nonce available"); } catch {}
   }
 
   // Algorithm negotiation
@@ -741,83 +808,97 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   const selectedAlg2 = (Array.isArray(supportedAlgs2) && supportedAlgs2.length)
     ? (preferredOrder2.find((a) => supportedAlgs2.includes(a)) || supportedAlgs2[0])
     : "ES256";
-  console.log("[codeflow] issuer supported proof algs:", supportedAlgs2);
-  console.log("[codeflow] selected proof alg:", selectedAlg2);
+  console.log("[codeflow] issuer supported proof algs:", supportedAlgs2); try { slog("[codeflow] supported algs", { supportedAlgs: supportedAlgs2 }); } catch {}
+  console.log("[codeflow] selected proof alg:", selectedAlg2); try { slog("[codeflow] selected alg", { selectedAlg: selectedAlg2 }); } catch {}
 
   const aud2 = issuerMeta?.credential_issuer || apiBase;
-  console.log("[codeflow] proof audience:", aud2, issuerMeta?.credential_issuer ? "(from issuerMeta.credential_issuer)" : "(fallback apiBase)");
+  console.log("[codeflow] proof audience:", aud2, issuerMeta?.credential_issuer ? "(from issuerMeta.credential_issuer)" : "(fallback apiBase)"); try { slog("[codeflow] proof audience", { aud: aud2 }); } catch {}
   const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(keyPath, selectedAlg2);
   const didJwk = generateDidJwkFromPrivateJwk(publicJwk);
   const proofJwt = await createProofJwt({ privateJwk, publicJwk, audience: aud2, nonce: c_nonce, issuer: didJwk, typ: "openid4vci-proof+jwt", alg: selectedAlg2 });
 
   const credentialEndpoint = issuerMeta.credential_endpoint || `${apiBase}/credential`;
-  console.log("[codeflow] credentialEndpoint=", credentialEndpoint);
-  console.log("[codeflow] requesting credential...");
+  console.log("[codeflow] credentialEndpoint=", credentialEndpoint); try { slog("[codeflow] credentialEndpoint", { credentialEndpoint }); } catch {}
+  console.log("[codeflow] requesting credential..."); try { slog("[codeflow] requesting credential"); } catch {}
   const credReq = { credential_configuration_id: configurationId, proof: { proof_type: "jwt", jwt: proofJwt } };
   const credRes = await fetch(credentialEndpoint, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
     body: JSON.stringify(credReq),
   });
-  console.log("[codeflow] credentialRes.status=", credRes.status);
+  console.log("[codeflow] credentialRes.status=", credRes.status); try { slog("[codeflow] credentialRes.status", { status: credRes.status }); } catch {}
 
   if (credRes.status === 202) {
     const { transaction_id } = await credRes.json();
+    try { slog("[codeflow] deferred issuance", { transaction_id }); } catch {}
     const start = Date.now();
     const timeout = pollTimeoutMs ?? 30000;
     const interval = pollIntervalMs ?? 2000;
     const deferredEndpoint = issuerMeta.credential_deferred_endpoint || `${apiBase}/credential_deferred`;
     while (Date.now() - start < timeout) {
       await sleep(interval);
-      const defRes = await httpPostJson(deferredEndpoint, { transaction_id });
+      const defRes = await httpPostJson(deferredEndpoint, { transaction_id }, logSessionId); try { slog("[codeflow] deferred poll", { status: defRes.status }); } catch {}
       if (defRes.ok) {
         const body = await defRes.json();
-        await validateAndStoreCredential({ configurationId, credential: body, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce } });
+        try { slog("[codeflow] deferred ready"); } catch {}
+        await validateAndStoreCredential({ configurationId, credential: body, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce } }, logSessionId);
         return body;
       }
     }
+    try { slog("[codeflow] deferred timeout"); } catch {}
     throw new Error("timeout: Deferred issuance timed out");
   }
 
   if (!credRes.ok) {
     const err = await credRes.json().catch(() => ({}));
+    try { slog("[codeflow] credential error", { status: credRes.status, err }); } catch {}
     throw new Error(`credential_error ${credRes.status}: ${JSON.stringify(err)}`);
   }
   const credBody = await credRes.json();
-  await validateAndStoreCredential({ configurationId, credential: credBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce } });
+  try { slog("[codeflow] credential received"); } catch {}
+  await validateAndStoreCredential({ configurationId, credential: credBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce } }, logSessionId);
   return credBody;
 }
 
-async function validateAndStoreCredential({ configurationId, credential, issuerMeta, apiBase, keyBinding, metadata }) {
+async function validateAndStoreCredential({ configurationId, credential, issuerMeta, apiBase, keyBinding, metadata }, logSessionId) {
+  const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   // Extract the token string if envelope is used
   const token = extractCredentialToken(credential);
   if (!token) throw new Error("credential_format_error: could not locate credential token");
 
-  console.log("[validate] configurationId=", configurationId, "issuer=", issuerMeta?.credential_issuer, "has.c_nonce=", !!metadata?.c_nonce);
-  console.log("[validate] token preview:", typeof token === 'string' ? token.substring(0, 60) + "..." : typeof token);
+  console.log("[validate] configurationId=", configurationId, "issuer=", issuerMeta?.credential_issuer, "has.c_nonce=", !!metadata?.c_nonce); try { slog("[validate] start", { configurationId, issuer: issuerMeta?.credential_issuer, hasCNonce: !!metadata?.c_nonce }); } catch {}
+  console.log("[validate] token preview:", typeof token === 'string' ? token.substring(0, 60) + "..." : typeof token); try { slog("[validate] token preview", { tokenType: typeof token, hasToken: !!token }); } catch {}
   try {
     const dbgFull = process.env.WALLET_DEBUG_CREDENTIAL === 'full';
     const envelopeStr = typeof credential === 'string' ? credential : JSON.stringify(credential);
     const shown = dbgFull ? envelopeStr : envelopeStr.substring(0, 2000);
-    console.log("[validate] credential envelope (" + (dbgFull ? "full" : "truncated") + ", len=" + envelopeStr.length + "):", shown);
+    console.log("[validate] credential envelope (" + (dbgFull ? "full" : "truncated") + ", len=" + envelopeStr.length + "):", shown); try { slog("[validate] envelope", { length: envelopeStr.length, mode: dbgFull ? "full" : "truncated" }); } catch {}
   } catch {}
 
   // Try SD-JWT first (presence of '~'), else treat as JWT VC; if neither, try mdoc
   if (typeof token === 'string' && token.includes('~')) {
-    await validateSdJwt({ sdJwt: token, issuerMeta, configurationId, expectedCNonce: metadata?.c_nonce });
+    try { slog("[validate] validating SD-JWT"); } catch {}
+    await validateSdJwt({ sdJwt: token, issuerMeta, configurationId, expectedCNonce: metadata?.c_nonce }, logSessionId);
   } else if (typeof token === 'string' && token.split('.').length >= 3) {
+    try { slog("[validate] validating JWT VC"); } catch {}
     await validateJwtVc({ jwtVc: token, issuerMeta, apiBase, configurationId, publicJwk: keyBinding?.publicJwk });
   } else if (typeof token === 'string') {
     // Potential mdoc base64url
+    try { slog("[validate] validating mdoc"); } catch {}
     const mdocResult = await verifyMdlToken(token, { validateStructure: true, includeMetadata: false });
-    if (!mdocResult.success) throw new Error(`mdoc_validation_failed: ${mdocResult.error}`);
+    if (!mdocResult.success) {
+      try { slog("[validate] mdoc validation failed", { error: mdocResult.error }); } catch {}
+      throw new Error(`mdoc_validation_failed: ${mdocResult.error}`);
+    }
     // Placeholder for cryptographic verification using trust anchors
     if (process.env.WALLET_MDL_STRICT === 'true') {
+      try { slog("[validate] mdoc crypto verification not implemented"); } catch {}
       throw new Error("mdoc_crypto_verification_not_implemented: provide trust anchors and crypto verifier");
     }
   }
 
   // If validation passed, store
+  try { slog("[store] credential", { configurationId }); } catch {}
   await storeWalletCredentialByType(configurationId, { credential, keyBinding, metadata });
 }
 
@@ -841,14 +922,15 @@ function extractCredentialToken(credentialEnvelope) {
   return null;
 }
 
-async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonce }) {
-  console.log("[sd-jwt] start validation; configurationId=", configurationId);
+async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonce }, logSessionId) {
+  const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
+  console.log("[sd-jwt] start validation; configurationId=", configurationId); try { slog("[sd-jwt] start validation", { configurationId }); } catch {}
   // Decode and reconstruct claims (verifies disclosures/digests)
   const decoded = await decodeSdJwt(sdJwt, digest);
-  console.log("[sd-jwt] decoded header.alg=", decoded.jwt.header?.alg, "kid=", decoded.jwt.header?.kid);
+  console.log("[sd-jwt] decoded header.alg=", decoded.jwt.header?.alg, "kid=", decoded.jwt.header?.kid); try { slog("[sd-jwt] decoded header", { alg: decoded.jwt.header?.alg, kid: decoded.jwt.header?.kid }); } catch {}
   // Throws if disclosures invalid
   await getClaims(decoded.jwt.payload, decoded.disclosures, digest);
-  console.log("[sd-jwt] disclosures/digests verified; vct=", decoded.jwt.payload?.vct);
+  console.log("[sd-jwt] disclosures/digests verified; vct=", decoded.jwt.payload?.vct); try { slog("[sd-jwt] disclosures verified", { vct: decoded.jwt.payload?.vct }); } catch {}
 
   // Extract JWS and header once
   const jws = sdJwt.split('~')[0];
@@ -859,12 +941,12 @@ async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonc
   if ((hdr.kid && hdr.kid.startsWith('did:')) || (decoded.jwt.payload?.iss && String(decoded.jwt.payload.iss).startsWith('did:'))) {
     try {
       const didIssuer = (hdr.kid && hdr.kid.split('#')[0]) || String(decoded.jwt.payload.iss);
-      console.log("[sd-jwt] attempting DID-based verification using", didIssuer);
+      console.log("[sd-jwt] attempting DID-based verification using", didIssuer); try { slog("[sd-jwt] attempting DID verification", { didIssuer }); } catch {}
       await verifyJwsWithDid(jws, hdr, decoded.jwt.payload?.iss);
-      console.log("[sd-jwt] DID-based JWS signature verified");
+      console.log("[sd-jwt] DID-based JWS signature verified"); try { slog("[sd-jwt] DID signature verified"); } catch {}
       signatureVerified = true;
     } catch (e) {
-      console.warn("[sd-jwt] DID-based verification failed:", e?.message || e);
+      console.warn("[sd-jwt] DID-based verification failed:", e?.message || e); try { slog("[sd-jwt] DID verification failed", { error: e?.message || String(e) }); } catch {}
     }
   }
   // If x5c present, try x509 cert verification (only if not already verified)
@@ -873,33 +955,33 @@ async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonc
     try {
       const certKey = await importX509(pem, hdr.alg || 'ES256');
       await jwtVerify(jws, certKey, { clockTolerance: 300 });
-      console.log("[sd-jwt] JWS signature verified via x5c certificate");
+      console.log("[sd-jwt] JWS signature verified via x5c certificate"); try { slog("[sd-jwt] x5c signature verified"); } catch {}
       signatureVerified = true;
     } catch (e) {
-      console.warn("[sd-jwt] x5c certificate verification failed:", e?.message || e);
+      console.warn("[sd-jwt] x5c certificate verification failed:", e?.message || e); try { slog("[sd-jwt] x5c verification failed", { error: e?.message || String(e) }); } catch {}
     }
   }
 
   // Verify issuer signature of SD-JWT JWS
   const jwksUrl = issuerMeta?.jwks_uri || (issuerMeta?.credential_issuer ? `${issuerMeta.credential_issuer.replace(/\/$/, '')}/.well-known/jwt-vc-issuer` : null);
   if (!signatureVerified && jwksUrl) {
-    console.log("[sd-jwt] fetching JWKS from:", jwksUrl);
+    console.log("[sd-jwt] fetching JWKS from:", jwksUrl); try { slog("[sd-jwt] fetching JWKS", { jwksUrl }); } catch {}
     const res = await fetch(jwksUrl);
-    console.log("[sd-jwt] JWKS fetch status:", res.status);
+    console.log("[sd-jwt] JWKS fetch status:", res.status); try { slog("[sd-jwt] JWKS fetch status", { status: res.status }); } catch {}
     if (res.ok) {
       const body = await res.json();
       const jwks = body.keys ? body : body.jwks ? body.jwks : null;
-      console.log("[sd-jwt] JWKS keys count:", jwks?.keys?.length || (Array.isArray(jwks) ? jwks.length : 0));
+      console.log("[sd-jwt] JWKS keys count:", jwks?.keys?.length || (Array.isArray(jwks) ? jwks.length : 0)); try { slog("[sd-jwt] JWKS keys count", { count: jwks?.keys?.length || (Array.isArray(jwks) ? jwks.length : 0) }); } catch {}
       if (jwks) {
         // hdr and jws are already computed above
-        console.log("[sd-jwt] JWS header.alg=", hdr.alg, "kid=", hdr.kid);
+        console.log("[sd-jwt] JWS header.alg=", hdr.alg, "kid=", hdr.kid); try { slog("[sd-jwt] JWS header", { alg: hdr.alg, kid: hdr.kid }); } catch {}
         const JWKS = createLocalJWKSet(jwks);
         try {
           await jwtVerify(jws, JWKS, { clockTolerance: 300 });
-          console.log("[sd-jwt] JWS signature verified");
+          console.log("[sd-jwt] JWS signature verified"); try { slog("[sd-jwt] JWS signature verified"); } catch {}
           signatureVerified = true;
         } catch (e) {
-          console.error("[sd-jwt] JWS signature verification failed with JWKS resolver:", e?.message || e);
+          console.error("[sd-jwt] JWS signature verification failed with JWKS resolver:", e?.message || e); try { slog("[sd-jwt] JWKS resolver failed", { error: e?.message || String(e) }); } catch {}
           // Fallback: iterate keys if no kid or resolver failed
           const keysArr = Array.isArray(jwks.keys) ? jwks.keys : jwks.keys ? jwks.keys : jwks;
           if (Array.isArray(keysArr) && keysArr.length > 0) {
@@ -908,14 +990,14 @@ async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonc
               if (jwk.use && jwk.use !== 'sig') continue;
               if (jwk.kty && jwk.kty !== 'EC') continue;
               try {
-                console.log(`[sd-jwt] Trying key[${idx}] kid=${jwk.kid || 'none'} crv=${jwk.crv}`);
+                console.log(`[sd-jwt] Trying key[${idx}] kid=${jwk.kid || 'none'} crv=${jwk.crv}`); try { slog(`[sd-jwt] trying key ${idx}`, { kid: jwk.kid, crv: jwk.crv }); } catch {}
                 const key = await importJWK(jwk, hdr.alg || 'ES256');
                 await jwtVerify(jws, key, { clockTolerance: 300 });
-                console.log(`[sd-jwt] Verified with key[${idx}]`);
+                console.log(`[sd-jwt] Verified with key[${idx}]`); try { slog(`[sd-jwt] verified with key ${idx}`); } catch {}
                 verified = true;
                 break;
               } catch (err) {
-                console.warn(`[sd-jwt] key[${idx}] failed:`, err?.message || err);
+                console.warn(`[sd-jwt] key[${idx}] failed:`, err?.message || err); try { slog(`[sd-jwt] key ${idx} failed`, { error: err?.message || String(err) }); } catch {}
               }
             }
             if (!verified) throw new Error('signature verification failed');
@@ -926,7 +1008,7 @@ async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonc
         }
       }
     } else {
-      console.warn("[sd-jwt] JWKS fetch failed; skipping JWS verification");
+      console.warn("[sd-jwt] JWKS fetch failed; skipping JWS verification"); try { slog("[sd-jwt] JWKS fetch failed"); } catch {}
     }
   }
 
@@ -938,13 +1020,13 @@ async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonc
   if (decoded.kbJwt && expectedCNonce) {
     try {
       const kbDecoded = decodeJwt(decoded.kbJwt);
-      console.log("[sd-jwt] kb-jwt nonce=", kbDecoded?.nonce, "expected=", expectedCNonce);
+      console.log("[sd-jwt] kb-jwt nonce=", kbDecoded?.nonce, "expected=", expectedCNonce); try { slog("[sd-jwt] kb-jwt nonce check", { hasNonce: !!kbDecoded?.nonce, nonceMatches: kbDecoded?.nonce === expectedCNonce }); } catch {}
       if (kbDecoded?.nonce && kbDecoded.nonce !== expectedCNonce) {
         throw new Error("kb_jwt_nonce_mismatch");
       }
     } catch (e) {
       // If decode fails, do a soft fail
-      console.error("[sd-jwt] kb-jwt decode failed:", e?.message || e);
+      console.error("[sd-jwt] kb-jwt decode failed:", e?.message || e); try { slog("[sd-jwt] kb-jwt decode failed", { error: e?.message || String(e) }); } catch {}
       throw new Error("kb_jwt_decode_failed");
     }
   }

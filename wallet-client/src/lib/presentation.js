@@ -1,6 +1,20 @@
 import fetch from "node-fetch";
 import { createProofJwt, generateDidJwkFromPrivateJwk, ensureOrCreateEcKeyPair } from "./crypto.js";
-import { getWalletCredentialByType, listWalletCredentialTypes } from "./cache.js";
+import { getWalletCredentialByType, listWalletCredentialTypes, appendWalletLog } from "./cache.js";
+
+function makeSessionLogger(sessionId) {
+  return function sessionLog(...args) {
+    try { console.log(...args); } catch {}
+    if (!sessionId) return;
+    try {
+      const message = args.map((a) => {
+        if (typeof a === 'string') return a;
+        try { return JSON.stringify(a); } catch { return String(a); }
+      }).join(' ');
+      appendWalletLog(sessionId, { level: 'info', message }).catch(() => {});
+    } catch {}
+  };
+}
 
 function parseOpenId4VpDeepLink(deepLink) {
   console.log("[present] Parsing deep link:", deepLink);
@@ -123,8 +137,10 @@ function extractCredentialString(credentialEnvelope) {
   return null;
 }
 
-export async function performPresentation({ deepLink, verifierBase, credentialType, keyPath }) {
+export async function performPresentation({ deepLink, verifierBase, credentialType, keyPath }, logSessionId) {
+  const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   const { requestUri, clientId, method } = parseOpenId4VpDeepLink(deepLink);
+  try { slog("[present] parsed deepLink", { requestUri, clientId, method }); } catch {}
   const requestJwt = await fetchAuthorizationRequestJwt(requestUri, method);
   const { payload } = decodeJwt(requestJwt);
 
@@ -134,6 +150,7 @@ export async function performPresentation({ deepLink, verifierBase, credentialTy
   const state = payload.state;
   const presentationDefinition = payload.presentation_definition;
   console.log("[present] Request payload summary →", { responseMode, hasResponseUri: !!responseUri, hasNonce: !!nonce, hasPD: !!presentationDefinition, state });
+  try { slog("[present] request payload", { responseMode, hasResponseUri: !!responseUri, hasNonce: !!nonce, hasPD: !!presentationDefinition, state }); } catch {}
 
   if (!responseUri) throw new Error("Missing response_uri in request");
   if (!nonce) throw new Error("Missing nonce in request");
@@ -142,50 +159,50 @@ export async function performPresentation({ deepLink, verifierBase, credentialTy
   let selectedType = credentialType;
   if (!selectedType) {
     // Try to infer from presentation_definition (dcql vct or descriptor id hints)
-    const candidateTypes = await listWalletCredentialTypes();
+    const candidateTypes = await listWalletCredentialTypes(); try { slog("[present] wallet types", { count: candidateTypes.length }); } catch {}
     console.log("[present] Available wallet credential types:", candidateTypes);
     if (candidateTypes.length === 0) throw new Error("No credentials available in wallet cache");
     // Heuristic: prefer a candidate whose type name appears in definition id/descriptor ids
     const defText = JSON.stringify(presentationDefinition || {});
     selectedType = candidateTypes.find((t) => defText.includes(t)) || candidateTypes[0];
   }
-  console.log("[present] Selected credential type:", selectedType);
+  console.log("[present] Selected credential type:", selectedType); try { slog("[present] selected type", { selectedType }); } catch {}
 
   const stored = await getWalletCredentialByType(selectedType);
-  console.log("[present] Stored credential found:", !!stored, "has.credential=", !!stored?.credential);
+  console.log("[present] Stored credential found:", !!stored, "has.credential=", !!stored?.credential); try { slog("[present] stored credential", { found: !!stored, hasCredential: !!stored?.credential }); } catch {}
   if (!stored || !stored.credential) throw new Error("Credential not found in wallet cache");
 
   // Build key-binding JWT
   const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(keyPath || undefined);
   const didJwk = generateDidJwkFromPrivateJwk(publicJwk);
   const kbJwt = await createProofJwt({ privateJwk, publicJwk, audience: verifierBase || clientId || responseUri, nonce, issuer: didJwk });
-  console.log("[present] Built kbJwt len:", kbJwt.length);
+  console.log("[present] Built kbJwt len:", kbJwt.length); try { slog("[present] kbJwt created", { length: kbJwt.length }); } catch {}
 
   // Debug: decode kbJwt to verify nonce
   try {
     const kbPayload = decodeJwt(kbJwt).payload;
-    console.log("[present] kbJwt payload nonce:", kbPayload.nonce, "expected:", nonce);
+    console.log("[present] kbJwt payload nonce:", kbPayload.nonce, "expected:", nonce); try { slog("[present] kbJwt payload", { hasNonce: !!kbPayload?.nonce }); } catch {}
   } catch (e) {
-    console.log("[present] Could not decode kbJwt for debugging:", e.message);
+    console.log("[present] Could not decode kbJwt for debugging:", e.message); try { slog("[present] kbJwt decode failed", { error: e?.message || String(e) }); } catch {}
   }
 
   let vpToken = extractCredentialString(stored.credential);
-  console.log("[present] Extracted credential string present=", typeof vpToken === "string", vpToken ? (vpToken.includes("~") ? "sd-jwt" : "jwt/other") : "none");
+  console.log("[present] Extracted credential string present=", typeof vpToken === "string", vpToken ? (vpToken.includes("~") ? "sd-jwt" : "jwt/other") : "none"); try { slog("[present] token extracted", { present: !!vpToken }); } catch {}
   if (!vpToken) throw new Error("Unable to extract presentable credential token from wallet cache");
 
   // For SD-JWT, ensure the key-binding JWT is appended if missing
   if (typeof vpToken === "string" && vpToken.includes("~")) {
     const before = vpToken;
     vpToken = attachKbJwtToSdJwt(vpToken, kbJwt);
-    if (before !== vpToken) console.log("[present] Appended kbJwt to SD-JWT");
-    else console.log("[present] SD-JWT already had kbJwt attached");
+    if (before !== vpToken) { console.log("[present] Appended kbJwt to SD-JWT"); try { slog("[present] kbJwt appended"); } catch {} }
+    else { console.log("[present] SD-JWT already had kbJwt attached"); try { slog("[present] kbJwt already attached"); } catch {} }
   } else {
     // For non-SD-JWT, we might need to create a VP wrapper
-    console.log("[present] Non-SD-JWT token, using as-is");
+    console.log("[present] Non-SD-JWT token, using as-is"); try { slog("[present] non-sd-jwt token"); } catch {}
   }
 
   const presentation_submission = buildPresentationSubmission(presentationDefinition);
-  if (presentation_submission) console.log("[present] Built presentation_submission len:", presentation_submission.length);
+  if (presentation_submission) { console.log("[present] Built presentation_submission len:", presentation_submission.length); try { slog("[present] submission built", { length: presentation_submission.length }); } catch {} }
 
   // Send the raw SD-JWT token directly - the verifier expects the actual token, not a VP wrapper
   let body;
@@ -196,16 +213,16 @@ export async function performPresentation({ deepLink, verifierBase, credentialTy
       presentation_submission, // Send as JSON string (as expected by verifier)
       ...(state ? { state } : {}),
     };
-    console.log("[present] Using raw SD-JWT with presentation_submission format");
+    console.log("[present] Using raw SD-JWT with presentation_submission format"); try { slog("[present] using submission format"); } catch {}
   } else {
     // Direct format with raw SD-JWT
     body = {
       vp_token: vpToken, // Send the raw SD-JWT token
       ...(state ? { state } : {}),
     };
-    console.log("[present] Using raw SD-JWT with direct format");
+    console.log("[present] Using raw SD-JWT with direct format"); try { slog("[present] using direct format"); } catch {}
   }
-  console.log("[present] Posting to response_uri:", responseUri, "body.keys=", Object.keys(body));
+  console.log("[present] Posting to response_uri:", responseUri, "body.keys=", Object.keys(body)); try { slog("[present] posting", { responseUri, keys: Object.keys(body) }); } catch {}
 
   const res = await fetch(responseUri, {
     method: "POST",
@@ -213,7 +230,7 @@ export async function performPresentation({ deepLink, verifierBase, credentialTy
     body: JSON.stringify(body),
   });
   const resText = await res.text().catch(() => "");
-  console.log("[present] Verifier response status:", res.status, "body.len=", resText?.length);
+  console.log("[present] Verifier response status:", res.status, "body.len=", resText?.length); try { slog("[present] verifier response", { status: res.status, bodyLen: resText?.length }); } catch {}
   console.log("[present] Sent vp_token preview:", vpToken.substring(0, 200) + "...");
   console.log("[present] Sent presentation_submission:", presentation_submission);
   console.log("[present] presentation_submission type:", typeof presentation_submission);
