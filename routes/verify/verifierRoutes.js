@@ -506,10 +506,32 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       }
 
       if (!submittedNonce) {
-        console.log("No submitted nonce found in vp_token");
+       
         console.log("jwtFromKeybind", jwtFromKeybind);
         console.log("vpToken", vpToken);
-        return res.status(400).json({ error: "submitted nonce not found in vp_token" });
+        
+        // For SD-JWT presentations in PEX flow, try to extract nonce from the SD-JWT directly
+        if (vpToken && typeof vpToken === 'string' && vpToken.includes('~')) {
+          try {
+            // This is likely an SD-JWT, try to extract the key-binding JWT
+            const parts = vpToken.split('~');
+            const kbJwtPart = parts[parts.length - 1]; // Last part should be the key-binding JWT
+            if (kbJwtPart && kbJwtPart !== '') {
+              const decodedKbJwt = jwt.decode(kbJwtPart, { complete: true });
+              if (decodedKbJwt && decodedKbJwt.payload && decodedKbJwt.payload.nonce) {
+                submittedNonce = decodedKbJwt.payload.nonce;
+                console.log("Extracted nonce from SD-JWT key-binding JWT:", submittedNonce);
+              }
+            }
+          } catch (error) {
+            console.warn("Failed to extract nonce from SD-JWT:", error.message);
+          }
+        }
+        
+        if (!submittedNonce) {
+          console.log("No submitted nonce found in vp_token");
+          return res.status(400).json({ error: "submitted nonce not found in vp_token" });
+        }
       }
 
       if (vpSession.nonce != submittedNonce) {
