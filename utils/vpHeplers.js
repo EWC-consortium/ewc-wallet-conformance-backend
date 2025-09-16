@@ -125,13 +125,7 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
           ) {
             const decodedSdJwt = await decodeSdJwt(credString, digest);
             if (decodedSdJwt.kbJwt) {
-              // Decode kb-jwt so downstream can read payload.nonce
-              try {
-                keybindJwt = jwt.decode(decodedSdJwt.kbJwt, { complete: true });
-              } catch (e) {
-                console.warn("Failed to decode kbJwt, passing raw string.");
-                keybindJwt = decodedSdJwt.kbJwt;
-              }
+                keybindJwt = decodedSdJwt.kbJwt
             }
             const claims = await getClaims(
               decodedSdJwt.jwt.payload,
