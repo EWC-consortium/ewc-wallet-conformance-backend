@@ -34,7 +34,8 @@ function extractTokenFromDataUrl(dataUrl) {
     'application/vc+sd-jwt',
     'application/vp+sd-jwt',
     'application/vc+jwt',
-    'application/vp+jwt'
+    'application/vp+jwt',
+    'application/dc+sd-jwt'  // Digital Credentials SD-JWT format
   ];
   if (!allowed.some((mt) => mediatype.startsWith(mt))) return null;
   try {
@@ -426,8 +427,62 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP) {
           } else { // Handle standard JWT
             const decodedJwt = await decodeJwtVC(token);
             const payload = decodedJwt ? decodedJwt.payload : null;
+            const header = decodedJwt ? decodedJwt.header : null;
+            
             if (payload) {
-              if (payload.vp && Array.isArray(payload.vp.verifiableCredential)) {
+              // Check if this is a VP+JWT (W3C Verifiable Presentation as JWT)
+              if (header && header.typ === 'vp+jwt' && payload.type && Array.isArray(payload.type) && payload.type.includes('VerifiablePresentation')) {
+                console.log("Processing VP+JWT token with verifiableCredential array");
+                
+                // Handle VP+JWT with verifiableCredential array containing EnvelopedVerifiableCredential
+                if (payload.verifiableCredential && Array.isArray(payload.verifiableCredential)) {
+                  let handledAny = false;
+                  
+                  for (const vcEntry of payload.verifiableCredential) {
+                    if (vcEntry && typeof vcEntry === 'object') {
+                      const objType = Array.isArray(vcEntry.type) ? vcEntry.type : [vcEntry.type];
+                      const isEnvelopedVC = objType && objType.includes('EnvelopedVerifiableCredential') && typeof vcEntry.id === 'string';
+                      
+                      if (isEnvelopedVC) {
+                        console.log("Found EnvelopedVerifiableCredential in VP+JWT, extracting from data URL");
+                        const tokenFromData = extractTokenFromDataUrl(vcEntry.id);
+                        if (tokenFromData) {
+                          handledAny = true;
+                          if (tokenFromData.includes('~')) {
+                            // SD-JWT credential
+                            const decVc = await decodeSdJwt(tokenFromData, digest);
+                            const vcClaims = await getClaims(decVc.jwt.payload, decVc.disclosures, digest);
+                            extractedClaims.push(vcClaims);
+                          } else {
+                            // Regular JWT credential
+                            const decVc = await decodeJwtVC(tokenFromData);
+                            if (decVc && decVc.payload) extractedClaims.push(decVc.payload);
+                          }
+                        }
+                      }
+                    } else if (typeof vcEntry === 'string') {
+                      // Direct credential string (fallback)
+                      handledAny = true;
+                      if (vcEntry.includes('~')) {
+                        const decVc = await decodeSdJwt(vcEntry, digest);
+                        const vcClaims = await getClaims(decVc.jwt.payload, decVc.disclosures, digest);
+                        extractedClaims.push(vcClaims);
+                      } else {
+                        const decodedVc = await decodeJwtVC(vcEntry);
+                        if (decodedVc && decodedVc.payload) {
+                          extractedClaims.push(decodedVc.payload);
+                        }
+                      }
+                    }
+                  }
+                  
+                  if (handledAny) {
+                    continue; // Successfully processed VP+JWT, move to next token
+                  }
+                }
+              }
+              // Legacy VP handling (payload.vp.verifiableCredential)
+              else if (payload.vp && Array.isArray(payload.vp.verifiableCredential)) {
                 for (const vcJwt of payload.vp.verifiableCredential) {
                   const decodedVc = await decodeJwtVC(vcJwt);
                   if (decodedVc && decodedVc.payload) {
