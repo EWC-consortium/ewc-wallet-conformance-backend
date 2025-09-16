@@ -404,6 +404,7 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             vpToken = decodedJWT.vp_token;
             
             if (!vpToken) {
+              console.log("No VP token in decrypted JWT response");
               return res.status(400).json({ error: "No VP token in decrypted JWT response" });
             }
           } else if (decrypted && decrypted.vp_token) {
@@ -428,6 +429,7 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           // Extract VP token from the JWT payload
           const vpToken = decodedJWT.vp_token;
           if (!vpToken) {
+            console.log("No VP token in JWT response");
             return res.status(400).json({ error: "No VP token in JWT response" });
           }
           
@@ -449,6 +451,7 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         }
 
         if (!submittedNonce) {
+          console.log("No submitted nonce found in vp_token");
           return res.status(400).json({ error: "submitted nonce not found in vp_token" });
         }
         
@@ -503,6 +506,9 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       }
 
       if (!submittedNonce) {
+        console.log("No submitted nonce found in vp_token");
+        console.log("jwtFromKeybind", jwtFromKeybind);
+        console.log("vpToken", vpToken);
         return res.status(400).json({ error: "submitted nonce not found in vp_token" });
       }
 

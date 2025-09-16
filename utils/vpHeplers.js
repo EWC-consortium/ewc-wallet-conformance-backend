@@ -54,6 +54,15 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
       throw new Error("descriptor_map is not an array.");
     }
 
+    const isValidDescriptorEntry = compareSubmissionToDefinition(
+      JSON.parse(presentationSubmission),
+      requestedInputDescriptors
+    );
+    if (!isValidDescriptorEntry) {
+      throw new Error("invalid descriptor entry.");
+    }
+    
+    
     for (const descriptor of descriptorMap) {
       const vpResult = await processDescriptorEntry(
         vpToken, // This is the outer JWT (VP) when path_nested is used
@@ -399,10 +408,7 @@ export async function processDescriptorEntry(
 ) {
   const { id, format, path, path_nested } = descriptor;
 
-  const isValidDescriptorEntry = compareSubmissionToDefinition(
-    descriptor,
-    requestedDescriptor
-  );
+
 
   if (!path_nested) {
     // the vp is in the root
@@ -450,31 +456,25 @@ export async function processDescriptorEntry(
 }
 
 function compareSubmissionToDefinition(submission, definitionsArray) {
-  let matchingSubmissions = definitionsArray.filter((definition) => {
-    // 2) Compare definition_id in the submission to definition.id
-    if (
-      submission.definition_id !== definition.id &&
-      submission.id !== definition.id
-    ) {
-      console.warn(
-        "Mismatch: submission.definition_id !== definition.id",
-        submission.definition_id,
-        definition.id
-      );
-      return false;
-    }
+  console.log("submission", submission);
+  console.log("definitionsArray", definitionsArray);
 
-    // 3) Check each descriptor_map item
-    if (!Array.isArray(submission.descriptor_map)) {
-      console.warn("descriptor_map is missing or not an array");
-      return false;
-    }
+  if (!Array.isArray(submission.descriptor_map)) {
+    console.warn("descriptor_map is missing or not an array");
+    return false;
+  }
+
+  let matchingSubmissions = definitionsArray.filter((definition) => {
 
     // Check that the root format (e.g. "vc+sd-jwt") also exists in definition.format
     // For example, if descriptor_map[0].format = "vc+sd-jwt", ensure definition.format has that key
+    // support for legacy format "vc+sd-jwt" instead of dc+sd-jwt
     for (const desc of submission.descriptor_map) {
-      const descFormat = desc.format; // e.g. "vc+sd-jwt"
-      if (!definition.format || !definition.format[descFormat]) {
+      let descFormat = desc.format; // e.g. "vc+sd-jwt"
+      if(descFormat === "vc+sd-jwt") {
+        descFormat = "dc+sd-jwt";
+      }
+      if (!definition.format || !definition.format[descFormat] ) {
         console.warn(
           `Definition does not have a root format for "${descFormat}"`
         );
@@ -482,10 +482,7 @@ function compareSubmissionToDefinition(submission, definitionsArray) {
       }
 
       // 4) Find matching input_descriptor
-      const matchingDescriptor = definition.input_descriptors.find(
-        (d) => d.id === desc.id
-      );
-      if (!matchingDescriptor) {
+      if (definition.id !== desc.id) {
         console.warn(
           "No matching input_descriptor found for descriptor_map id:",
           desc.id
@@ -495,9 +492,9 @@ function compareSubmissionToDefinition(submission, definitionsArray) {
 
       // 5) Compare descriptor_map.format with input_descriptor.format
       //    i.e. check if input_descriptor.format has the same key as descFormat
+      // also added check for legacy format "vc+sd-jwt" instead of dc+sd-jwt
       if (
-        !matchingDescriptor.format ||
-        !matchingDescriptor.format[descFormat]
+        definition.format[descFormat] === undefined || definition.format["vc+sd-jwt"] === null
       ) {
         console.warn(
           `descriptor_map.format "${descFormat}" not found in input_descriptors.format`
@@ -518,18 +515,6 @@ function compareSubmissionToDefinition(submission, definitionsArray) {
         }
       }
 
-      // We could also compare the "alg" arrays, etc., as needed
-      // e.g. compare definition.format["vc+sd-jwt"].alg with matchingDescriptor.format["vc+sd-jwt"].alg
-      // This is optional and depends on your logic:
-      const rootAlgs = definition.format[descFormat]?.alg || [];
-      const descAlgs = matchingDescriptor.format[descFormat]?.alg || [];
-      const algsMatch =
-        rootAlgs.length === descAlgs.length &&
-        rootAlgs.every((val) => descAlgs.includes(val));
-      if (!algsMatch) {
-        console.warn("Root alg array does not match descriptor alg array");
-        return false;
-      }
     }
 
     // If we get here, everything passed the checks
