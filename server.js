@@ -15,6 +15,7 @@ import sharedRouter from "./routes/issue/sharedIssuanceFlows.js";
 import batchRouter from "./routes/batchRequestRoutes.js";
 import receiptRouter from "./routes/receiptsRoutes.js";
 import mdlRouter from "./routes/verify/mdlRoutes.js";
+import loggingRouter from "./routes/loggingRoutes.js";
 import bodyParser from "body-parser"; // Body parser middleware
 
 import * as OpenApiValidator from "express-openapi-validator";
@@ -64,6 +65,7 @@ app.use("/", sharedRouter);
 app.use("/", batchRouter);
 app.use("/", receiptRouter);
 app.use("/mdl", mdlRouter);
+app.use("/", loggingRouter);
 
 // Error handler for validation errors
 app.use((err, req, res, next) => {

@@ -5,7 +5,7 @@ import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import { generateNonce, buildVpRequestJWT } from "./cryptoUtils.js";
 import { getSDsFromPresentationDef } from "./vpHeplers.js";
-import { storeVPSession, getVPSession } from "../services/cacheServiceRedis.js";
+import { storeVPSession, getVPSession, logInfo, logWarn, logError, logDebug } from "../services/cacheServiceRedis.js";
 import { createPublicKey } from "crypto";
 import base64url from "base64url";
 
@@ -318,14 +318,34 @@ export const createCodeFlowSession = (client_id_scheme, flowType, isDynamic = fa
  * @param {string} credentialOffer - Credential offer string
  * @returns {Promise<string>} Base64 encoded QR code
  */
-export const generateQRCode = async (credentialOffer) => {
+export const generateQRCode = async (credentialOffer, sessionId = null) => {
   try {
+    if (sessionId) {
+      await logDebug(sessionId, "Generating QR code", {
+        offerLength: credentialOffer?.length
+      });
+    }
+    
     const code = qr.image(credentialOffer, QR_CONFIG);
     const mediaType = "PNG";
     const encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+    
+    if (sessionId) {
+      await logInfo(sessionId, "QR code generated successfully", {
+        encodedLength: encodedQR?.length
+      });
+    }
+    
     return encodedQR;
   } catch (error) {
-    console.error("QR code generation error:", error);
+    if (sessionId) {
+      await logError(sessionId, "QR code generation error", {
+        error: error.message,
+        stack: error.stack
+      });
+    } else {
+      console.error("QR code generation error:", error);
+    }
     throw new Error(ERROR_MESSAGES.QR_GENERATION_FAILED);
   }
 };
@@ -487,7 +507,15 @@ export const buildDidController = () => {
  * @param {number} status - HTTP status code
  * @returns {Object} Standardized error response
  */
-export const createErrorResponse = (error, description, status = 500) => {
+export const createErrorResponse = (error, description, status = 500, sessionId = null) => {
+  if (sessionId) {
+    logError(sessionId, "Creating error response", {
+      error: error || "server_error",
+      description: description || "An unexpected error occurred",
+      status
+    }).catch(err => console.error("Failed to log error response:", err));
+  }
+  
   return {
     status,
     body: {
@@ -503,9 +531,18 @@ export const createErrorResponse = (error, description, status = 500) => {
  * @param {string} context - Error context for logging
  * @param {Object} res - Express response object
  */
-export const handleRouteError = (error, context, res) => {
-  console.error(`${context} error:`, error);
-  const errorResponse = createErrorResponse("server_error", error.message);
+export const handleRouteError = (error, context, res, sessionId = null) => {
+  if (sessionId) {
+    logError(sessionId, `${context} error`, {
+      error: error.message,
+      stack: error.stack,
+      context
+    }).catch(err => console.error("Failed to log route error:", err));
+  } else {
+    console.error(`${context} error:`, error);
+  }
+  
+  const errorResponse = createErrorResponse("server_error", error.message, 500, sessionId);
   res.status(errorResponse.status).json(errorResponse.body);
 };
 
@@ -614,8 +651,23 @@ export async function generateVPRequest(params) {
     routePath,
   } = params;
 
+  await logInfo(sessionId, "Starting VP request generation in routeUtils", {
+    responseMode,
+    clientId,
+    hasPrivateKey: !!privateKey,
+    hasDcqlQuery: !!dcqlQuery,
+    hasTransactionData: !!transactionData,
+    usePostMethod,
+    routePath
+  });
+
   const nonce = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
   const responseUri = `${serverURL}/direct_post/${sessionId}`;
+  
+  await logDebug(sessionId, "Generated nonce and response URI", {
+    nonce,
+    responseUri
+  });
 
   // Prepare session data
   const sessionData = {
@@ -626,21 +678,33 @@ export async function generateVPRequest(params) {
   if (presentationDefinition) {
     sessionData.presentation_definition = presentationDefinition;
     sessionData.sdsRequested = getSDsFromPresentationDef(presentationDefinition);
+    await logDebug(sessionId, "Added presentation definition to session", {
+      inputDescriptors: presentationDefinition.input_descriptors?.length || 0
+    });
   }
 
   if (dcqlQuery) {
     sessionData.dcql_query = dcqlQuery;
+    await logDebug(sessionId, "Added DCQL query to session", {
+      credentialsCount: dcqlQuery.credentials?.length || 0
+    });
   }
 
   if (transactionData) {
     sessionData.transaction_data = [transactionData];
+    await logDebug(sessionId, "Added transaction data to session", {
+      transactionType: transactionData.type
+    });
   }
 
   // Store session data
+  await logDebug(sessionId, "Storing VP session data");
   await storeVPSessionData(sessionId, sessionData);
+  await logInfo(sessionId, "VP session data stored successfully");
 
   // Build VP request JWT if private key is provided
   if (privateKey) {
+    await logDebug(sessionId, "Building VP request JWT with private key");
     await buildVpRequestJWT(
       clientId,
       responseUri,
@@ -655,16 +719,30 @@ export async function generateVPRequest(params) {
       transactionData ? [transactionData] : null,
       responseMode
     );
+    await logInfo(sessionId, "VP request JWT built successfully");
+  } else {
+    await logDebug(sessionId, "No private key provided, skipping JWT build");
   }
 
   // Create OpenID4VP request URL
   const requestUri = `${serverURL}${routePath}/${sessionId}`;
   const vpRequest = createOpenID4VPRequestUrl(requestUri, clientId, usePostMethod);
+  
+  await logDebug(sessionId, "Created OpenID4VP request URL", {
+    requestUri,
+    vpRequest: vpRequest.substring(0, 100) + "..."
+  });
 
   // Generate QR code
-  const qrCode = await generateQRCode(vpRequest);
+  const qrCode = await generateQRCode(vpRequest, sessionId);
 
-  return createVPRequestResponse(qrCode, vpRequest, sessionId);
+  const response = createVPRequestResponse(qrCode, vpRequest, sessionId);
+  await logInfo(sessionId, "VP request generation completed successfully", {
+    hasQrCode: !!response.qr,
+    deepLinkLength: response.deepLink?.length
+  });
+  
+  return response;
 }
 
 /**
@@ -685,14 +763,40 @@ export async function processVPRequest(params) {
     walletMetadata,
   } = params;
 
+  await logInfo(sessionId, "Starting VP request processing in routeUtils", {
+    clientId,
+    hasPrivateKey: !!privateKey,
+    hasAudience: !!audience,
+    hasWalletNonce: !!walletNonce,
+    hasWalletMetadata: !!walletMetadata
+  });
+
   try {
+    await logDebug(sessionId, "Retrieving VP session data");
     const vpSession = await getVPSession(sessionId);
 
     if (!vpSession) {
+      await logError(sessionId, "VP session not found", {
+        sessionId,
+        error: CONFIG.ERROR_MESSAGES.INVALID_SESSION
+      });
       return { error: CONFIG.ERROR_MESSAGES.INVALID_SESSION, status: 400 };
     }
+    
+    await logInfo(sessionId, "VP session retrieved successfully", {
+      hasNonce: !!vpSession.nonce,
+      hasPresentationDefinition: !!vpSession.presentation_definition,
+      hasDcqlQuery: !!vpSession.dcql_query,
+      hasTransactionData: !!vpSession.transaction_data,
+      responseMode: vpSession.response_mode
+    });
 
     const responseUri = `${serverURL}/direct_post/${sessionId}`;
+    
+    await logDebug(sessionId, "Building VP request JWT", {
+      responseUri,
+      responseMode: vpSession.response_mode
+    });
 
     const vpRequestJWT = await buildVpRequestJWT(
       clientId,
@@ -712,11 +816,24 @@ export async function processVPRequest(params) {
       walletMetadata,
       vpSession.state
     );
+    
+    await logInfo(sessionId, "VP request JWT built successfully", {
+      jwtLength: vpRequestJWT?.length
+    });
 
     console.log("vpRequestJWT", vpRequestJWT);
+    await logDebug(sessionId, "VP request JWT details", {
+      jwt: vpRequestJWT
+    });
+    
+    await logInfo(sessionId, "VP request processing completed successfully");
     return { jwt: vpRequestJWT, status: 200 };
   } catch (error) {
     console.error("Error in processVPRequest:", error.message);
+    await logError(sessionId, "Error in processVPRequest", {
+      error: error.message,
+      stack: error.stack
+    });
     throw new Error(CONFIG.ERROR_MESSAGES.JWT_BUILD_ERROR);
   }
 }
@@ -758,14 +875,28 @@ export function createOpenID4VPRequestUrl(requestUri, clientId, usePostMethod = 
  */
 export async function storeVPSessionData(sessionId, sessionData) {
   try {
+    await logDebug(sessionId, "Storing VP session data", {
+      hasNonce: !!sessionData.nonce,
+      hasPresentationDefinition: !!sessionData.presentation_definition,
+      hasDcqlQuery: !!sessionData.dcql_query,
+      hasTransactionData: !!sessionData.transaction_data,
+      responseMode: sessionData.response_mode
+    });
+    
     await storeVPSession(sessionId, {
       uuid: sessionId,
       status: CONFIG.SESSION_STATUS.PENDING,
       claims: null,
       ...sessionData,
     });
+    
+    await logInfo(sessionId, "VP session data stored successfully");
   } catch (error) {
     console.error("Failed to store VP session:", error.message);
+    await logError(sessionId, "Failed to store VP session", {
+      error: error.message,
+      stack: error.stack
+    });
     throw new Error(CONFIG.ERROR_MESSAGES.SESSION_STORE_ERROR);
   }
 }
@@ -793,7 +924,16 @@ export function createVPRequestResponse(qrCode, deepLink, sessionId) {
  * @returns {Promise<void>}
  */
 export async function handleSessionCreation(sessionId, presentationDefinition, responseMode) {
+  await logInfo(sessionId, "Creating new VP session", {
+    responseMode,
+    hasPresentation: !!presentationDefinition
+  });
+  
   const nonce = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
+  
+  await logDebug(sessionId, "Generated nonce for new session", {
+    nonce
+  });
 
   await storeVPSessionData(sessionId, {
     presentation_definition: presentationDefinition,
@@ -801,6 +941,8 @@ export async function handleSessionCreation(sessionId, presentationDefinition, r
     sdsRequested: getSDsFromPresentationDef(presentationDefinition),
     response_mode: responseMode,
   });
+  
+  await logInfo(sessionId, "VP session created successfully");
 }
 
 // ============================================================================

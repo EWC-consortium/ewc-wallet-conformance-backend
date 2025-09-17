@@ -303,3 +303,205 @@ export function getSessionsAuthorizationDetail() {
 export function getAuthCodeAuthorizationDetail() {
   return authCodeAuthorizationDetail;
 }
+
+// ============================================================================
+// SESSION-BASED LOGGING FUNCTIONS
+// ============================================================================
+
+// Function to store logs for a specific session
+export async function storeSessionLog(sessionId, logLevel, message, metadata = {}) {
+  try {
+    // Check if Redis client is connected
+    if (!client.isReady) {
+      console.error("Redis client is not ready");
+      throw new Error("Redis client is not ready");
+    }
+    
+    const key = `session-logs:${sessionId}`;
+    const timestamp = new Date().toISOString();
+    
+    const logEntry = {
+      timestamp,
+      level: logLevel,
+      message,
+      metadata
+    };
+    
+    // Get existing logs or initialize empty array
+    const existingLogs = await client.get(key);
+    let logs = existingLogs ? JSON.parse(existingLogs) : [];
+    
+    // Add new log entry
+    logs.push(logEntry);
+    
+    // Keep only the last 100 log entries to prevent memory issues
+    if (logs.length > 100) {
+      logs = logs.slice(-100);
+    }
+    
+    const ttlInSeconds = 1800; // 30 minutes
+    await client.setEx(key, ttlInSeconds, JSON.stringify(logs));
+    
+    // Also log to console for immediate visibility
+    console.log(`[${sessionId}] ${logLevel.toUpperCase()}: ${message}`, metadata);
+  } catch (err) {
+    console.error("Error storing session log:", err);
+  }
+}
+
+// Function to retrieve all logs for a specific session
+export async function getSessionLogs(sessionId) {
+  try {
+    // Check if Redis client is connected
+    if (!client.isReady) {
+      console.error("Redis client is not ready");
+      throw new Error("Redis client is not ready");
+    }
+    
+    const key = `session-logs:${sessionId}`;
+    const result = await client.get(key);
+    
+    if (result) {
+      return JSON.parse(result);
+    } else {
+      return [];
+    }
+  } catch (err) {
+    console.error("Error retrieving session logs:", err);
+    return [];
+  }
+}
+
+// Function to clear logs for a specific session
+export async function clearSessionLogs(sessionId) {
+  try {
+    // Check if Redis client is connected
+    if (!client.isReady) {
+      console.error("Redis client is not ready");
+      throw new Error("Redis client is not ready");
+    }
+    
+    const key = `session-logs:${sessionId}`;
+    const result = await client.del(key);
+    return result === 1;
+  } catch (err) {
+    console.error("Error clearing session logs:", err);
+    return false;
+  }
+}
+
+// Convenience functions for different log levels
+export async function logInfo(sessionId, message, metadata = {}) {
+  return await storeSessionLog(sessionId, 'info', message, metadata);
+}
+
+export async function logWarn(sessionId, message, metadata = {}) {
+  return await storeSessionLog(sessionId, 'warn', message, metadata);
+}
+
+export async function logError(sessionId, message, metadata = {}) {
+  return await storeSessionLog(sessionId, 'error', message, metadata);
+}
+
+export async function logDebug(sessionId, message, metadata = {}) {
+  return await storeSessionLog(sessionId, 'debug', message, metadata);
+}
+
+
+//TODO evaluate this approach might be better
+// ============================================================================
+// CONSOLE LOG INTERCEPTION (OPTIONAL)
+// ============================================================================
+//
+// To enable global console interception for all console.log/warn/error calls:
+// 
+// import { enableConsoleInterception } from './services/cacheServiceRedis.js';
+// enableConsoleInterception();
+//
+// This will automatically capture all console logs when a session context is set.
+// The session context is automatically managed by the x509Routes middleware.
+//
+
+// Store original console methods
+const originalConsole = {
+  log: console.log,
+  warn: console.warn,
+  error: console.error,
+  info: console.info,
+  debug: console.debug
+};
+
+// Session context storage for console interception
+let currentSessionId = null;
+
+// Function to set session context for console interception
+export function setSessionContext(sessionId) {
+  currentSessionId = sessionId;
+}
+
+// Function to clear session context
+export function clearSessionContext() {
+  currentSessionId = null;
+}
+
+// Function to enable console log interception
+export function enableConsoleInterception() {
+  console.log = (...args) => {
+    originalConsole.log(...args);
+    if (currentSessionId) {
+      const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+      storeSessionLog(currentSessionId, 'info', message).catch(err => 
+        originalConsole.error('Failed to store console.log:', err)
+      );
+    }
+  };
+
+  console.warn = (...args) => {
+    originalConsole.warn(...args);
+    if (currentSessionId) {
+      const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+      storeSessionLog(currentSessionId, 'warn', message).catch(err => 
+        originalConsole.error('Failed to store console.warn:', err)
+      );
+    }
+  };
+
+  console.error = (...args) => {
+    originalConsole.error(...args);
+    if (currentSessionId) {
+      const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+      storeSessionLog(currentSessionId, 'error', message).catch(err => 
+        originalConsole.error('Failed to store console.error:', err)
+      );
+    }
+  };
+
+  console.info = (...args) => {
+    originalConsole.info(...args);
+    if (currentSessionId) {
+      const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+      storeSessionLog(currentSessionId, 'info', message).catch(err => 
+        originalConsole.error('Failed to store console.info:', err)
+      );
+    }
+  };
+
+  console.debug = (...args) => {
+    originalConsole.debug(...args);
+    if (currentSessionId) {
+      const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+      storeSessionLog(currentSessionId, 'debug', message).catch(err => 
+        originalConsole.error('Failed to store console.debug:', err)
+      );
+    }
+  };
+}
+
+// Function to disable console log interception
+export function disableConsoleInterception() {
+  console.log = originalConsole.log;
+  console.warn = originalConsole.warn;
+  console.error = originalConsole.error;
+  console.info = originalConsole.info;
+  console.debug = originalConsole.debug;
+}

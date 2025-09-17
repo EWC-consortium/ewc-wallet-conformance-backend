@@ -24,7 +24,16 @@ import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import jwt from "jsonwebtoken";
 import TimedArray from "../../utils/timedArray.js";
 
-import { getVPSession, storeVPSession } from "../../services/cacheServiceRedis.js";
+import { 
+  getVPSession, 
+  storeVPSession,
+  logInfo,
+  logWarn,
+  logError,
+  logDebug,
+  setSessionContext,
+  clearSessionContext
+} from "../../services/cacheServiceRedis.js";
 import redirectUriRouter from "../redirectUriRoutes.js";
 import x509Router from "./x509Routes.js";
 import didRouter from "./didRoutes.js";
@@ -39,6 +48,19 @@ const getSessionTranscriptBytes = (
 ) => encodeCbor(['OIDC4VPHandover', oid4vpData.client_id, oid4vpData.response_uri, mdocGeneratedNonce, oid4vpData.nonce]);
 
 const verifierRouter = express.Router();
+
+// Middleware to set session context for console interception
+verifierRouter.use((req, res, next) => {
+  const sessionId = req.query.sessionId || req.params.sessionId || req.params.id;
+  if (sessionId) {
+    setSessionContext(sessionId);
+    // Clear context when response finishes
+    res.on('finish', () => {
+      clearSessionContext();
+    });
+  }
+  next();
+});
 
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 const proxyPath = process.env.PROXY_PATH || null;
@@ -170,22 +192,46 @@ verifierRouter.use("/did-jwk", didJwkRouter);
 verifierRouter.post("/direct_post/:id", async (req, res) => {
   try {
     const sessionId = req.params.id;
+    await logInfo(sessionId, "Processing direct_post VP response", {
+      endpoint: "/direct_post/:id",
+      sessionId
+    });
+    
     const vpSession = await getVPSession(sessionId);
     
     if (!vpSession) {
       console.warn(`Session ID ${sessionId} not found.`);
+      await logError(sessionId, "Session ID not found", {
+        sessionId,
+        error: `Session ID ${sessionId} not found.`
+      });
       return res.status(400).json({ error: `Session ID ${sessionId} not found.` });
     }
+    
+    await logInfo(sessionId, "VP session retrieved successfully", {
+      hasNonce: !!vpSession.nonce,
+      hasPresentationDefinition: !!vpSession.presentation_definition,
+      responseMode: vpSession.response_mode,
+      status: vpSession.status
+    });
 
     const isMdoc = vpSession.presentation_definition && vpSession.presentation_definition.format && vpSession.presentation_definition.format.mso_mdoc;
 
     if (isMdoc) {
       console.log("mDL verification using custom cbor-x decoder...");
+      await logInfo(sessionId, "Processing mDL verification using custom cbor-x decoder", {
+        isMdoc: true
+      });
       try {
         const vpToken = req.body["vp_token"];
         if (!vpToken) {
+          await logError(sessionId, "No vp_token found in mDL request body");
           return res.status(400).json({ error: "No vp_token found in the request body." });
         }
+        
+        await logDebug(sessionId, "VP token found in mDL request", {
+          vpTokenLength: vpToken?.length
+        });
 
         // Use our custom verification logic
         const verificationOptions = {
@@ -196,44 +242,76 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
         // TODO
         const documentType=null//vpSession.vct
+        await logDebug(sessionId, "Starting mDL token verification", {
+          verificationOptions
+        });
+        
         const mdocResult = await verifyMdlToken(vpToken, verificationOptions);
 
         if (!mdocResult.success) {
           console.error("mDL verification failed:", mdocResult.error);
+          await logError(sessionId, "mDL verification failed", {
+            error: mdocResult.error,
+            details: mdocResult.details
+          });
           return res.status(400).json({ 
             error: `mDL verification failed: ${mdocResult.error}`,
             details: mdocResult.details 
           });
         }
+        
+        await logInfo(sessionId, "mDL verification successful", {
+          claimsCount: Object.keys(mdocResult.claims || {}).length
+        });
 
         const claims = mdocResult.claims;
 
         // Validate that extracted claims match what was requested
         if (vpSession.sdsRequested && !validateMdlClaims(claims, vpSession.sdsRequested)) {
           console.log("mDL claims do not match what was requested.");
+          await logError(sessionId, "mDL claims do not match what was requested", {
+            requested: vpSession.sdsRequested,
+            received: Object.keys(claims)
+          });
           return res.status(400).json({
             error: "mDL claims do not match what was requested.",
             requested: vpSession.sdsRequested,
             received: Object.keys(claims)
           });
         }
-
+        
+        await logDebug(sessionId, "mDL claims validation successful", {
+          claimsReceived: Object.keys(claims),
+          claimsRequested: vpSession.sdsRequested
+        });
 
         vpSession.status = "success";
         vpSession.claims = claims;
         vpSession.mdlMetadata = mdocResult.metadata; // Store metadata for debugging
-        storeVPSession(sessionId, vpSession);
+        await storeVPSession(sessionId, vpSession);
+        
+        await logInfo(sessionId, "mDL verification completed successfully", {
+          status: "success",
+          claimsCount: Object.keys(claims).length
+        });
         
         return res.status(200).json({ status: "ok" });
 
       } catch (error) {
         console.error("Error processing mDL response:", error);
+        await logError(sessionId, "Error processing mDL response", {
+          error: error.message,
+          stack: error.stack
+        });
         return res.status(400).json({ error: `mDL verification failed: ${error.message}` });
       }
     }
 
     // Handle different response modes
     console.log("response mode: " + vpSession.response_mode);
+    await logInfo(sessionId, "Processing VP response mode", {
+      responseMode: vpSession.response_mode
+    });
     let claimsFromExtraction;
     let jwtFromKeybind;
 
@@ -242,6 +320,9 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     // posts the entire VP as a signed JWT in the request body
     if (vpSession.response_mode === 'dc_api.jwt') {
       console.log("Processing HAIP dc_api.jwt response mode");
+      await logInfo(sessionId, "Processing HAIP dc_api.jwt response mode", {
+        responseMode: "dc_api.jwt"
+      });
       try {
         // For Response Mode dc_api.jwt, the Wallet includes 
         // the response parameter, which contains an encrypted JWT encapsulating the Authorization Response, as defined in Section 8.3.
@@ -250,8 +331,13 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         const encryptedJWT = req.body.response;
         
         console.log("HAIP dc_api.jwt encrypted JWT received:", encryptedJWT ? "Yes" : "No");
+        await logDebug(sessionId, "HAIP dc_api.jwt encrypted JWT received", {
+          hasEncryptedJWT: !!encryptedJWT,
+          encryptedJWTLength: encryptedJWT?.length
+        });
         
         if (!encryptedJWT) {
+          await logError(sessionId, "No encrypted JWT found in HAIP dc_api.jwt response");
           return res.status(400).json({ 
             error: "No encrypted JWT found in HAIP dc_api.jwt response", 
             note: "In HAIP dc_api.jwt, the response parameter should contain an encrypted JWT"
@@ -260,14 +346,22 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
         // Decrypt the JWT using X509 EC private key
         console.log("Decrypting HAIP dc_api.jwt response...");
+        await logDebug(sessionId, "Starting HAIP dc_api.jwt decryption");
         const privateKeyForDecryption = fs.readFileSync("./x509EC/ec_private_pkcs8.key", "utf8");
         
         let decryptedResponse;
         try {
           decryptedResponse = await decryptJWE(encryptedJWT, privateKeyForDecryption, "dc_api.jwt");
           console.log("HAIP dc_api.jwt decrypted response:", decryptedResponse);
+          await logInfo(sessionId, "HAIP dc_api.jwt decryption successful", {
+            decryptedResponseType: typeof decryptedResponse
+          });
         } catch (decryptError) {
           console.error("Failed to decrypt HAIP dc_api.jwt response:", decryptError);
+          await logError(sessionId, "Failed to decrypt HAIP dc_api.jwt response", {
+            error: decryptError.message,
+            stack: decryptError.stack
+          });
           return res.status(400).json({ 
             error: "Failed to decrypt HAIP dc_api.jwt response", 
             details: decryptError.message 
@@ -290,6 +384,9 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
         if (!vpToken) {
           console.log("No VP token found in decrypted response:", decryptedResponse);
+          await logError(sessionId, "No VP token found in decrypted HAIP dc_api.jwt response", {
+            decryptedResponse: decryptedResponse
+          });
           return res.status(400).json({ 
             error: "No VP token found in decrypted HAIP dc_api.jwt response", 
             decryptedResponse: decryptedResponse
@@ -297,6 +394,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         }
 
         console.log("HAIP dc_api.jwt extracted vpToken:", vpToken);
+        await logDebug(sessionId, "HAIP dc_api.jwt extracted vpToken", {
+          vpTokenType: typeof vpToken,
+          vpTokenLength: typeof vpToken === 'string' ? vpToken.length : 'N/A'
+        });
 
         // For HAIP dc_api.jwt with Digital Credentials API, the vpToken might be an object
         // with credential IDs as keys and mdoc data as values
@@ -362,11 +463,21 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         vpSession.status = "success";
         vpSession.claims = claims;
         vpSession.mdlMetadata = mdocResult.metadata; // Store metadata for debugging
-        storeVPSession(sessionId, vpSession);
+        await storeVPSession(sessionId, vpSession);
+        
+        await logInfo(sessionId, "HAIP dc_api.jwt processing completed successfully", {
+          status: "success",
+          claimsCount: Object.keys(claims).length
+        });
+        
         return res.status(200).json({ status: "ok" });
 
       } catch (error) {
         console.error("Error processing HAIP dc_api.jwt response:", error);
+        await logError(sessionId, "Error processing HAIP dc_api.jwt response", {
+          error: error.message,
+          stack: error.stack
+        });
         return res.status(400).json({ error: `HAIP dc_api.jwt processing failed: ${error.message}` });
       }
     }
@@ -380,20 +491,35 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     //   "vp_token": "verifiable_presentation_jwt_or_sd_jwt"
     // }
     else if (vpSession.response_mode === 'direct_post.jwt') {
+      await logInfo(sessionId, "Processing direct_post.jwt response mode", {
+        responseMode: "direct_post.jwt"
+      });
+      
       // According to OpenID4VP spec, direct_post.jwt sends response in 'response' parameter
       const jwtResponse = req.body.response;
       
       if (!jwtResponse) {
+        await logError(sessionId, "No 'response' parameter in direct_post.jwt response");
         return res.status(400).json({ error: "No 'response' parameter in direct_post.jwt response" });
       }
+      
+      await logDebug(sessionId, "JWT response received", {
+        hasJwtResponse: !!jwtResponse,
+        jwtParts: jwtResponse?.split('.').length
+      });
       
       try {
         // Check if it's encrypted (JWE has 5 parts)
         if (jwtResponse.split('.').length === 5) {
           console.log("Processing encrypted JWE response for direct_post.jwt");
+          await logInfo(sessionId, "Processing encrypted JWE response for direct_post.jwt");
+          
           // Decrypt the JWE - this may return JWT string (per spec) or payload object (wallet-specific)
           const decrypted = await decryptJWE(jwtResponse, privateKey, "direct_post.jwt");
           console.log("Decrypted result type:", typeof decrypted);
+          await logDebug(sessionId, "JWE decryption completed", {
+            decryptedType: typeof decrypted
+          });
           
           let vpToken;
           
@@ -469,24 +595,46 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
         vpSession.status = "success";
         vpSession.claims = { ...claimsFromExtraction };
-        storeVPSession(sessionId, vpSession);
+        await storeVPSession(sessionId, vpSession);
+        
+        await logInfo(sessionId, "direct_post.jwt processing completed successfully", {
+          status: "success",
+          claimsCount: Object.keys(claimsFromExtraction || {}).length
+        });
+        
         return res.status(200).json({ status: "ok" });
 
       } catch (error) {
         console.error("Error processing JWT response:", error);
+        await logError(sessionId, "Error processing JWT response", {
+          error: error.message,
+          stack: error.stack
+        });
         return res.status(400).json({ error: "Invalid JWT response" });
       }
     } 
     // Handle regular direct_post response mode
     else {
-     
+      await logInfo(sessionId, "Processing regular direct_post response mode", {
+        responseMode: "direct_post"
+      });
 
       try {
+        await logDebug(sessionId, "Extracting claims from direct_post request");
         const result = await extractClaimsFromRequest(req, digest);
         claimsFromExtraction = result.extractedClaims;
         jwtFromKeybind = result.keybindJwt;
+        
+        await logInfo(sessionId, "Claims extracted successfully", {
+          claimsCount: Object.keys(claimsFromExtraction || {}).length,
+          hasKeybindJwt: !!jwtFromKeybind
+        });
       }catch(error){
         console.error("Error processing direct_post response:", error);
+        await logError(sessionId, "Error processing direct_post response", {
+          error: error.message,
+          stack: error.stack
+        });
         return res.status(400).json({ error: error.message });
       }
       const vpToken = req.body["vp_token"];
@@ -508,14 +656,26 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
  
         if (!submittedNonce) {
           console.log("No submitted nonce found in vp_token");
+          await logError(sessionId, "No submitted nonce found in vp_token");
           return res.status(400).json({ error: "submitted nonce not found in vp_token" });
         }
+        
+        await logDebug(sessionId, "Nonce found in VP token", {
+          submittedNonce,
+          expectedNonce: vpSession.nonce
+        });
     
 
       if (vpSession.nonce != submittedNonce) {
         console.log(`error nonces do not match ${submittedNonce} ${vpSession.nonce}`);
+        await logError(sessionId, "Nonce mismatch", {
+          submittedNonce,
+          expectedNonce: vpSession.nonce
+        });
         return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
       }
+      
+      await logInfo(sessionId, "Nonce verification successful");
 
       if (vpSession.sdsRequested && !hasOnlyAllowedFields(claimsFromExtraction, vpSession.sdsRequested)) {
         return res.status(400).json({
@@ -525,12 +685,22 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
       vpSession.status = "success";
       vpSession.claims = { ...claimsFromExtraction };
-      storeVPSession(sessionId, vpSession);
+      await storeVPSession(sessionId, vpSession);
       console.log(`vp session ${sessionId} status is success`);
+      
+      await logInfo(sessionId, "direct_post processing completed successfully", {
+        status: "success",
+        claimsCount: Object.keys(claimsFromExtraction || {}).length
+      });
+      
       return res.status(200).json({ status: "ok" });
     }
   } catch (error) {
     console.error("Error processing request:", error.message);
+    await logError(sessionId, "Error processing direct_post request", {
+      error: error.message,
+      stack: error.stack
+    });
     return res.status(400).json({ error: error.message });
   }
 });
@@ -616,7 +786,17 @@ verifierRouter.get("/vpRequestJwt/:id", async (req, res) => {
 verifierRouter.get("/vp-request/:type", async (req, res) => {
   const { type } = req.params;
   const stateParam = req.query.id ? req.query.id : uuidv4();
+  
+  await logInfo(stateParam, "Generating VP request", {
+    endpoint: "/vp-request/:type",
+    type,
+    sessionId: stateParam
+  });
+  
   const nonce = generateNonce(16);
+  await logDebug(stateParam, "Generated nonce for VP request", {
+    nonce
+  });
 
   let request_uri = `${serverURL}/vpRequest/${type}/${stateParam}`;
   const response_uri = `${serverURL}/direct_post_jwt`; // not used
@@ -630,6 +810,7 @@ verifierRouter.get("/vp-request/:type", async (req, res) => {
     null
   );
 
+  await logDebug(stateParam, "Generating QR code for VP request");
   let code = qr.image(vpRequest, {
     type: "png",
     ec_level: "H",
@@ -638,6 +819,13 @@ verifierRouter.get("/vp-request/:type", async (req, res) => {
   });
   let mediaType = "PNG";
   let encodedQR = imageDataURI.encode(await streamToBuffer(code), mediaType);
+  
+  await logInfo(stateParam, "VP request generated successfully", {
+    hasQR: !!encodedQR,
+    deepLinkLength: vpRequest?.length,
+    sessionId: stateParam
+  });
+  
   res.json({
     qr: encodedQR,
     deepLink: vpRequest,
@@ -648,8 +836,21 @@ verifierRouter.get("/vp-request/:type", async (req, res) => {
 verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
   const { type, id } = req.params;
   const uuid = id ? id : uuidv4();
+  
+  await logInfo(uuid, "Processing VP request by type and ID", {
+    endpoint: "/vpRequest/:type/:id",
+    type,
+    id,
+    uuid
+  });
+  
   const stateParam = uuidv4();
   const nonce = generateNonce(16);
+  
+  await logDebug(uuid, "Generated parameters for VP request", {
+    stateParam,
+    nonce
+  });
 
   const response_uri = `${serverURL}/direct_post_jwt/${uuid}`;
   let clientId = `${serverURL}/direct_post_jwt/${uuid}`;
@@ -676,9 +877,19 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
   } else if (type === "cff") {
     presentationDefinition = presentation_definition_cff;
   } else {
+    await logError(uuid, "Invalid type parameter for VP request", {
+      type,
+      validTypes: ["pid", "epassport", "educationId", "educationid", "allianceId", "allianceid", "ferryboardingpass", "erua-id", "cff"]
+    });
     return res.status(400).type("text/plain").send("Invalid type parameter");
   }
 
+  await logInfo(uuid, "Presentation definition selected", {
+    type,
+    hasPresentationDefinition: !!presentationDefinition
+  });
+
+  await logDebug(uuid, "Building VP request JWT");
   const vpRequestJWT = await buildVpRequestJWT(
     clientId,
     response_uri,
@@ -695,16 +906,28 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
     "direct_post" // response_mode
   );
   
+  await logInfo(uuid, "VP request JWT generated successfully", {
+    jwtLength: vpRequestJWT?.length
+  });
+  
   res.type("application/oauth-authz-req+jwt").send(vpRequestJWT);
 });
 
 verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
   const sessionId = req.params.id;
   const jwtVp = req.body.vp_token;
+  
+  await logInfo(sessionId, "Received direct_post JWT VP", {
+    endpoint: "/direct_post_jwt/:id",
+    sessionId,
+    hasVpToken: !!jwtVp
+  });
+  
   // Log received request
   console.log("Received direct_post VP for session:", sessionId);
   if (!jwtVp) {
     console.error("No VP token provided.");
+    await logError(sessionId, "No VP token provided in direct_post_jwt request");
     return res.sendStatus(400); // Bad Request
   }
   let decodedWithHeader;
@@ -712,43 +935,78 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
     decodedWithHeader = jwt.decode(jwtVp, { complete: true });
   } catch (error) {
     console.error("Failed to decode JWT:", error);
+    await logError(sessionId, "Failed to decode JWT in direct_post_jwt", {
+      error: error.message,
+      stack: error.stack
+    });
     return res.sendStatus(400); // Bad Request due to invalid JWT
   }
   const credentialsJwtArray =
     decodedWithHeader?.payload?.vp?.verifiableCredential;
   if (!credentialsJwtArray) {
     console.error("Invalid JWT structure.");
+    await logError(sessionId, "Invalid JWT structure in direct_post_jwt", {
+      hasPayload: !!decodedWithHeader?.payload,
+      hasVp: !!decodedWithHeader?.payload?.vp
+    });
     return res.sendStatus(400); // Bad Request
   }
+  
+  await logDebug(sessionId, "JWT decoded successfully", {
+    credentialsCount: credentialsJwtArray?.length
+  });
   // Convert credentials to claims
   let claims;
   try {
     console.log(credentialsJwtArray);
-    claims = await flattenCredentialsToClaims(credentialsJwtArray);
+    claims = await flattenCredentialsToClaims(credentialsJwtArray, sessionId);
     console.log(claims);
     if (!claims) {
       throw new Error("Claims conversion returned null or undefined.");
     }
   } catch (error) {
     console.error("Error processing claims:", error);
+    await logError(sessionId, "Error processing claims in direct_post_jwt", {
+      error: error.message,
+      stack: error.stack
+    });
     return res.sendStatus(500); // Internal Server Error
   }
   // Update session status
   const index = sessions.indexOf(sessionId);
   console.log("Session index:", index);
+  await logDebug(sessionId, "Looking up session index", {
+    index,
+    sessionId
+  });
+  
   if (index === -1) {
     console.error("Session ID not found.");
+    await logError(sessionId, "Session ID not found in direct_post_jwt", {
+      sessionId
+    });
     return res.sendStatus(404); // Not Found
   }
   // Log successful verification
   verificationSessions[index].status = "success";
   verificationSessions[index].claims = claims;
   console.log("Verification success:", verificationSessions[index]);
+  
+  await logInfo(sessionId, "direct_post_jwt verification completed successfully", {
+    status: "success",
+    claimsCount: Object.keys(claims || {}).length
+  });
+  
   res.sendStatus(200); // OK
 });
 
 verifierRouter.get(["/verificationStatus"], async (req, res) => {
   let sessionId = req.query.sessionId;
+  await logInfo(sessionId, "Checking verification status", {
+    endpoint: "/verificationStatus",
+    sessionId
+  });
+  
   // let index = sessions.indexOf(sessionId); // sessions.indexOf(sessionId+""); //
   const vpSession = await getVPSession(sessionId);
 
@@ -758,6 +1016,11 @@ verifierRouter.get(["/verificationStatus"], async (req, res) => {
   if (vpSession) {
     let status = vpSession.status;
     console.log(`sending status ${status} for session ${sessionId}`);
+    await logInfo(sessionId, "Verification status retrieved", {
+      status,
+      hasResult: status === "success"
+    });
+    
     if (status === "success") {
       result = vpSession.claims;
       // sessions.splice(index, 1);
@@ -776,6 +1039,9 @@ verifierRouter.get(["/verificationStatus"], async (req, res) => {
       claims: result,
     });
   } else {
+    await logWarn(sessionId, "Verification status not found", {
+      sessionId
+    });
     res.json({
       status: "failed",
       reason: "not found",
@@ -786,11 +1052,22 @@ verifierRouter.get(["/verificationStatus"], async (req, res) => {
 
 verifierRouter.get(["/verificationStatusHistory"], async (req, res) => {
   let sessionId = req.query.sessionId;
+  await logInfo(sessionId, "Checking verification status history", {
+    endpoint: "/verificationStatusHistory",
+    sessionId
+  });
+  
   const vpSession = await getVPSession(sessionId);
   // let index = sessionHistory.getCurrentArray().indexOf(sessionId);
   if (vpSession) {
+    await logInfo(sessionId, "Verification status history retrieved", {
+      status: vpSession.status
+    });
     res.json(vpSession);
   } else {
+    await logWarn(sessionId, "Verification status history not found", {
+      sessionId
+    });
     res.json({
       status: "failed",
       reason: "not found",
@@ -831,7 +1108,13 @@ function buildVP(
   return result;
 }
 
-async function flattenCredentialsToClaims(credentials) {
+async function flattenCredentialsToClaims(credentials, sessionId = null) {
+  if (sessionId) {
+    await logDebug(sessionId, "Flattening credentials to claims", {
+      credentialsCount: credentials?.length
+    });
+  }
+  
   let claimsResult = {};
   credentials.forEach((credentialJwt) => {
     let decodedCredential = jwt.decode(credentialJwt, {
@@ -840,9 +1123,21 @@ async function flattenCredentialsToClaims(credentials) {
     if (decodedCredential) {
       let claims = decodedCredential.payload.vc.credentialSubject;
       console.log(claims);
+      if (sessionId) {
+        logDebug(sessionId, "Decoded credential claims", {
+          claims: Object.keys(claims)
+        }).catch(err => console.error("Failed to log credential claims:", err));
+      }
       claimsResult = { ...claimsResult, ...claims };
     }
   });
+  
+  if (sessionId) {
+    await logInfo(sessionId, "Claims flattening completed", {
+      totalClaimsCount: Object.keys(claimsResult).length
+    });
+  }
+  
   return claimsResult;
 }
 

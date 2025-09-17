@@ -11,8 +11,29 @@ import {
   createTransactionData,
   createErrorResponse,
 } from "../../utils/routeUtils.js";
+import {
+  logInfo,
+  logWarn,
+  logError,
+  logDebug,
+  setSessionContext,
+  clearSessionContext,
+} from "../../services/cacheServiceRedis.js";
 
 const didRouter = express.Router();
+
+// Middleware to set session context for console interception
+didRouter.use((req, res, next) => {
+  const sessionId = req.query.sessionId || req.params.sessionId || req.params.id;
+  if (sessionId) {
+    setSessionContext(sessionId);
+    // Clear context when response finishes
+    res.on('finish', () => {
+      clearSessionContext();
+    });
+  }
+  next();
+});
 
 // Load configuration files
 const { presentationDefinition, clientMetadata, privateKey } = loadConfigurationFiles(
@@ -29,6 +50,13 @@ didRouter.get("/generateVPRequest", async (req, res) => {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
     const { client_id, kid } = generateDidIdentifiers(CONFIG.SERVER_URL);
+    
+    await logInfo(sessionId, "Starting DID VP request generation", {
+      endpoint: "/generateVPRequest",
+      responseMode,
+      clientId: client_id,
+      kid
+    });
 
     const result = await generateVPRequest({
       sessionId,
@@ -43,9 +71,18 @@ didRouter.get("/generateVPRequest", async (req, res) => {
       routePath: "/did/VPrequest",
     });
 
+    await logInfo(sessionId, "DID VP request generated successfully", {
+      hasQR: !!result.qr,
+      deepLinkLength: result.deepLink?.length
+    });
+    
     res.json(result);
   } catch (error) {
-    const errorResponse = createErrorResponse(error, "generateVPRequest");
+    await logError(sessionId, "Error generating DID VP request", {
+      error: error.message,
+      stack: error.stack
+    });
+    const errorResponse = createErrorResponse(error.message, "generateVPRequest", 500, sessionId);
     res.status(500).json(errorResponse);
   }
 });
@@ -58,6 +95,13 @@ didRouter.get("/generateVPRequestGET", async (req, res) => {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
     const { client_id, kid } = generateDidIdentifiers(CONFIG.SERVER_URL);
+    
+    await logInfo(sessionId, "Starting DID VP request generation (GET method)", {
+      endpoint: "/generateVPRequestGET",
+      responseMode,
+      clientId: client_id,
+      kid
+    });
 
     const result = await generateVPRequest({
       sessionId,
@@ -72,9 +116,18 @@ didRouter.get("/generateVPRequestGET", async (req, res) => {
       routePath: "/did/VPrequest",
     });
 
+    await logInfo(sessionId, "DID VP request generated successfully (GET method)", {
+      hasQR: !!result.qr,
+      deepLinkLength: result.deepLink?.length
+    });
+    
     res.json(result);
   } catch (error) {
-    const errorResponse = createErrorResponse(error, "generateVPRequestGET");
+    await logError(sessionId, "Error generating DID VP request (GET method)", {
+      error: error.message,
+      stack: error.stack
+    });
+    const errorResponse = createErrorResponse(error.message, "generateVPRequestGET", 500, sessionId);
     res.status(500).json(errorResponse);
   }
 });
@@ -87,6 +140,13 @@ didRouter.get("/generateVPRequestDCQL", async (req, res) => {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
     const { client_id, kid } = generateDidIdentifiers(CONFIG.SERVER_URL);
+    
+    await logInfo(sessionId, "Starting DID VP request generation with DCQL", {
+      endpoint: "/generateVPRequestDCQL",
+      responseMode,
+      clientId: client_id,
+      kid
+    });
 
     const result = await generateVPRequest({
       sessionId,
@@ -102,9 +162,18 @@ didRouter.get("/generateVPRequestDCQL", async (req, res) => {
       routePath: "/did/VPrequest",
     });
 
+    await logInfo(sessionId, "DID VP request with DCQL generated successfully", {
+      hasQR: !!result.qr,
+      deepLinkLength: result.deepLink?.length
+    });
+    
     res.json(result);
   } catch (error) {
-    const errorResponse = createErrorResponse(error, "generateVPRequestDCQL");
+    await logError(sessionId, "Error generating DID VP request with DCQL", {
+      error: error.message,
+      stack: error.stack
+    });
+    const errorResponse = createErrorResponse(error.message, "generateVPRequestDCQL", 500, sessionId);
     res.status(500).json(errorResponse);
   }
 });
@@ -117,6 +186,13 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
     const { client_id, kid } = generateDidIdentifiers(CONFIG.SERVER_URL);
+    
+    await logInfo(sessionId, "Starting DID VP request generation with transaction data", {
+      endpoint: "/generateVPRequestTransaction",
+      responseMode,
+      clientId: client_id,
+      kid
+    });
 
     const transactionDataObj = createTransactionData(presentationDefinition);
     const base64UrlEncodedTxData = Buffer.from(JSON.stringify(transactionDataObj))
@@ -136,9 +212,18 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
       routePath: "/did/VPrequest",
     });
 
+    await logInfo(sessionId, "DID VP request with transaction data generated successfully", {
+      hasQR: !!result.qr,
+      deepLinkLength: result.deepLink?.length
+    });
+    
     res.json(result);
   } catch (error) {
-    const errorResponse = createErrorResponse(error, "generateVPRequestTransaction");
+    await logError(sessionId, "Error generating DID VP request with transaction data", {
+      error: error.message,
+      stack: error.stack
+    });
+    const errorResponse = createErrorResponse(error.message, "generateVPRequestTransaction", 500, sessionId);
     res.status(500).json(errorResponse);
   }
 });
@@ -154,8 +239,20 @@ didRouter
       const { client_id, kid } = generateDidIdentifiers(CONFIG.SERVER_URL);
       const { wallet_nonce: walletNonce, wallet_metadata: walletMetadata } = req.body;
 
+      await logInfo(sessionId, "Processing POST DID VP request", {
+        endpoint: "POST /VPrequest/:id",
+        clientId: client_id,
+        kid,
+        hasWalletNonce: !!walletNonce,
+        hasWalletMetadata: !!walletMetadata
+      });
+
       if (walletNonce || walletMetadata) {
         console.log(`Received from wallet: wallet_nonce=${walletNonce}, wallet_metadata=${walletMetadata}`);
+        await logInfo(sessionId, "Received wallet data", {
+          walletNonce,
+          walletMetadata
+        });
       }
 
       const result = await processVPRequest({
@@ -170,12 +267,24 @@ didRouter
       });
 
       if (result.error) {
+        await logError(sessionId, "DID VP request processing failed", {
+          error: result.error,
+          status: result.status
+        });
         return res.status(result.status).json({ error: result.error });
       }
 
+      await logInfo(sessionId, "DID VP request processed successfully (POST)", {
+        jwtLength: result.jwt?.length
+      });
+      
       res.type(CONFIG.CONTENT_TYPE).send(result.jwt);
     } catch (error) {
-      const errorResponse = createErrorResponse(error, "POST /VPrequest/:id");
+      await logError(sessionId, "Error processing POST DID VP request", {
+        error: error.message,
+        stack: error.stack
+      });
+      const errorResponse = createErrorResponse(error.message, "POST /VPrequest/:id", 500, sessionId);
       res.status(500).json(errorResponse);
     }
   })
@@ -183,6 +292,12 @@ didRouter
     try {
       const sessionId = req.params.id;
       const { client_id, kid } = generateDidIdentifiers(CONFIG.SERVER_URL);
+      
+      await logInfo(sessionId, "Processing GET DID VP request", {
+        endpoint: "GET /VPrequest/:id",
+        clientId: client_id,
+        kid
+      });
 
       const result = await processVPRequest({
         sessionId,
@@ -194,12 +309,24 @@ didRouter
       });
 
       if (result.error) {
+        await logError(sessionId, "DID VP request processing failed (GET)", {
+          error: result.error,
+          status: result.status
+        });
         return res.status(result.status).json({ error: result.error });
       }
 
+      await logInfo(sessionId, "DID VP request processed successfully (GET)", {
+        jwtLength: result.jwt?.length
+      });
+      
       res.type(CONFIG.CONTENT_TYPE).send(result.jwt);
     } catch (error) {
-      const errorResponse = createErrorResponse(error, "GET /VPrequest/:id");
+      await logError(sessionId, "Error processing GET DID VP request", {
+        error: error.message,
+        stack: error.stack
+      });
+      const errorResponse = createErrorResponse(error.message, "GET /VPrequest/:id", 500, sessionId);
       res.status(500).json(errorResponse);
     }
   });
