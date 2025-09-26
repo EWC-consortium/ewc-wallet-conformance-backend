@@ -3,8 +3,8 @@ version: '3.8'
 services:
   wallet-client:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: wallet-client/Dockerfile
     container_name: wallet-client
     ports:
       - "4000:4000"

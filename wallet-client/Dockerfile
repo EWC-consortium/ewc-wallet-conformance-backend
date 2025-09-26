@@ -19,6 +19,12 @@ COPY src ./src
 # Copy utils directory
 COPY utils ./utils
 
+# Copy key/cert and DID materials required at runtime
+COPY didjwks ./didjwks
+COPY x509EC ./x509EC
+COPY x509 ./x509
+COPY X25519 ./X25519
+
 # Create non-root user for security
 RUN groupadd -r wallet && useradd -r -g wallet wallet
 RUN chown -R wallet:wallet /app

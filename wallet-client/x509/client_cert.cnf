@@ -1,0 +1,21 @@
+[ req ]
+default_bits       = 2048
+prompt             = no
+default_md         = sha256
+distinguished_name = dn
+req_extensions     = req_ext
+
+[ dn ]
+C  = EU
+ST = GREECE
+L  = GREECE
+O  = UAegean
+OU = IT Department
+CN = dss.aegean.gr
+
+[ req_ext ]
+subjectAltName = @alt_names
+
+[ alt_names ]
+DNS.1 = dss.aegean.gr
+DNS.2 = www.dss.aegean.gr

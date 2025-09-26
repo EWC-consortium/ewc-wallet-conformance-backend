@@ -1,0 +1,8 @@
+{
+  "kty": "OKP",
+  "crv": "X25519",
+  "x": "MCowBQYDK2VuAyEA2QVGrt1vzlwZNe-drBk8IZ7kiew0CZqnq0qQ61MCLl0",
+  "use": "enc",
+  "kid": "enc-key-1",
+  "alg": "ECDH-ES+A256KW"
+}
