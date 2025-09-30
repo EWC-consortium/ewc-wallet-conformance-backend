@@ -34,7 +34,7 @@ const jwks = pemToJWK(publicKeyPem, "public");
 
 metadataRouter.get(
   ["/.well-known/openid-credential-issuer",
-  "/.well-known/openid-credential-issuer/rfc-issuer"],
+  "/openid-credential-issuer/rfc-issuer"],
   async (req, res) => {
     issuerConfig.credential_issuer = serverURL;
     issuerConfig.authorization_servers = [serverURL];
