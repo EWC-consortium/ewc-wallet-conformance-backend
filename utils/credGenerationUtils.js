@@ -201,12 +201,12 @@ export async function handleVcSdJwtFormat(
     const selectedProof = requestedCredentialIdentifier
       ? jwtProofs.find((p) => p && p.credential_identifier === requestedCredentialIdentifier)
       : jwtProofs[0];
-    if (!selectedProof || !selectedProof.jwt) {
+    if (!selectedProof ) {
       const error = new Error("No usable JWT proof found in 'proofs'");
       error.status = 400;
       throw error;
     }
-    normalizedProofJwt = selectedProof.jwt;
+    normalizedProofJwt = selectedProof.jwt || selectedProof;
     // Normalize structure for downstream code that reads requestBody.proof.jwt
     requestBody.proof = { proof_type: "jwt", jwt: normalizedProofJwt };
   }
@@ -525,12 +525,12 @@ export async function handleVcSdJwtFormatDeferred(sessionObject, serverURL) {
     const selectedProof = requestedCredentialIdentifier
       ? jwtProofs.find((p) => p && p.credential_identifier === requestedCredentialIdentifier)
       : jwtProofs[0];
-    if (!selectedProof || !selectedProof.jwt) {
+    if (!selectedProof ) {
       const error = new Error("No usable JWT proof found in 'proofs'");
       error.status = 400;
       throw error;
     }
-    normalizedProofJwt = selectedProof.jwt;
+    normalizedProofJwt = selectedProof.jwt || selectedProof;
     // Normalize structure for downstream code that reads requestBody.proof.jwt
     requestBody.proof = { proof_type: "jwt", jwt: normalizedProofJwt };
   }

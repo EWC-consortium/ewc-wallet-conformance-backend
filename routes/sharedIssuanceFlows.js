@@ -485,14 +485,14 @@ sharedRouter.post("/credential", async (req, res) => {
     const selectedProof = requestedCredentialIdentifier
       ? jwtProofs.find((p) => p && p.credential_identifier === requestedCredentialIdentifier)
       : jwtProofs[0];
-    if (!selectedProof || !selectedProof.jwt) {
+    if (!selectedProof ) {
       await markSessionFailed(sessionObject, flowType, { codeSessionKey, preAuthsessionKey, token });
       return res.status(400).json({
         error: "invalid_proof",
         error_description: "No usable JWT proof found in 'proofs'",
       });
     }
-    proofJwt = selectedProof.jwt;
+    proofJwt = selectedProof.jwt || selectedProof;
     // Normalize downstream handling to singular 'proof'
     requestBody.proof = { proof_type: "jwt", jwt: proofJwt };
   }
