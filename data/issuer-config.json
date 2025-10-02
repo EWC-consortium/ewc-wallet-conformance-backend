@@ -1080,79 +1080,74 @@
       "scope": "urn:eu.europa.ec.eudi:pid:1",
       "claims": [
         {
-          "path": ["urn:eu.europa.ec.eudi:pid:1"],
-          "claims": [
+          "path": ["urn:eu.europa.ec.eudi:pid:1", "given_name"],
+          "display": [
             {
-              "path": ["given_name"],
-              "display": [
-                {
-                  "name": "Given Name",
-                  "locale": "en-GB"
-                }
-              ]
-            },
+              "name": "Given Name",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        {
+          "path": ["urn:eu.europa.ec.eudi:pid:1", "family_name"],
+          "display": [
             {
-              "path": ["family_name"],
-              "display": [
-                {
-                  "name": "Surname",
-                  "locale": "en-GB"
-                }
-              ]
-            },
+              "name": "Surname",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        {
+          "path": ["urn:eu.europa.ec.eudi:pid:1", "birth_date"],
+          "display": [
             {
-              "path": ["birth_date"],
-              "display": [
-                {
-                  "name": "Birth Date",
-                  "locale": "en-GB"
-                }
-              ]
-            },
+              "name": "Birth Date",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        {
+          "path": ["urn:eu.europa.ec.eudi:pid:1", "age_over_18"],
+          "display": [
             {
-              "path": ["age_over_18"],
-              "display": [
-                {
-                  "name": "Age Over 18",
-                  "locale": "en-GB"
-                }
-              ]
-            },
+              "name": "Age Over 18",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        {
+          "path": ["urn:eu.europa.ec.eudi:pid:1", "issuance_date"],
+          "display": [
             {
-              "path": ["issuance_date"],
-              "display": [
-                {
-                  "name": "Issuance Date",
-                  "locale": "en-GB"
-                }
-              ]
-            },
+              "name": "Issuance Date",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        {
+          "path": ["urn:eu.europa.ec.eudi:pid:1", "expiry_date"],
+          "display": [
             {
-              "path": ["expiry_date"],
-              "display": [
-                {
-                  "name": "Expiry Date",
-                  "locale": "en-GB"
-                }
-              ]
-            },
+              "name": "Expiry Date",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        {
+          "path": ["urn:eu.europa.ec.eudi:pid:1", "issuing_authority"],
+          "display": [
             {
-              "path": ["issuing_authority"],
-              "display": [
-                {
-                  "name": "Issuing Authority",
-                  "locale": "en-GB"
-                }
-              ]
-            },
+              "name": "Issuing Authority",
+              "locale": "en-GB"
+            }
+          ]
+        },
+        {
+          "path": ["urn:eu.europa.ec.eudi:pid:1", "issuing_country"],
+          "display": [
             {
-              "path": ["issuing_country"],
-              "display": [
-                {
-                  "name": "Issuing Country",
-                  "locale": "en-GB"
-                }
-              ]
+              "name": "Issuing Country",
+              "locale": "en-GB"
             }
           ]
         }
