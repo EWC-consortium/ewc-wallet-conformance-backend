@@ -11,6 +11,7 @@
   "grant_types_supported": ["authorization_code","urn:ietf:params:oauth:grant-type:pre-authorized_code"],
   "subject_types_supported": ["public", "pairwise"],
   "id_token_signing_alg_values_supported": ["ES256"],
+  "code_challenge_methods_supported": ["S256"],
 
   "pre-authorized_grant_anonymous_access_supported": true,
 
