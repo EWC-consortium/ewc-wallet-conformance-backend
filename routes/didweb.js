@@ -7,7 +7,7 @@ const didWebRouter = express.Router();
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
 const proxyPath = process.env.PROXY_PATH || null;
 
-didWebRouter.get(["/.well-known/did.json","/did.json"], async (req, res) => {
+didWebRouter.get(["/did.json"], async (req, res) => {
   let jwks = await convertPemToJwk();
   // console.log(jwks);
   let contorller = serverURL;

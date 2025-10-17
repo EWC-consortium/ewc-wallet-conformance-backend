@@ -207,8 +207,6 @@ export async function handleVcSdJwtFormat(
       throw error;
     }
     normalizedProofJwt = selectedProof.jwt || selectedProof;
-    // Normalize structure for downstream code that reads requestBody.proof.jwt
-    requestBody.proof = { proof_type: "jwt", jwt: normalizedProofJwt };
   }
   if (!normalizedProofJwt) {
     const error = new Error("proof not found");
@@ -531,8 +529,6 @@ export async function handleVcSdJwtFormatDeferred(sessionObject, serverURL) {
       throw error;
     }
     normalizedProofJwt = selectedProof.jwt || selectedProof;
-    // Normalize structure for downstream code that reads requestBody.proof.jwt
-    requestBody.proof = { proof_type: "jwt", jwt: normalizedProofJwt };
   }
   if (!normalizedProofJwt) {
     const error = new Error("proof not found");

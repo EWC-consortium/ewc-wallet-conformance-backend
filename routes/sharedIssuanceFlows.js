@@ -495,6 +495,7 @@ sharedRouter.post("/credential", async (req, res) => {
     proofJwt = selectedProof.jwt || selectedProof;
     // Normalize downstream handling to singular 'proof'
     requestBody.proof = { proof_type: "jwt", jwt: proofJwt };
+    delete requestBody.proofs; // Remove 'proofs' to avoid conflict
   }
 
   if (!proofJwt) {
