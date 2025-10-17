@@ -6,7 +6,7 @@ import { storeWalletCredentialByType, walletRedisClient, appendWalletLog, getWal
 import { jwtVerify, decodeJwt, decodeProtectedHeader, createLocalJWKSet, importJWK, importX509 } from "jose";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
 import { digest } from "@sd-jwt/crypto-nodejs";
-import { verifyMdlToken } from "../utils/mdlVerification.js";
+import { verifyReceivedMdlToken } from "../utils/mdlVerification.js";
 import { didKeyToJwks } from "../utils/cryptoUtils.js";
 
 const app = express();
@@ -862,8 +862,16 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
 
 async function validateAndStoreCredential({ configurationId, credential, issuerMeta, apiBase, keyBinding, metadata }, logSessionId) {
   const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
+  
+  // Debug: Log credential envelope structure
+  console.log("[validate] credential envelope type:", typeof credential, Array.isArray(credential) ? "(array)" : "");
+  if (credential && typeof credential === 'object') {
+    console.log("[validate] credential envelope keys:", Object.keys(credential));
+  }
+  
   // Extract the token string if envelope is used
   const token = extractCredentialToken(credential);
+  console.log("[validate] extracted token type:", typeof token, "length:", typeof token === 'string' ? token.length : 'N/A');
   if (!token) throw new Error("credential_format_error: could not locate credential token");
 
   console.log("[validate] configurationId=", configurationId, "issuer=", issuerMeta?.credential_issuer, "has.c_nonce=", !!metadata?.c_nonce); try { slog("[validate] start", { configurationId, issuer: issuerMeta?.credential_issuer, hasCNonce: !!metadata?.c_nonce }); } catch {}
@@ -872,7 +880,8 @@ async function validateAndStoreCredential({ configurationId, credential, issuerM
     const dbgFull = process.env.WALLET_DEBUG_CREDENTIAL === 'full';
     const envelopeStr = typeof credential === 'string' ? credential : JSON.stringify(credential);
     const shown = dbgFull ? envelopeStr : envelopeStr.substring(0, 2000);
-    console.log("[validate] credential envelope (" + (dbgFull ? "full" : "truncated") + ", len=" + envelopeStr.length + "):", shown); try { slog("[validate] envelope", { length: envelopeStr.length, mode: dbgFull ? "full" : "truncated" }); } catch {}
+    console.log("[validate] credential envelope:"+ envelopeStr)
+    // console.log("[validate] credential envelope (" + (dbgFull ? "full" : "truncated") + ", len=" + envelopeStr.length + "):", shown); try { slog("[validate] envelope", { length: envelopeStr.length, mode: dbgFull ? "full" : "truncated" }); } catch {}
   } catch {}
 
   // Try SD-JWT first (presence of '~'), else treat as JWT VC; if neither, try mdoc
@@ -885,7 +894,7 @@ async function validateAndStoreCredential({ configurationId, credential, issuerM
   } else if (typeof token === 'string') {
     // Potential mdoc base64url
     try { slog("[validate] validating mdoc"); } catch {}
-    const mdocResult = await verifyMdlToken(token, { validateStructure: true, includeMetadata: false });
+    const mdocResult = await verifyReceivedMdlToken(token, { validateStructure: true, includeMetadata: false });
     if (!mdocResult.success) {
       try { slog("[validate] mdoc validation failed", { error: mdocResult.error }); } catch {}
       throw new Error(`mdoc_validation_failed: ${mdocResult.error}`);
@@ -1068,6 +1077,7 @@ async function validateJwtVc({ jwtVc, issuerMeta, apiBase, configurationId, publ
       } catch (e) {
         console.warn("[jwt-vc] x5c certificate verification failed:", e?.message || e);
       }
+
     }
   } catch {}
   // Validate JWT VC signature using issuer JWKS
@@ -1233,5 +1243,6 @@ async function verifyJwsWithDid(jws, header, didOrIss) {
   }
   throw lastErr || new Error('DID verification failed');
 }
+
 
 

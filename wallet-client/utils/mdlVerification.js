@@ -12,7 +12,7 @@ import base64url from 'base64url';
  * @param {boolean} options.includeMetadata - Whether to include metadata in response (default: true)
  * @returns {Object} Verification result
  */
-export async function verifyMdlToken(vpTokenBase64, options = {}, documentType = "urn:eu.europa.ec.eudi:pid:1") {
+export async function verifyReceivedMdlToken(vpTokenBase64, options = {}, documentType = "urn:eu.europa.ec.eudi:pid:1") {
   const {
     requestedFields = null,
     validateStructure = true,
@@ -24,24 +24,109 @@ export async function verifyMdlToken(vpTokenBase64, options = {}, documentType =
     const buffer = base64url.toBuffer(vpTokenBase64);
     
     // Step 2: Decode CBOR structure
-    const deviceResponse = decode(buffer);
+    const decodedData = decode(buffer);
     
-    // Step 3: Validate basic structure if requested
-    if (validateStructure) {
-      if (!deviceResponse.version || !deviceResponse.documents || !Array.isArray(deviceResponse.documents)) {
-        throw new Error("Invalid mDL structure: missing version or documents");
+    // Debug: Log the structure to understand what we received
+    console.log("[mdl-verify] Decoded CBOR structure keys:", Object.keys(decodedData || {}));
+    console.log("[mdl-verify] Decoded CBOR type:", typeof decodedData, Array.isArray(decodedData) ? "(array)" : "");
+    if (decodedData && typeof decodedData === 'object' && !Array.isArray(decodedData)) {
+      console.log("[mdl-verify] Top-level fields:", JSON.stringify(Object.keys(decodedData)));
+    }
+    
+    // Step 3: Detect format - could be DeviceResponse (presentation) or Document (issuance)
+    let deviceResponse;
+    let document;
+    
+    if (decodedData.version && decodedData.documents && Array.isArray(decodedData.documents)) {
+      // Full DeviceResponse format (used during presentation)
+      console.log("[mdl-verify] Detected DeviceResponse format (presentation)");
+      deviceResponse = decodedData;
+      
+      if (validateStructure && deviceResponse.documents.length === 0) {
+        throw new Error("No documents found in mDL");
       }
       
-      if (deviceResponse.documents.length === 0) {
-        throw new Error("No documents found in mDL");
+      document = deviceResponse.documents[0];
+    } else if (decodedData.docType || decodedData.issuerSigned) {
+      // Single Document format (used during issuance)
+      console.log("[mdl-verify] Detected single Document format (issuance)");
+      document = decodedData;
+      deviceResponse = {
+        version: "1.0", // Default version for issued credentials
+        documents: [document],
+        status: 0
+      };
+    } else if (decodedData.nameSpaces && decodedData.issuerAuth) {
+      // IssuerSigned format (minimal issuance format per ISO 18013-5)
+      console.log("[mdl-verify] Detected IssuerSigned format (minimal issuance)");
+      // Wrap IssuerSigned in a Document structure
+      document = {
+        docType: documentType || "org.iso.18013.5.1.mDL", // Use provided or default docType
+        issuerSigned: decodedData,
+        deviceSigned: null // Not present during issuance
+      };
+      deviceResponse = {
+        version: "1.0",
+        documents: [document],
+        status: 0
+      };
+    } else {
+      // Unknown format - might be wrapped or use non-standard field names
+      console.log("[mdl-verify] Warning: Unknown format, attempting to unwrap/parse");
+      
+      // Try common envelope patterns
+      let unwrapped = decodedData;
+      
+      // Check if it's wrapped in a 'credential' field
+      if (decodedData.credential) {
+        console.log("[mdl-verify] Found 'credential' wrapper, unwrapping...");
+        unwrapped = decodedData.credential;
+      }
+      
+      // Check if the unwrapped data is a string (might need another decode)
+      if (typeof unwrapped === 'string') {
+        console.log("[mdl-verify] Credential is a string, attempting to decode again...");
+        try {
+          const innerBuffer = base64url.toBuffer(unwrapped);
+          unwrapped = decode(innerBuffer);
+          console.log("[mdl-verify] Successfully decoded inner credential");
+        } catch (e) {
+          console.warn("[mdl-verify] Could not decode inner string:", e.message);
+        }
+      }
+      
+      // Re-check format after unwrapping
+      if (unwrapped.version && unwrapped.documents && Array.isArray(unwrapped.documents)) {
+        console.log("[mdl-verify] After unwrapping: Detected DeviceResponse format");
+        deviceResponse = unwrapped;
+        document = deviceResponse.documents[0];
+      } else if (unwrapped.docType || unwrapped.issuerSigned) {
+        console.log("[mdl-verify] After unwrapping: Detected Document format");
+        document = unwrapped;
+        deviceResponse = { version: "1.0", documents: [document], status: 0 };
+      } else if (unwrapped.nameSpaces && unwrapped.issuerAuth) {
+        console.log("[mdl-verify] After unwrapping: Detected IssuerSigned format");
+        document = {
+          docType: documentType || "org.iso.18013.5.1.mDL",
+          issuerSigned: unwrapped,
+          deviceSigned: null
+        };
+        deviceResponse = { version: "1.0", documents: [document], status: 0 };
+      } else {
+        // Still unknown after unwrapping
+        console.log("[mdl-verify] Still unknown format after unwrapping. Keys:", Object.keys(unwrapped || {}));
+        if (validateStructure) {
+          throw new Error("Invalid mDL structure: not a DeviceResponse or Document");
+        }
+        // Last resort: treat as document
+        document = unwrapped;
+        deviceResponse = { version: "1.0", documents: [document], status: 0 };
       }
     }
     
-    // Step 4: Process the first document (typically the mDL)
-    const document = deviceResponse.documents[0];
-    
     if (validateStructure && !document.docType) {
-      throw new Error("Document missing docType");
+      console.warn("[mdl-verify] Warning: Document missing docType, using default");
+      document.docType = documentType || "org.iso.18013.5.1.mDL";
     }
     
     // Step 5: Extract claims from issuerSigned nameSpaces
@@ -217,7 +302,7 @@ export async function extractDeviceNonce(vpTokenBase64) {
 }
 
 export default {
-  verifyMdlToken,
+  verifyMdlToken: verifyReceivedMdlToken,
   validateMdlClaims,
   getSessionTranscriptBytes,
   extractDeviceNonce
