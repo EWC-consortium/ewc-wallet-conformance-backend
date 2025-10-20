@@ -265,11 +265,19 @@ class StatusListManager {
     const statusList = await statusListGet(statusListId);
     if (!statusList) throw new Error("Status list not found");
 
-    // Check if we have a cached token
+    // Check if we have a cached token and ensure it's not expired
     if (this.statusListTokens.has(statusListId)) {
       const cached = this.statusListTokens.get(statusListId);
       if (cached.updated_at >= statusList.updated_at) {
-        return cached.token;
+        try {
+          const decodedCached = jwt.decode(cached.token);
+          const nowEpoch = Math.floor(Date.now() / 1000);
+          if (decodedCached && decodedCached.exp && decodedCached.exp > nowEpoch) {
+            return cached.token;
+          }
+        } catch (e) {
+          // fall through to regenerate on decode error
+        }
       }
     }
 
@@ -348,15 +356,17 @@ class StatusListManager {
     };
 
     // Choose the correct private key based on header/type to avoid mismatches
+    // Align with issuance path in credGenerationUtils.js:
+    // - did:web and did:jwk -> ./private-key.pem
+    // - x509 -> ./x509EC/ec_private_pkcs8.key
     let pemToUse = privateKey;
     if (protectedHeader && protectedHeader.x5c && privateKeyPemX509) {
       pemToUse = privateKeyPemX509;
-    } else if (
-      protectedHeader && protectedHeader.kid && protectedHeader.kid.startsWith("did:web:") && privateKeyPemDidWeb
-    ) {
-      pemToUse = privateKeyPemDidWeb;
     } else if (effectiveSignatureType === "x509" && privateKeyPemX509) {
       pemToUse = privateKeyPemX509;
+    } else {
+      // did:web or did:jwk: always use the same key as issuance (./private-key.pem)
+      pemToUse = privateKey;
     }
 
     // Sign the JWT with jose to ensure correct protected header
