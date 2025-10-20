@@ -30,7 +30,7 @@ import {
   getLoyaltyCardSDJWTDataWithPayload,
 } from "../utils/credPayloadUtil.js";
 
-import issuerConfig from "../data/issuer-config.json" assert { type: "json" };
+import issuerConfig from "../data/issuer-config.json" with { type: "json" };
 
 import {
   MDoc,

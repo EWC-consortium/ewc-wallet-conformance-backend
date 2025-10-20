@@ -301,9 +301,136 @@ export async function extractDeviceNonce(vpTokenBase64) {
   }
 }
 
+/**
+ * Constructs a DeviceResponse for presentation from stored credential
+ * This is used when the wallet presents an mdoc credential to a verifier
+ * 
+ * @param {string|Object} storedCredential - The stored credential (could be IssuerSigned, Document, or DeviceResponse)
+ * @param {Object} options - Presentation options
+ * @param {string} options.docType - Document type (e.g., "org.iso.18013.5.1.mDL")
+ * @param {Object} options.sessionTranscript - Optional session transcript for deviceAuth
+ * @returns {string} Base64url encoded DeviceResponse ready for presentation
+ */
+export async function buildMdocPresentation(storedCredential, options = {}) {
+  const { encode: encodeCbor } = await import('cbor-x');
+  const { docType = "org.iso.18013.5.1.mDL" } = options;
+  
+  console.log("[mdoc-present] Building DeviceResponse for presentation");
+  console.log("[mdoc-present] Stored credential type:", typeof storedCredential);
+  
+  let issuerSigned;
+  
+  // Determine what format we have stored
+  if (typeof storedCredential === 'string') {
+    // Stored as base64url encoded CBOR - decode it first
+    console.log("[mdoc-present] Decoding stored base64url credential");
+    const buffer = base64url.toBuffer(storedCredential);
+    const decoded = decode(buffer);
+    
+    if (decoded.version && decoded.documents) {
+      // Already a DeviceResponse - return as-is
+      console.log("[mdoc-present] Already a DeviceResponse, returning as-is");
+      return storedCredential;
+    } else if (decoded.docType || decoded.issuerSigned) {
+      // Document format
+      issuerSigned = decoded.issuerSigned || decoded;
+    } else if (decoded.nameSpaces && decoded.issuerAuth) {
+      // IssuerSigned format
+      issuerSigned = decoded;
+    } else {
+      throw new Error("Unknown mdoc credential format");
+    }
+  } else if (typeof storedCredential === 'object') {
+    // Stored as object
+    if (storedCredential.version && storedCredential.documents) {
+      // Already DeviceResponse - encode and return
+      console.log("[mdoc-present] Converting DeviceResponse object to base64url");
+      const encoded = encodeCbor(storedCredential);
+      return base64url.encode(Buffer.from(encoded));
+    } else if (storedCredential.docType || storedCredential.issuerSigned) {
+      // Document format
+      issuerSigned = storedCredential.issuerSigned || storedCredential;
+    } else if (storedCredential.nameSpaces && storedCredential.issuerAuth) {
+      // IssuerSigned format
+      issuerSigned = storedCredential;
+    } else {
+      throw new Error("Unknown mdoc credential format");
+    }
+  } else {
+    throw new Error("Invalid stored credential type");
+  }
+  
+  // Construct Document structure
+  const document = {
+    docType: docType,
+    issuerSigned: issuerSigned,
+    // deviceSigned would go here if we had deviceAuth (MAC or signature)
+    // For now, omit it - ISO 18013-5 allows presenting without deviceSigned
+  };
+  
+  // Construct DeviceResponse
+  const deviceResponse = {
+    version: "1.0",
+    documents: [document],
+    status: 0
+  };
+  
+  console.log("[mdoc-present] Constructed DeviceResponse with docType:", docType);
+  
+  // CBOR encode and base64url encode
+  const encoded = encodeCbor(deviceResponse);
+  const base64urlEncoded = base64url.encode(Buffer.from(encoded));
+  
+  console.log("[mdoc-present] Encoded DeviceResponse length:", base64urlEncoded.length);
+  
+  return base64urlEncoded;
+}
+
+/**
+ * Checks if a credential is an mdoc/mDL credential
+ * 
+ * @param {string|Object} credential - The credential to check
+ * @returns {boolean} True if it's an mdoc credential
+ */
+export function isMdocCredential(credential) {
+  try {
+    if (typeof credential === 'string') {
+      // Check if it's base64url encoded CBOR
+      // SD-JWT has '~', JWT has 3 parts with '.'
+      if (credential.includes('~')) return false; // SD-JWT
+      if (credential.split('.').length === 3) return false; // JWT
+      
+      // Try to decode as CBOR
+      const buffer = base64url.toBuffer(credential);
+      const decoded = decode(buffer);
+      
+      // Check for mdoc structures
+      if (decoded.version && decoded.documents) return true; // DeviceResponse
+      if (decoded.docType || decoded.issuerSigned) return true; // Document
+      if (decoded.nameSpaces && decoded.issuerAuth) return true; // IssuerSigned
+      
+      return false;
+    } else if (typeof credential === 'object' && credential !== null) {
+      // Check object structure
+      if (credential.version && credential.documents) return true; // DeviceResponse
+      if (credential.docType || credential.issuerSigned) return true; // Document
+      if (credential.nameSpaces && credential.issuerAuth) return true; // IssuerSigned
+      
+      return false;
+    }
+    
+    return false;
+  } catch (e) {
+    // If decoding fails, it's probably not an mdoc
+    return false;
+  }
+}
+
 export default {
   verifyMdlToken: verifyReceivedMdlToken,
   validateMdlClaims,
   getSessionTranscriptBytes,
-  extractDeviceNonce
+  extractDeviceNonce,
+  buildMdocPresentation,
+  isMdocCredential
 }; 

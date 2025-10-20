@@ -1,6 +1,7 @@
 import fetch from "node-fetch";
 import { createProofJwt, generateDidJwkFromPrivateJwk, ensureOrCreateEcKeyPair } from "./crypto.js";
 import { getWalletCredentialByType, listWalletCredentialTypes, appendWalletLog } from "./cache.js";
+import { buildMdocPresentation, isMdocCredential } from "../../utils/mdlVerification.js";
 
 function makeSessionLogger(sessionId) {
   return function sessionLog(...args) {
@@ -60,13 +61,14 @@ function decodeJwt(token) {
   return { header, payload };
 }
 
-function buildPresentationSubmission(presentationDefinition) {
+function buildPresentationSubmission(presentationDefinition, credentialFormat) {
   if (!presentationDefinition) return undefined;
   console.log("[present] Building presentation_submission from definition:", presentationDefinition.id);
   console.log("[present] Input descriptors:", presentationDefinition.input_descriptors?.length || 0);
 
   const inputDescriptors = presentationDefinition.input_descriptors || [];
-  const descriptorMap = inputDescriptors.map((d) => ({ id: d.id, format: inferRootFormat(presentationDefinition), path: "$.vp_token" }));
+  const format = credentialFormat || inferRootFormat(presentationDefinition);
+  const descriptorMap = inputDescriptors.map((d) => ({ id: d.id, format, path: "$.vp_token" }));
 
   console.log("[present] Descriptor map:", JSON.stringify(descriptorMap, null, 2));
 
@@ -77,8 +79,9 @@ function buildPresentationSubmission(presentationDefinition) {
 }
 
 function inferRootFormat(presentationDefinition) {
-  // Prefer dc+sd-jwt or vc+sd-jwt if available
+  // Infer format from presentation definition
   const fmt = presentationDefinition.format || {};
+  if (fmt["mso_mdoc"]) return "mso_mdoc"; // mdoc format
   if (fmt["dc+sd-jwt"]) return "dc+sd-jwt";
   if (fmt["vc+sd-jwt"]) return "vc+sd-jwt";
   if (fmt["jwt_vc_json"]) return "jwt_vc_json";
@@ -190,37 +193,65 @@ export async function performPresentation({ deepLink, verifierBase, credentialTy
   console.log("[present] Extracted credential string present=", typeof vpToken === "string", vpToken ? (vpToken.includes("~") ? "sd-jwt" : "jwt/other") : "none"); try { slog("[present] token extracted", { present: !!vpToken }); } catch {}
   if (!vpToken) throw new Error("Unable to extract presentable credential token from wallet cache");
 
-  // For SD-JWT, ensure the key-binding JWT is appended if missing
-  if (typeof vpToken === "string" && vpToken.includes("~")) {
+  // Check if this is an mdoc credential
+  const isMdoc = isMdocCredential(vpToken);
+  console.log("[present] Credential type detected:", isMdoc ? "mdoc" : (vpToken.includes("~") ? "sd-jwt" : "jwt")); try { slog("[present] credential type", { isMdoc, isSdJwt: vpToken.includes("~") }); } catch {}
+
+  if (isMdoc) {
+    // For mdoc, construct proper DeviceResponse structure
+    console.log("[present] Processing mdoc credential for presentation"); try { slog("[present] processing mdoc"); } catch {}
+    
+    // Determine docType from presentation definition if available
+    let docType = "org.iso.18013.5.1.mDL"; // Default
+    if (presentationDefinition?.input_descriptors?.[0]?.id) {
+      const descriptorId = presentationDefinition.input_descriptors[0].id;
+      // Try to infer docType from descriptor id
+      if (descriptorId.includes("pid") || descriptorId.includes("PID")) {
+        docType = "eu.europa.ec.eudi.pid.1";
+      } else if (descriptorId.includes("mdl") || descriptorId.includes("mDL")) {
+        docType = "org.iso.18013.5.1.mDL";
+      }
+    }
+    console.log("[present] Using docType:", docType); try { slog("[present] docType", { docType }); } catch {}
+    
+    // Build proper DeviceResponse for presentation
+    vpToken = await buildMdocPresentation(vpToken, { docType });
+    console.log("[present] Built DeviceResponse, length:", vpToken.length); try { slog("[present] DeviceResponse built", { length: vpToken.length }); } catch {}
+  } else if (typeof vpToken === "string" && vpToken.includes("~")) {
+    // For SD-JWT, ensure the key-binding JWT is appended if missing
     const before = vpToken;
     vpToken = attachKbJwtToSdJwt(vpToken, kbJwt);
     if (before !== vpToken) { console.log("[present] Appended kbJwt to SD-JWT"); try { slog("[present] kbJwt appended"); } catch {} }
     else { console.log("[present] SD-JWT already had kbJwt attached"); try { slog("[present] kbJwt already attached"); } catch {} }
   } else {
-    // For non-SD-JWT, we might need to create a VP wrapper
-    console.log("[present] Non-SD-JWT token, using as-is"); try { slog("[present] non-sd-jwt token"); } catch {}
+    // For JWT VC, use as-is
+    console.log("[present] JWT VC token, using as-is"); try { slog("[present] jwt-vc token"); } catch {}
   }
 
-  const presentation_submission = buildPresentationSubmission(presentationDefinition);
+  // Determine credential format for presentation_submission
+  const credentialFormat = isMdoc ? "mso_mdoc" : (vpToken.includes("~") ? "dc+sd-jwt" : "jwt_vc_json");
+  console.log("[present] Credential format for submission:", credentialFormat); try { slog("[present] credential format", { format: credentialFormat }); } catch {}
+  
+  const presentation_submission = buildPresentationSubmission(presentationDefinition, credentialFormat);
   if (presentation_submission) { console.log("[present] Built presentation_submission len:", presentation_submission.length); try { slog("[present] submission built", { length: presentation_submission.length }); } catch {} }
 
-  // Send the raw SD-JWT token directly - the verifier expects the actual token, not a VP wrapper
+  // Send the credential token (SD-JWT, mdoc DeviceResponse, or JWT VC)
   let body;
   if (presentation_submission) {
-    // Use presentation_submission format with raw SD-JWT
+    // Use presentation_submission format
     body = {
-      vp_token: vpToken, // Send the raw SD-JWT token
+      vp_token: vpToken,
       presentation_submission, // Send as JSON string (as expected by verifier)
       ...(state ? { state } : {}),
     };
-    console.log("[present] Using raw SD-JWT with presentation_submission format"); try { slog("[present] using submission format"); } catch {}
+    console.log("[present] Using presentation_submission format"); try { slog("[present] using submission format"); } catch {}
   } else {
-    // Direct format with raw SD-JWT
+    // Direct format
     body = {
-      vp_token: vpToken, // Send the raw SD-JWT token
+      vp_token: vpToken,
       ...(state ? { state } : {}),
     };
-    console.log("[present] Using raw SD-JWT with direct format"); try { slog("[present] using direct format"); } catch {}
+    console.log("[present] Using direct format"); try { slog("[present] using direct format"); } catch {}
   }
   console.log("[present] Posting to response_uri:", responseUri, "body.keys=", Object.keys(body)); try { slog("[present] posting", { responseUri, keys: Object.keys(body) }); } catch {}
 
