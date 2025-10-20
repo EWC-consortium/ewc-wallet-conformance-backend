@@ -1107,7 +1107,28 @@ export const publicKeyToPem = async (jwk) => {
     throw new Error("JWK is undefined or null.");
   }
   try {
-    const publicKey = await jose.importJWK(jwk);
+    // Ensure we only import a PUBLIC JWK; strip any private members if present
+    const toPublicJwk = (key) => {
+      const { kty, kid, alg } = key;
+      if (kty === "EC") {
+        const { crv, x, y } = key;
+        return { kty, crv, x, y, ...(kid ? { kid } : {}), ...(alg ? { alg } : {}) };
+      }
+      if (kty === "OKP") {
+        const { crv, x } = key;
+        return { kty, crv, x, ...(kid ? { kid } : {}), ...(alg ? { alg } : {}) };
+      }
+      if (kty === "RSA") {
+        const { n, e } = key;
+        return { kty, n, e, ...(kid ? { kid } : {}), ...(alg ? { alg } : {}) };
+      }
+      // Fallback: drop known private members generically
+      const cloned = { ...key };
+      ["d", "p", "q", "dp", "dq", "qi", "oth"].forEach((f) => delete cloned[f]);
+      return cloned;
+    };
+    const publicOnlyJwk = toPublicJwk(jwk);
+    const publicKey = await jose.importJWK(publicOnlyJwk);
     const pem = await jose.exportSPKI(publicKey);
     return pem;
   } catch (err) {
