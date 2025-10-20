@@ -95,10 +95,10 @@ didRouter.get("/generateVPRequest", async (req, res) => {
       }
   };
   const privateKeyObj = await jose.importPKCS8(privateKey, "ES256");
-  const attestationJwt = await new jose.SignJWT(attestationPayload)
-      .setProtectedHeader({ alg: 'ES256', kid: kid, typ: 'jwt' })
-      .sign(privateKeyObj);
-  const verifier_attestations = [attestationJwt];
+  // const attestationJwt = await new jose.SignJWT(attestationPayload)
+  //     .setProtectedHeader({ alg: 'ES256', kid: kid, typ: 'jwt' })
+  //     .sign(privateKeyObj);
+  // const verifier_attestations = [{format:"jwt", "data": attestationJwt}];
 
   storeVPSession(uuid, {
     uuid: uuid,
@@ -107,7 +107,7 @@ didRouter.get("/generateVPRequest", async (req, res) => {
     dcql_query: dcql_query_pid,
     nonce: nonce,
     response_mode: responseMode,
-    verifier_attestations: verifier_attestations,
+    verifier_attestations: null,
     client_id: client_id
   });
 
@@ -180,10 +180,10 @@ didRouter.get("/generateVPRequestGET", async (req, res) => {
     }
   };
   const privateKeyObj = await jose.importPKCS8(privateKey, "ES256");
-  const attestationJwt = await new jose.SignJWT(attestationPayload)
-      .setProtectedHeader({ alg: 'ES256', kid: kid, typ: 'jwt' })
-      .sign(privateKeyObj);
-  const verifier_attestations = [attestationJwt];
+  // const attestationJwt = await new jose.SignJWT(attestationPayload)
+  //     .setProtectedHeader({ alg: 'ES256', kid: kid, typ: 'jwt' })
+  //     .sign(privateKeyObj);
+  // const verifier_attestations = [{format:"jwt", "data": attestationJwt}];
 
   // Determine which DCQL query to use based on credentialFormat
   let dcql_query = null;
@@ -203,7 +203,7 @@ didRouter.get("/generateVPRequestGET", async (req, res) => {
     dcql_query: dcql_query,
     nonce: nonce,
     response_mode: responseMode,
-    verifier_attestations: verifier_attestations,
+    verifier_attestations: null,
     client_id: client_id
   });
 
@@ -258,10 +258,10 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     }
   };
   const privateKeyObj = await jose.importPKCS8(privateKey, "ES256");
-  const attestationJwt = await new jose.SignJWT(attestationPayload)
-      .setProtectedHeader({ alg: 'ES256', kid: kid, typ: 'jwt' })
-      .sign(privateKeyObj);
-  const verifier_attestations = [attestationJwt];
+  // const attestationJwt = await new jose.SignJWT(attestationPayload)
+  //     .setProtectedHeader({ alg: 'ES256', kid: kid, typ: 'jwt' })
+  //     .sign(privateKeyObj);
+  //     const verifier_attestations = [{format:"jwt", "data": attestationJwt}];
 
   const credentialIds = dcql_query_pid.credentials.map(cred => cred.id);
   const transactionDataObj = {
@@ -300,7 +300,7 @@ didRouter.get("/generateVPRequestTransaction", async (req, res) => {
     nonce: nonce,
     transaction_data: [base64UrlEncodedTxData],
     response_mode: responseMode,
-    verifier_attestations: verifier_attestations,
+    verifier_attestations: null,
     client_id: client_id
   });
 
