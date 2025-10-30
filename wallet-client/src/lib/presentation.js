@@ -113,7 +113,7 @@ function extractCredentialString(credentialEnvelope) {
     // Handle { credentials: { ... } } structure
     if (credentialEnvelope.credentials && typeof credentialEnvelope.credentials === "object") {
       console.log("[present] Found credentials object, keys:", Object.keys(credentialEnvelope.credentials));
-      // Look for SD-JWT in credentials object
+      // Look for SD-JWT, JWT, or mdoc in credentials object
       for (const [key, value] of Object.entries(credentialEnvelope.credentials)) {
         console.log("[present] credentials[" + key + "] type:", typeof value, "value preview:", typeof value === "string" ? value.substring(0, 100) : JSON.stringify(value).substring(0, 100));
         if (typeof value === "string" && (value.includes("~") || value.split(".").length >= 3)) {
@@ -124,9 +124,12 @@ function extractCredentialString(credentialEnvelope) {
         if (typeof value === "object" && value !== null) {
           console.log("[present] credentials[" + key + "] object keys:", Object.keys(value));
           for (const [subKey, subValue] of Object.entries(value)) {
-            if (typeof subValue === "string" && (subValue.includes("~") || subValue.split(".").length >= 3)) {
-              console.log("[present] Found token in credentials." + key + "." + subKey);
-              return subValue;
+            if (typeof subValue === "string") {
+              // Check for SD-JWT, JWT, or mdoc (base64 string)
+              if (subValue.includes("~") || subValue.split(".").length >= 3 || isMdocCredential(subValue)) {
+                console.log("[present] Found token in credentials." + key + "." + subKey);
+                return subValue;
+              }
             }
           }
         }
@@ -134,7 +137,7 @@ function extractCredentialString(credentialEnvelope) {
     }
     // Try to find first string value that looks like token
     for (const v of Object.values(credentialEnvelope)) {
-      if (typeof v === "string" && (v.includes("~") || v.split(".").length >= 3)) return v;
+      if (typeof v === "string" && (v.includes("~") || v.split(".").length >= 3 || isMdocCredential(v))) return v;
     }
   }
   return null;
@@ -147,8 +150,13 @@ export async function performPresentation({ deepLink, verifierBase, credentialTy
   const requestJwt = await fetchAuthorizationRequestJwt(requestUri, method);
   const { payload } = decodeJwt(requestJwt);
 
-  const responseMode = payload.response_mode || "direct_post";
+  let responseMode = payload.response_mode || "direct_post";
   const responseUri = payload.response_uri; // our routes embed this
+  // If the response_uri suggests direct_post.jwt, force that mode for compatibility
+  if (responseUri && /direct_post\.jwt/i.test(responseUri)) {
+    console.log("[present] Forcing response_mode to direct_post.jwt based on response_uri");
+    responseMode = "direct_post.jwt";
+  }
   const nonce = payload.nonce;
   const state = payload.state;
   const presentationDefinition = payload.presentation_definition;
@@ -201,18 +209,25 @@ export async function performPresentation({ deepLink, verifierBase, credentialTy
     // For mdoc, construct proper DeviceResponse structure
     console.log("[present] Processing mdoc credential for presentation"); try { slog("[present] processing mdoc"); } catch {}
     
-    // Determine docType from presentation definition if available
-    let docType = "org.iso.18013.5.1.mDL"; // Default
+    // Determine docType from credential type, presentation definition, or descriptor ID
+    let docType = selectedType || "org.iso.18013.5.1.mDL"; // Use selected credential type as default
+    
     if (presentationDefinition?.input_descriptors?.[0]?.id) {
       const descriptorId = presentationDefinition.input_descriptors[0].id;
-      // Try to infer docType from descriptor id
-      if (descriptorId.includes("pid") || descriptorId.includes("PID")) {
+      
+      // If descriptor ID looks like a docType (has dots/colons), use it directly
+      if (descriptorId.includes('.') || descriptorId.includes(':')) {
+        docType = descriptorId;
+      }
+      // Otherwise, try to infer from known patterns
+      else if (descriptorId.includes("pid") || descriptorId.includes("PID")) {
         docType = "eu.europa.ec.eudi.pid.1";
       } else if (descriptorId.includes("mdl") || descriptorId.includes("mDL")) {
         docType = "org.iso.18013.5.1.mDL";
       }
     }
-    console.log("[present] Using docType:", docType); try { slog("[present] docType", { docType }); } catch {}
+    
+    console.log("[present] Using docType:", docType, "from selectedType:", selectedType); try { slog("[present] docType", { docType, selectedType }); } catch {}
     
     // Build proper DeviceResponse for presentation
     vpToken = await buildMdocPresentation(vpToken, { docType });
@@ -236,7 +251,13 @@ export async function performPresentation({ deepLink, verifierBase, credentialTy
   if (presentation_submission) { console.log("[present] Built presentation_submission len:", presentation_submission.length); try { slog("[present] submission built", { length: presentation_submission.length }); } catch {} }
 
   // Send the credential token (SD-JWT, mdoc DeviceResponse, or JWT VC)
+  // Per OpenID4VP spec:
+  // - direct_post: application/x-www-form-urlencoded with vp_token (+ optional presentation_submission)
+  // - direct_post.jwt: application/x-www-form-urlencoded with 'response' containing a JWE/JWT
   let body;
+  let bodyContent;
+  let contentType;
+  
   if (presentation_submission) {
     // Use presentation_submission format
     body = {
@@ -253,12 +274,106 @@ export async function performPresentation({ deepLink, verifierBase, credentialTy
     };
     console.log("[present] Using direct format"); try { slog("[present] using direct format"); } catch {}
   }
+  
+  if ((responseMode || "direct_post") === "direct_post.jwt") {
+    // Build a compact JWT payload and encrypt to JWE if verifier provides JWKS
+    // Wallet signs nothing here to avoid verifier signature mismatch; use JWE per spec branch in verifier
+    let responseJwtOrJwe = null;
+    try {
+      const clientMetadata = payload.client_metadata || payload.clientMetadata || {};
+      const jwks = clientMetadata.jwks || (clientMetadata.jwks_uri ? await (await fetch(clientMetadata.jwks_uri)).json() : null);
+      const encKey = jwks?.keys?.find((k) => (k.use === 'enc' || !k.use) && (k.kty === 'EC' || k.kty === 'OKP' || k.kty === 'RSA'));
+
+      // Build signed JWT payload per OpenID4VP direct_post.jwt
+      const now = Math.floor(Date.now() / 1000);
+      let presentationSubmissionObj = undefined;
+      if (presentation_submission) {
+        try { presentationSubmissionObj = JSON.parse(presentation_submission); } catch {}
+      }
+      const jwtPayload = {
+        vp_token: vpToken,
+        ...(presentationSubmissionObj ? { presentation_submission: presentationSubmissionObj } : {}),
+        ...(state ? { state } : {}),
+        ...(nonce ? { nonce } : {}),
+        iat: now,
+        exp: now + 300,
+        iss: didJwk,
+        // OID4VP direct_post.jwt aligns with JARM: aud SHOULD be the verifier's client_id
+        aud: clientId || responseUri
+      };
+
+      // Sign with wallet key (ES256)
+      const { importJWK, SignJWT, CompactEncrypt, EncryptJWT } = await import('jose');
+
+      if (encKey) {
+        // Encrypt to JWE so verifier follows its JWE branch
+        
+        // Prioritize encryption settings from client_metadata
+        let alg = clientMetadata.authorization_encrypted_response_alg || encKey.alg || 'ECDH-ES+A256KW';
+        if (alg === 'ECDH-ES') alg = 'ECDH-ES+A256KW'; // Ensure key wrapping alg is included
+
+        let enc = 'A256GCM'; // Default enc
+        if (clientMetadata.authorization_encrypted_response_enc) {
+          enc = clientMetadata.authorization_encrypted_response_enc;
+        } else if (Array.isArray(clientMetadata.encrypted_response_enc_values_supported)) {
+          const supportedEnc = clientMetadata.encrypted_response_enc_values_supported;
+          const preferredEnc = supportedEnc.find((e) => ['A256GCM','A192GCM','A128GCM','A256CBC-HS512','A192CBC-HS384','A128CBC-HS256'].includes(e));
+          if (preferredEnc) enc = preferredEnc;
+        }
+
+        const publicKey = await importJWK(encKey, alg.startsWith('ECDH-ES') ? 'ECDH-ES' : undefined);
+        const jweProtectedHeader = { alg, enc, kid: encKey.kid };
+        console.log('[present] JWE protected header:', jweProtectedHeader);
+
+        // OID4VP-15: "The Authorization Response is returned as a JSON object, which MUST be encrypted as the payload of a JWE"
+        // Encrypt the JSON payload directly, not a nested signed JWT.
+        responseJwtOrJwe = await new EncryptJWT(jwtPayload)
+          .setProtectedHeader(jweProtectedHeader)
+          .encrypt(publicKey);
+
+        console.log('[present] Created JWE:', responseJwtOrJwe.substring(0, 100) + '...');
+      } else {
+        // Fallback: send signed JWT directly if no enc key is provided
+        const signingKey = await importJWK(privateJwk, 'ES256');
+        responseJwtOrJwe = await new SignJWT(jwtPayload)
+          .setProtectedHeader({ alg: 'ES256', typ: 'JWT', kid: didJwk })
+          .setIssuer(jwtPayload.iss)
+          .setAudience(jwtPayload.aud)
+          .setIssuedAt(jwtPayload.iat)
+          .setExpirationTime(jwtPayload.exp)
+          .sign(signingKey);
+      }
+
+      const formParams = new URLSearchParams();
+      formParams.append('response', responseJwtOrJwe);
+      if (state) formParams.append('state', state);
+      bodyContent = formParams.toString();
+      contentType = 'application/x-www-form-urlencoded';
+    } catch (e) {
+      console.log('[present] Failed to build direct_post.jwt response, falling back to direct_post:', e.message);
+    }
+  }
+  
+  if (!bodyContent) {
+    // Default: direct_post
+    const formParams = new URLSearchParams();
+    formParams.append("vp_token", vpToken);
+    if (presentation_submission) {
+      formParams.append("presentation_submission", presentation_submission);
+    }
+    if (state) {
+      formParams.append("state", state);
+    }
+    bodyContent = formParams.toString();
+    contentType = "application/x-www-form-urlencoded";
+  }
+  
   console.log("[present] Posting to response_uri:", responseUri, "body.keys=", Object.keys(body)); try { slog("[present] posting", { responseUri, keys: Object.keys(body) }); } catch {}
 
   const res = await fetch(responseUri, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    headers: { "content-type": contentType },
+    body: bodyContent,
   });
   const resText = await res.text().catch(() => "");
   console.log("[present] Verifier response status:", res.status, "body.len=", resText?.length); try { slog("[present] verifier response", { status: res.status, bodyLen: resText?.length }); } catch {}
@@ -267,6 +382,45 @@ export async function performPresentation({ deepLink, verifierBase, credentialTy
   console.log("[present] presentation_submission type:", typeof presentation_submission);
   console.log("[present] Full request body:", JSON.stringify(body, null, 2));
   if (!res.ok) {
+    // Compatibility fallback for some verifiers expecting JWE payload object instead of JWT inside direct_post.jwt
+    
+    if ((responseMode || "direct_post") === "direct_post.jwt") {
+      try {
+        console.log("[present] direct_post.jwt failed (" + res.status + ") – retrying with payload-object JWE fallback");
+        const clientMetadata = payload.client_metadata || payload.clientMetadata || {};
+        const jwks = clientMetadata.jwks || (clientMetadata.jwks_uri ? await (await fetch(clientMetadata.jwks_uri)).json() : null);
+        const encKey = jwks?.keys?.find((k) => (k.use === 'enc' || !k.use) && (k.kty === 'EC' || k.kty === 'OKP' || k.kty === 'RSA'));
+        if (encKey) {
+          const { importJWK, EncryptJWT } = await import('jose');
+          const alg = encKey.alg || 'ECDH-ES+A256KW';
+          const supportedEnc = Array.isArray(clientMetadata.encrypted_response_enc_values_supported)
+            ? clientMetadata.encrypted_response_enc_values_supported
+            : [];
+          const preferredEnc = supportedEnc.find((e) => ['A256GCM','A192GCM','A128GCM','A256CBC-HS512','A192CBC-HS384','A128CBC-HS256'].includes(e));
+          const enc = preferredEnc || 'A256GCM';
+          const publicKey = await importJWK(encKey, alg.startsWith('ECDH-ES') ? 'ECDH-ES' : undefined);
+          const fallbackPayload = { vp_token: vpToken, ...(presentation_submission ? { presentation_submission: JSON.parse(presentation_submission) } : {}), ...(state ? { state } : {}) };
+          // Build a JWE with JSON payload (so jwtDecrypt returns { payload })
+          const jwe = await new EncryptJWT(fallbackPayload)
+            .setProtectedHeader({ alg, enc, kid: encKey.kid })
+            .encrypt(publicKey);
+          const formParams2 = new URLSearchParams();
+          formParams2.append('response', jwe);
+          const res2 = await fetch(responseUri, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: formParams2.toString() });
+          const res2Text = await res2.text().catch(() => "");
+          console.log("[present] Fallback verifier response status:", res2.status, "body.len=", res2Text?.length);
+          if (!res2.ok) {
+            let parsed2 = null;
+            try { parsed2 = JSON.parse(res2Text); } catch {}
+            throw new Error(`Verifier response error ${res2.status}${parsed2 ? ": " + JSON.stringify(parsed2) : res2Text ? ": " + res2Text.slice(0, 500) : ""}`);
+          }
+          try { return JSON.parse(res2Text); } catch { return { status: "ok" }; }
+        }
+      } catch (e) {
+        console.log("[present] Fallback attempt failed:", e?.message || String(e));
+      }
+    }
+    
     let parsed = null;
     try { parsed = JSON.parse(resText); } catch {}
     throw new Error(`Verifier response error ${res.status}${parsed ? ": " + JSON.stringify(parsed) : resText ? ": " + resText.slice(0, 500) : ""}`);
