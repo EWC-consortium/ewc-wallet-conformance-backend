@@ -43,7 +43,7 @@ testRouter.get('/generateVPRequest', async (req, res) => {
     const nonce = mockCryptoUtils.generateNonce(16);
 
     const response_uri = `http://localhost:3000/direct_post/${uuid}`;
-    const client_id = 'x509_san_dns:dss.aegean.gr';
+    const client_id = 'decentralized_identifier:did:web:localhost:3000';
 
     // Store session data
     await mockCacheService.storeVPSession(uuid, {
@@ -307,6 +307,9 @@ describe('MDL Routes', () => {
       expect(response.body).to.have.property('deepLink');
       expect(response.body).to.have.property('sessionId');
       expect(response.body.sessionId).to.equal('test-uuid-123');
+      expect(response.body.deepLink).to.not.include('redirect_uri=');
+      expect(response.body.deepLink).to.include('client_id=decentralized_identifier%3Adid%3Aweb%3A');
+      expect(response.body.deepLink).to.not.include('client_id_scheme=');
     });
 
     it('should generate VP request with custom sessionId', async () => {
@@ -320,14 +323,17 @@ describe('MDL Routes', () => {
       expect(response.body.sessionId).to.equal(customSessionId);
     });
 
-    it('should generate VP request with custom response_mode', async () => {
+    it('should generate VP request with direct_post response_mode', async () => {
       const response = await request(app)
         .get('/mdl/generateVPRequest')
-        .query({ response_mode: 'fragment' })
+        .query({ response_mode: 'direct_post' })
         .expect(200);
 
       expect(response.body).to.have.property('qr');
       expect(response.body).to.have.property('deepLink');
+      expect(response.body.deepLink).to.not.include('redirect_uri=');
+      expect(response.body.deepLink).to.include('client_id=decentralized_identifier%3Adid%3Aweb%3A');
+      expect(response.body.deepLink).to.not.include('client_id_scheme=');
     });
 
     it('should store session with mDL presentation definition', async () => {

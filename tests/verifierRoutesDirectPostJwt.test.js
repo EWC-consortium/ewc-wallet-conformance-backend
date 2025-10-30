@@ -27,6 +27,10 @@ app.post('/direct_post/:id', async (req, res) => {
     }
 
     if (vpSession.response_mode === 'direct_post.jwt') {
+      // Wallet-reported error handling for jwt flow
+      if (req.body.error) {
+        return res.status(400).json({ error: req.body.error, error_description: req.body.error_description });
+      }
       const jwtResponse = req.body.response;
       
       if (!jwtResponse) {
@@ -60,7 +64,16 @@ app.post('/direct_post/:id', async (req, res) => {
           console.log("Extracted vp_token for processing");
           
           const result = await mockExtractClaimsFromRequest({ body: { vp_token: vpToken } });
-          
+          // Nonce and audience validation using key-binding JWT when present
+          if (result.keybindJwt && result.keybindJwt.payload) {
+            const kb = result.keybindJwt.payload;
+            if (!kb.nonce || kb.nonce !== vpSession.nonce) {
+              return res.status(400).json({ error: 'submitted nonce does not match' });
+            }
+            if (vpSession.client_id && kb.aud && kb.aud !== vpSession.client_id) {
+              return res.status(400).json({ error: 'aud claim does not match verifier client_id' });
+            }
+          }
           vpSession.status = "success";
           vpSession.claims = result.extractedClaims;
           await mockStoreVPSession(sessionId, vpSession);
@@ -76,7 +89,15 @@ app.post('/direct_post/:id', async (req, res) => {
           }
           
           const result = await mockExtractClaimsFromRequest({ body: { vp_token: vpToken } });
-          
+          if (result.keybindJwt && result.keybindJwt.payload) {
+            const kb = result.keybindJwt.payload;
+            if (!kb.nonce || kb.nonce !== vpSession.nonce) {
+              return res.status(400).json({ error: 'submitted nonce does not match' });
+            }
+            if (vpSession.client_id && kb.aud && kb.aud !== vpSession.client_id) {
+              return res.status(400).json({ error: 'aud claim does not match verifier client_id' });
+            }
+          }
           vpSession.status = "success";
           vpSession.claims = result.extractedClaims;
           await mockStoreVPSession(sessionId, vpSession);
@@ -85,6 +106,37 @@ app.post('/direct_post/:id', async (req, res) => {
       } catch (error) {
         console.error("Error processing JWT response:", error);
         return res.status(400).json({ error: "Invalid JWT response" });
+      }
+    } else if (vpSession.response_mode === 'direct_post') {
+      // Wallet-reported error handling for form-post flow
+      if (req.body.error) {
+        return res.status(400).json({ error: req.body.error, error_description: req.body.error_description });
+      }
+      try {
+        const state = req.body.state;
+        if (!state) {
+          return res.status(400).json({ error: 'state parameter missing' });
+        }
+        if (state !== vpSession.state) {
+          return res.status(400).json({ error: 'state mismatch' });
+        }
+        const result = await mockExtractClaimsFromRequest(req);
+        // If kb-jwt present even in direct_post, enforce nonce/aud
+        if (result.keybindJwt && result.keybindJwt.payload) {
+          const kb = result.keybindJwt.payload;
+          if (!kb.nonce || kb.nonce !== vpSession.nonce) {
+            return res.status(400).json({ error: 'submitted nonce does not match' });
+          }
+          if (vpSession.client_id && kb.aud && kb.aud !== vpSession.client_id) {
+            return res.status(400).json({ error: 'aud claim does not match verifier client_id' });
+          }
+        }
+        vpSession.status = 'success';
+        vpSession.claims = result.extractedClaims;
+        await mockStoreVPSession(sessionId, vpSession);
+        return res.status(200).json({ status: 'ok' });
+      } catch (e) {
+        return res.status(400).json({ error: e.message });
       }
     } else {
       return res.status(400).json({ error: "Unsupported response mode" });
@@ -301,6 +353,246 @@ describe('Verifier Routes - Direct Post JWT Fixes', () => {
 
       expect(response.body).to.have.property('error');
       expect(response.body.error).to.include('Invalid JWT response');
+    });
+
+    it('should accept when kb-jwt nonce and aud match', async () => {
+      const mockSession = {
+        uuid: 'test-session',
+        response_mode: 'direct_post.jwt',
+        nonce: 'kb-nonce-123',
+        client_id: 'decentralized_identifier:did:web:example.org',
+        status: 'pending'
+      };
+      mockGetVPSession.resolves(mockSession);
+
+      const mockJWT = jwt.sign(
+        { vp_token: 'test-vp-token', iss: 'wallet', aud: 'verifier' },
+        'mock-secret',
+        { algorithm: 'HS256' }
+      );
+
+      // Return key-binding JWT with matching nonce and aud
+      mockExtractClaimsFromRequest.resolves({
+        extractedClaims: { test: 'claims' },
+        keybindJwt: { payload: { nonce: 'kb-nonce-123', aud: 'decentralized_identifier:did:web:example.org' } }
+      });
+
+      const response = await request(app)
+        .post('/direct_post/test-session')
+        .send({ response: mockJWT })
+        .expect(200);
+
+      expect(response.body).to.have.property('status', 'ok');
+    });
+
+    it('should reject when kb-jwt nonce mismatches', async () => {
+      const mockSession = {
+        uuid: 'test-session',
+        response_mode: 'direct_post.jwt',
+        nonce: 'expected-nonce',
+        client_id: 'decentralized_identifier:did:web:example.org',
+        status: 'pending'
+      };
+      mockGetVPSession.resolves(mockSession);
+
+      const mockJWT = jwt.sign(
+        { vp_token: 'test-vp-token', iss: 'wallet', aud: 'verifier' },
+        'mock-secret',
+        { algorithm: 'HS256' }
+      );
+
+      mockExtractClaimsFromRequest.resolves({
+        extractedClaims: { test: 'claims' },
+        keybindJwt: { payload: { nonce: 'wrong-nonce', aud: 'decentralized_identifier:did:web:example.org' } }
+      });
+
+      const response = await request(app)
+        .post('/direct_post/test-session')
+        .send({ response: mockJWT })
+        .expect(400);
+
+      expect(response.body).to.have.property('error');
+      expect(response.body.error).to.match(/nonce/i);
+    });
+
+    it('should reject when kb-jwt nonce is missing', async () => {
+      const mockSession = {
+        uuid: 'test-session',
+        response_mode: 'direct_post.jwt',
+        nonce: 'expected-nonce',
+        client_id: 'decentralized_identifier:did:web:example.org',
+        status: 'pending'
+      };
+      mockGetVPSession.resolves(mockSession);
+
+      const mockJWT = jwt.sign(
+        { vp_token: 'test-vp-token', iss: 'wallet', aud: 'verifier' },
+        'mock-secret',
+        { algorithm: 'HS256' }
+      );
+
+      mockExtractClaimsFromRequest.resolves({
+        extractedClaims: { test: 'claims' },
+        keybindJwt: { payload: { aud: 'decentralized_identifier:did:web:example.org' } }
+      });
+
+      const response = await request(app)
+        .post('/direct_post/test-session')
+        .send({ response: mockJWT })
+        .expect(400);
+
+      expect(response.body).to.have.property('error');
+      expect(response.body.error).to.match(/nonce/i);
+    });
+
+    it('should reject when kb-jwt aud mismatches client_id', async () => {
+      const mockSession = {
+        uuid: 'test-session',
+        response_mode: 'direct_post.jwt',
+        nonce: 'kb-nonce-123',
+        client_id: 'decentralized_identifier:did:web:example.org',
+        status: 'pending'
+      };
+      mockGetVPSession.resolves(mockSession);
+
+      const mockJWT = jwt.sign(
+        { vp_token: 'test-vp-token', iss: 'wallet', aud: 'verifier' },
+        'mock-secret',
+        { algorithm: 'HS256' }
+      );
+
+      mockExtractClaimsFromRequest.resolves({
+        extractedClaims: { test: 'claims' },
+        keybindJwt: { payload: { nonce: 'kb-nonce-123', aud: 'wrong-aud' } }
+      });
+
+      const response = await request(app)
+        .post('/direct_post/test-session')
+        .send({ response: mockJWT })
+        .expect(400);
+
+      expect(response.body).to.have.property('error');
+      expect(response.body.error).to.match(/aud/);
+    });
+
+    it('should surface wallet error for jwt flow', async () => {
+      const mockSession = {
+        uuid: 'test-session',
+        response_mode: 'direct_post.jwt',
+        nonce: 'test-nonce',
+        status: 'pending'
+      };
+      mockGetVPSession.resolves(mockSession);
+
+      const response = await request(app)
+        .post('/direct_post/test-session')
+        .send({ error: 'invalid_request', error_description: 'unsupported parameter' })
+        .expect(400);
+
+      expect(response.body.error).to.equal('invalid_request');
+      expect(response.body.error_description).to.include('unsupported');
+    });
+  });
+
+  describe('POST /direct_post/:id - Direct Post (form post)', () => {
+    it('should accept when state matches and no holder binding', async () => {
+      const mockSession = {
+        uuid: 'test-session',
+        response_mode: 'direct_post',
+        state: 'state-123',
+        nonce: 'nonce-abc',
+        status: 'pending'
+      };
+      mockGetVPSession.resolves(mockSession);
+
+      mockExtractClaimsFromRequest.resolves({ extractedClaims: { ok: true }, keybindJwt: null });
+
+      const response = await request(app)
+        .post('/direct_post/test-session')
+        .send({ vp_token: 'vp.jwt', state: 'state-123' })
+        .expect(200);
+
+      expect(response.body).to.have.property('status', 'ok');
+    });
+
+    it('should reject when state is missing', async () => {
+      const mockSession = {
+        uuid: 'test-session',
+        response_mode: 'direct_post',
+        state: 'state-123',
+        nonce: 'nonce-abc',
+        status: 'pending'
+      };
+      mockGetVPSession.resolves(mockSession);
+
+      mockExtractClaimsFromRequest.resolves({ extractedClaims: { ok: true }, keybindJwt: null });
+
+      const response = await request(app)
+        .post('/direct_post/test-session')
+        .send({ vp_token: 'vp.jwt' })
+        .expect(400);
+
+      expect(response.body).to.have.property('error');
+      expect(response.body.error).to.match(/state/i);
+    });
+
+    it('should reject when state mismatches', async () => {
+      const mockSession = {
+        uuid: 'test-session',
+        response_mode: 'direct_post',
+        state: 'state-expected',
+        nonce: 'nonce-abc',
+        status: 'pending'
+      };
+      mockGetVPSession.resolves(mockSession);
+
+      mockExtractClaimsFromRequest.resolves({ extractedClaims: { ok: true }, keybindJwt: null });
+
+      const response = await request(app)
+        .post('/direct_post/test-session')
+        .send({ vp_token: 'vp.jwt', state: 'state-wrong' })
+        .expect(400);
+
+      expect(response.body).to.have.property('error');
+      expect(response.body.error).to.match(/state mismatch/);
+    });
+
+    it('should surface wallet error for form-post flow', async () => {
+      const mockSession = {
+        uuid: 'test-session',
+        response_mode: 'direct_post',
+        state: 'state-123',
+        nonce: 'nonce-abc',
+        status: 'pending'
+      };
+      mockGetVPSession.resolves(mockSession);
+
+      const response = await request(app)
+        .post('/direct_post/test-session')
+        .send({ error: 'invalid_request', error_description: 'unsupported parameter', state: 'state-123' })
+        .expect(400);
+
+      expect(response.body.error).to.equal('invalid_request');
+      expect(response.body.error_description).to.include('unsupported');
+    });
+
+    it('should surface unsupported transaction data type error', async () => {
+      const mockSession = {
+        uuid: 'test-session',
+        response_mode: 'direct_post',
+        state: 'state-123',
+        nonce: 'nonce-abc',
+        status: 'pending'
+      };
+      mockGetVPSession.resolves(mockSession);
+
+      const response = await request(app)
+        .post('/direct_post/test-session')
+        .send({ error: 'unsupported_transaction_data_type', error_description: 'unrecognized transaction_data type', state: 'state-123' })
+        .expect(400);
+
+      expect(response.body.error).to.equal('unsupported_transaction_data_type');
+      expect(response.body.error_description).to.include('unrecognized');
     });
   });
 

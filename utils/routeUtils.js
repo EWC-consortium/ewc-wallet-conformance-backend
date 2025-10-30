@@ -35,7 +35,7 @@ export const CLIENT_METADATA = {
   cover_uri: "string",
   description: "EWC pilot case verification",
   vp_formats: {
-    "vc+sd-jwt": {
+    "dc+sd-jwt": {
       "sd-jwt_alg_values": ["ES256", "ES384"],
       "kb-jwt_alg_values": ["ES256", "ES384"],
     },
@@ -662,10 +662,12 @@ export async function generateVPRequest(params) {
   });
 
   const nonce = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
+  const state = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
   const responseUri = `${serverURL}/direct_post/${sessionId}`;
   
   await logDebug(sessionId, "Generated nonce and response URI", {
     nonce,
+    state,
     responseUri
   });
 
@@ -673,6 +675,7 @@ export async function generateVPRequest(params) {
   const sessionData = {
     nonce,
     response_mode: responseMode,
+    state,
   };
 
   if (presentationDefinition) {
@@ -717,7 +720,10 @@ export async function generateVPRequest(params) {
       nonce,
       dcqlQuery,
       transactionData ? [transactionData] : null,
-      responseMode
+      responseMode,
+      undefined,
+      undefined,
+      state
     );
     await logInfo(sessionId, "VP request JWT built successfully");
   } else {
@@ -986,7 +992,7 @@ export function createDidController(serverURL) {
  */
 export function generateDidIdentifiers(serverURL) {
   const controller = createDidController(serverURL);
-  const client_id = `did:web:${controller}`;
+  const client_id = `decentralized_identifier:did:web:${controller}`;
   const kid = `did:web:${controller}#keys-1`;
   return { client_id, kid };
 }
@@ -997,7 +1003,7 @@ export function generateDidIdentifiers(serverURL) {
  * @returns {Object} - Object containing client_id and kid
  */
 export function generateDidJwkIdentifiers(didJwkIdentifier) {
-  const client_id = didJwkIdentifier;
+  const client_id = `decentralized_identifier:${didJwkIdentifier}`;
   const kid = `${didJwkIdentifier}#0`; // did:jwk uses #0 as default key ID
   return { client_id, kid };
 } 

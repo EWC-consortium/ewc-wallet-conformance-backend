@@ -55,7 +55,7 @@ testRouter.get('/generateVPRequest', async (req, res) => {
 
     const response_uri = `http://localhost:3000/direct_post/${uuid}`;
     const controller = createDidController('http://localhost:3000');
-    const client_id = `did:web:${controller}`;
+    const client_id = `decentralized_identifier:did:web:${controller}`;
     const kid = `did:web:${controller}#keys-1`;
 
     // Store session data
@@ -120,7 +120,7 @@ testRouter.get('/generateVPRequestGET', async (req, res) => {
 
     const response_uri = `http://localhost:3000/direct_post/${uuid}`;
     const controller = createDidController('http://localhost:3000');
-    const client_id = `did:web:${controller}`;
+    const client_id = `decentralized_identifier:did:web:${controller}`;
     const kid = `did:web:${controller}#keys-1`;
 
     await mockCacheService.storeVPSession(uuid, {
@@ -181,7 +181,7 @@ testRouter.get('/generateVPRequestDCQL', async (req, res) => {
 
     const response_uri = `http://localhost:3000/direct_post/${uuid}`;
     const controller = createDidController('http://localhost:3000');
-    const client_id = `did:web:${controller}`;
+    const client_id = `decentralized_identifier:did:web:${controller}`;
     const kid = `did:web:${controller}#keys-1`;
 
     const dcql_query = {
@@ -350,7 +350,7 @@ async function generateDidVPRequest(uuid, clientMetadata, serverURL, wallet_nonc
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
   const controller = createDidController(serverURL);
-  const client_id = `did:web:${controller}`;
+  const client_id = `decentralized_identifier:did:web:${controller}`;
   const kid = `did:web:${controller}#keys-1`;
   
   const vpRequestJWT = await mockCryptoUtils.buildVpRequestJWT(
@@ -450,6 +450,9 @@ describe('DID Routes', () => {
       expect(response.body).to.have.property('deepLink');
       expect(response.body).to.have.property('sessionId');
       expect(response.body.sessionId).to.equal('test-uuid-123');
+      expect(response.body.deepLink).to.not.include('redirect_uri=');
+      expect(response.body.deepLink).to.include('client_id=decentralized_identifier%3Adid%3Aweb%3A');
+      expect(response.body.deepLink).to.not.include('client_id_scheme=');
     });
 
     it('should generate VP request with custom sessionId', async () => {
@@ -463,14 +466,17 @@ describe('DID Routes', () => {
       expect(response.body.sessionId).to.equal(customSessionId);
     });
 
-    it('should generate VP request with custom response_mode', async () => {
+    it('should generate VP request with direct_post response_mode', async () => {
       const response = await request(app)
         .get('/did/generateVPRequest')
-        .query({ response_mode: 'fragment' })
+        .query({ response_mode: 'direct_post' })
         .expect(200);
 
       expect(response.body).to.have.property('qr');
       expect(response.body).to.have.property('deepLink');
+      expect(response.body.deepLink).to.not.include('redirect_uri=');
+      expect(response.body.deepLink).to.include('client_id=decentralized_identifier%3Adid%3Aweb%3A');
+      expect(response.body.deepLink).to.not.include('client_id_scheme=');
     });
 
     it('should call buildVpRequestJWT with correct parameters', async () => {
@@ -480,7 +486,7 @@ describe('DID Routes', () => {
 
       expect(mockCryptoUtils.buildVpRequestJWT.called).to.be.true;
       const callArgs = mockCryptoUtils.buildVpRequestJWT.getCall(0).args;
-      expect(callArgs[0]).to.include('did:web:'); // client_id should be DID-based
+      expect(callArgs[0]).to.include('decentralized_identifier:did:web:'); // client_id should be scheme-prefixed DID-based
       expect(callArgs[1]).to.include('/direct_post/'); // response_uri
       expect(callArgs[2]).to.be.an('object'); // presentation_definition
       expect(callArgs[3]).to.equal('mock-private-key'); // privateKey
@@ -700,8 +706,8 @@ describe('DID Routes', () => {
 
       expect(mockCryptoUtils.buildVpRequestJWT.called).to.be.true;
       const callArgs = mockCryptoUtils.buildVpRequestJWT.getCall(0).args;
-      expect(callArgs[0]).to.match(/^did:web:/); // client_id should be DID format
-      expect(callArgs[5]).to.match(/^did:web:.*#keys-1$/); // kid should be DID format with key reference
+      expect(callArgs[0]).to.match(/^decentralized_identifier:did:web:/); // client_id should be scheme-prefixed DID format
+      expect(callArgs[5]).to.match(/^did:web:.*#keys-1$/); // kid remains DID format with key reference
     });
 
     it('should handle PROXY_PATH environment variable', async () => {

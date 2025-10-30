@@ -472,6 +472,9 @@ describe('X509 Routes', () => {
       expect(response.body).to.have.property('deepLink');
       expect(response.body).to.have.property('sessionId');
       expect(response.body.sessionId).to.equal('test-uuid-123');
+      expect(response.body.deepLink).to.not.include('redirect_uri=');
+      // For x509 tests the client_id is not DID-based; skip strict scheme check here.
+      expect(response.body.deepLink).to.not.include('client_id_scheme=');
     });
 
     it('should generate VP request with custom sessionId', async () => {
@@ -485,14 +488,16 @@ describe('X509 Routes', () => {
       expect(response.body.sessionId).to.equal(customSessionId);
     });
 
-    it('should generate VP request with custom response_mode', async () => {
+    it('should generate VP request with direct_post response_mode', async () => {
       const response = await request(app)
         .get('/x509/generateVPRequest')
-        .query({ response_mode: 'fragment' })
+        .query({ response_mode: 'direct_post' })
         .expect(200);
 
       expect(response.body).to.have.property('qr');
       expect(response.body).to.have.property('deepLink');
+      expect(response.body.deepLink).to.not.include('redirect_uri=');
+      expect(response.body.deepLink).to.not.include('client_id_scheme=');
     });
 
     it('should call buildVpRequestJWT with correct parameters', async () => {

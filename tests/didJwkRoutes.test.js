@@ -51,8 +51,8 @@ testRouter.get('/generateVPRequest', async (req, res) => {
     const nonce = mockCryptoUtils.generateNonce(16);
 
     const response_uri = `http://localhost:3000/direct_post/${uuid}`;
-    const client_id = 'did:jwk:mock-jwk-identifier';
-    const kid = `${client_id}#0`;
+    const client_id = 'decentralized_identifier:did:jwk:mock-jwk-identifier';
+    const kid = `did:jwk:mock-jwk-identifier#0`;
 
     // Store session data
     await mockCacheService.storeVPSession(uuid, {
@@ -115,8 +115,8 @@ testRouter.get('/generateVPRequestGET', async (req, res) => {
     const nonce = mockCryptoUtils.generateNonce(16);
 
     const response_uri = `http://localhost:3000/direct_post/${uuid}`;
-    const client_id = 'did:jwk:mock-jwk-identifier';
-    const kid = `${client_id}#0`;
+    const client_id = 'decentralized_identifier:did:jwk:mock-jwk-identifier';
+    const kid = `did:jwk:mock-jwk-identifier#0`;
 
     await mockCacheService.storeVPSession(uuid, {
       uuid: uuid,
@@ -176,8 +176,8 @@ testRouter.get('/generateVPRequestDCQL', async (req, res) => {
     const responseMode = req.query.response_mode || 'direct_post';
 
     const response_uri = `http://localhost:3000/direct_post/${uuid}`;
-    const client_id = 'did:jwk:mock-jwk-identifier';
-    const kid = `${client_id}#0`;
+    const client_id = 'decentralized_identifier:did:jwk:mock-jwk-identifier';
+    const kid = `did:jwk:mock-jwk-identifier#0`;
 
     const dcql_query = {
       credentials: [
@@ -252,8 +252,8 @@ testRouter.get('/generateVPRequestDCQLGET', async (req, res) => {
     const responseMode = req.query.response_mode || 'direct_post';
 
     const response_uri = `http://localhost:3000/direct_post/${uuid}`;
-    const client_id = 'did:jwk:mock-jwk-identifier';
-    const kid = `${client_id}#0`;
+    const client_id = 'decentralized_identifier:did:jwk:mock-jwk-identifier';
+    const kid = `did:jwk:mock-jwk-identifier#0`;
 
     const dcql_query = {
       credentials: [
@@ -314,7 +314,7 @@ testRouter.get('/generateVPRequestTransaction', async (req, res) => {
 
     const response_uri = `http://localhost:3000/direct_post/${uuid}`;
     const client_id = 'did:jwk:mock-jwk-identifier';
-    const kid = `${client_id}#0`;
+    const kid = `did:jwk:mock-jwk-identifier#0`;
 
     const presentation_definition = { test: 'definition' };
     const credentialIds = ['test-descriptor-1', 'test-descriptor-2'];
@@ -404,8 +404,8 @@ async function generateDidJwkVPRequest(uuid, privateKey, clientMetadata, serverU
   }
 
   const response_uri = `${serverURL}/direct_post/${uuid}`;
-  const client_id = 'did:jwk:mock-jwk-identifier';
-  const kid = `${client_id}#0`;
+  const client_id = 'decentralized_identifier:did:jwk:mock-jwk-identifier';
+  const kid = `did:jwk:mock-jwk-identifier#0`;
   
   const vpRequestJWT = await mockCryptoUtils.buildVpRequestJWT(
     client_id,
@@ -506,6 +506,9 @@ describe('DID JWK Routes', () => {
       expect(response.body).to.have.property('deepLink');
       expect(response.body).to.have.property('sessionId');
       expect(response.body.sessionId).to.equal('test-uuid-123');
+      expect(response.body.deepLink).to.not.include('redirect_uri=');
+      expect(response.body.deepLink).to.include('client_id=decentralized_identifier%3Adid%3Ajwk%3A');
+      expect(response.body.deepLink).to.not.include('client_id_scheme=');
     });
 
     it('should generate VP request with custom sessionId', async () => {
@@ -519,14 +522,17 @@ describe('DID JWK Routes', () => {
       expect(response.body.sessionId).to.equal(customSessionId);
     });
 
-    it('should generate VP request with custom response_mode', async () => {
+    it('should generate VP request with direct_post response_mode', async () => {
       const response = await request(app)
         .get('/did-jwk/generateVPRequest')
-        .query({ response_mode: 'fragment' })
+        .query({ response_mode: 'direct_post' })
         .expect(200);
 
       expect(response.body).to.have.property('qr');
       expect(response.body).to.have.property('deepLink');
+      expect(response.body.deepLink).to.not.include('redirect_uri=');
+      expect(response.body.deepLink).to.include('client_id=decentralized_identifier%3Adid%3Ajwk%3A');
+      expect(response.body.deepLink).to.not.include('client_id_scheme=');
     });
 
     it('should call buildVpRequestJWT with correct parameters', async () => {
@@ -536,7 +542,7 @@ describe('DID JWK Routes', () => {
 
       expect(mockCryptoUtils.buildVpRequestJWT.called).to.be.true;
       const callArgs = mockCryptoUtils.buildVpRequestJWT.getCall(0).args;
-      expect(callArgs[0]).to.include('did:jwk:'); // client_id should be DID JWK format
+      expect(callArgs[0]).to.include('decentralized_identifier:did:jwk:'); // client_id should be scheme-prefixed DID JWK format
       expect(callArgs[1]).to.include('/direct_post/'); // response_uri
       expect(callArgs[2]).to.be.an('object'); // presentation_definition
       expect(callArgs[3]).to.equal('mock-private-key'); // privateKey
@@ -778,8 +784,8 @@ describe('DID JWK Routes', () => {
 
       expect(mockCryptoUtils.buildVpRequestJWT.called).to.be.true;
       const callArgs = mockCryptoUtils.buildVpRequestJWT.getCall(0).args;
-      expect(callArgs[0]).to.match(/^did:jwk:/); // client_id should be DID JWK format
-      expect(callArgs[5]).to.match(/^did:jwk:.*#0$/); // kid should be DID JWK format with #0
+      expect(callArgs[0]).to.match(/^decentralized_identifier:did:jwk:/); // client_id should be scheme-prefixed DID JWK format
+      expect(callArgs[5]).to.match(/^did:jwk:.*#0$/); // kid remains DID JWK with #0
     });
 
     it('should handle JWK generation correctly', async () => {

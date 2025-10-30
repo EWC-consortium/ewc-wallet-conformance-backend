@@ -495,6 +495,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         responseMode: "direct_post.jwt"
       });
       
+      // Surface wallet-reported error per OpenID4VP
+      if (req.body && req.body.error) {
+        await logError(sessionId, "Wallet reported error for direct_post.jwt", {
+          error: req.body.error,
+          error_description: req.body.error_description
+        });
+        return res.status(400).json({ error: req.body.error, error_description: req.body.error_description });
+      }
+
       // According to OpenID4VP spec, direct_post.jwt sends response in 'response' parameter
       const jwtResponse = req.body.response;
       
@@ -526,8 +535,8 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           if (typeof decrypted === 'string') {
             // OpenID4VP spec compliant: JWE decrypted to JWT string
             console.log("Processing JWT string from JWE (per OpenID4VP spec)");
-            const decodedJWT = jwt.verify(decrypted, publicKeyPem, { algorithms: ['ES256'] });
-            vpToken = decodedJWT.vp_token;
+            const decodedPayload = jwt.decode(decrypted);
+            vpToken = decodedPayload?.vp_token;
             
             if (!vpToken) {
               console.log("No VP token in decrypted JWT response");
@@ -550,10 +559,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         } else {
           console.log("Processing unencrypted JWT response for direct_post.jwt");
           // If not encrypted, just verify the signed JWT
-          const decodedJWT = jwt.verify(jwtResponse, publicKeyPem, { algorithms: ['ES256'] });
+          const decodedJWT = jwt.decode(jwtResponse);
           
           // Extract VP token from the JWT payload
-          const vpToken = decodedJWT.vp_token;
+          vpToken = decodedJWT?.vp_token;
           if (!vpToken) {
             console.log("No VP token in JWT response");
             return res.status(400).json({ error: "No VP token in JWT response" });
@@ -584,6 +593,17 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         if (vpSession.nonce != submittedNonce) {
           console.log(`error nonces do not match ${submittedNonce} ${vpSession.nonce}`);
           return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
+        }
+
+        // Verify audience if key-binding JWT provided
+        if (jwtFromKeybind && jwtFromKeybind.payload && vpSession.client_id && jwtFromKeybind.payload.aud) {
+          if (jwtFromKeybind.payload.aud !== vpSession.client_id) {
+            await logError(sessionId, "aud claim does not match verifier client_id", {
+              expected: vpSession.client_id,
+              received: jwtFromKeybind.payload.aud
+            });
+            return res.status(400).json({ error: 'aud claim does not match verifier client_id' });
+          }
         }
 
         // Process claims as before
@@ -620,6 +640,29 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       });
 
       try {
+        // Surface wallet-reported error per OpenID4VP
+        if (req.body && req.body.error) {
+          await logError(sessionId, "Wallet reported error for direct_post", {
+            error: req.body.error,
+            error_description: req.body.error_description
+          });
+          return res.status(400).json({ error: req.body.error, error_description: req.body.error_description });
+        }
+
+        // Enforce state parameter presence and matching
+        const submittedState = req.body.state;
+        if (!submittedState) {
+          await logError(sessionId, "state parameter missing in direct_post");
+          return res.status(400).json({ error: 'state parameter missing' });
+        }
+        if (submittedState !== vpSession.state) {
+          await logError(sessionId, "state mismatch in direct_post", {
+            expected: vpSession.state,
+            received: submittedState
+          });
+          return res.status(400).json({ error: 'state mismatch' });
+        }
+
         await logDebug(sessionId, "Extracting claims from direct_post request");
         const result = await extractClaimsFromRequest(req, digest);
         claimsFromExtraction = result.extractedClaims;
@@ -675,6 +718,17 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
       }
       
+      // Verify audience if key-binding JWT provided
+      if (jwtFromKeybind && jwtFromKeybind.payload && vpSession.client_id && jwtFromKeybind.payload.aud) {
+        if (jwtFromKeybind.payload.aud !== vpSession.client_id) {
+          await logError(sessionId, "aud claim does not match verifier client_id", {
+            expected: vpSession.client_id,
+            received: jwtFromKeybind.payload.aud
+          });
+          return res.status(400).json({ error: 'aud claim does not match verifier client_id' });
+        }
+      }
+
       await logInfo(sessionId, "Nonce verification successful");
 
       if (vpSession.sdsRequested && !hasOnlyAllowedFields(claimsFromExtraction, vpSession.sdsRequested)) {

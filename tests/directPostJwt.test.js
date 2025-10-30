@@ -310,6 +310,549 @@ describe('Direct Post JWT Fixes', () => {
     });
   });
 
+  describe('Response URI exclusivity for direct_post', () => {
+    it('should include response_uri and omit redirect_uri for direct_post', async () => {
+      const client_id = 'did:jwk:test';
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:jwk:test#0';
+
+      const result = await buildVpRequestJWT(
+        client_id,
+        redirect_uri,
+        presentation_definition,
+        null,
+        client_metadata,
+        kid,
+        serverURL,
+        'vp_token',
+        nonce,
+        null,
+        null,
+        'direct_post'
+      );
+
+      const decoded = jwt.decode(result, { complete: true });
+      expect(decoded.payload).to.have.property('response_uri');
+      expect(decoded.payload).to.not.have.property('redirect_uri');
+    });
+
+    it('should include response_uri and omit redirect_uri for direct_post.jwt', async () => {
+      const client_id = 'did:jwk:test';
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:jwk:test#0';
+
+      const result = await buildVpRequestJWT(
+        client_id,
+        redirect_uri,
+        presentation_definition,
+        null,
+        client_metadata,
+        kid,
+        serverURL,
+        'vp_token',
+        nonce,
+        null,
+        null,
+        'direct_post.jwt'
+      );
+
+      const decoded = jwt.decode(result, { complete: true });
+      expect(decoded.payload).to.have.property('response_uri');
+      expect(decoded.payload).to.not.have.property('redirect_uri');
+    });
+  });
+
+  describe('Client identification scheme migration', () => {
+    it('should not include client_id_scheme and should carry scheme in client_id', async () => {
+      const client_id = 'decentralized_identifier:did:web:example.org';
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:web:example.org#keys-1';
+
+      const result = await buildVpRequestJWT(
+        client_id,
+        redirect_uri,
+        presentation_definition,
+        null,
+        client_metadata,
+        kid,
+        serverURL,
+        'vp_token',
+        nonce,
+        null,
+        null,
+        'direct_post'
+      );
+
+      const decoded = jwt.decode(result, { complete: true });
+      expect(decoded.payload).to.not.have.property('client_id_scheme');
+      expect(decoded.payload.client_id).to.match(/^[a-z0-9_]+:/); // has scheme prefix
+    });
+
+    it('should omit client_metadata for redirect_uri scheme', async () => {
+      const client_id = 'redirect_uri:https://verifier.example.org/cb';
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:web:example.org#keys-1';
+
+      const result = await buildVpRequestJWT(
+        client_id,
+        redirect_uri,
+        presentation_definition,
+        null,
+        client_metadata,
+        kid,
+        serverURL,
+        'vp_token',
+        nonce,
+        null,
+        null,
+        'direct_post'
+      );
+
+      const decoded = jwt.decode(result, { complete: true });
+      expect(decoded.payload).to.not.have.property('client_metadata');
+      // Unsecured JAR for redirect_uri scheme
+      expect(decoded.header.alg).to.equal('none');
+      const parts = result.split('.');
+      expect(parts[2]).to.equal('');
+    });
+
+    it('should include client_metadata and sign with DID for decentralized_identifier scheme', async () => {
+      const client_id = 'decentralized_identifier:did:web:example.org';
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:web:example.org#keys-1';
+
+      const result = await buildVpRequestJWT(
+        client_id,
+        redirect_uri,
+        presentation_definition,
+        null,
+        client_metadata,
+        kid,
+        serverURL,
+        'vp_token',
+        nonce,
+        null,
+        null,
+        'direct_post'
+      );
+
+      const decoded = jwt.decode(result, { complete: true });
+      expect(decoded.payload).to.have.property('client_metadata');
+      // Header should include kid for DID and be signed (alg not none)
+      expect(decoded.header).to.have.property('kid');
+      expect(decoded.header.alg).to.not.equal('none');
+    });
+  });
+
+  describe('Verifier Attestation scheme', () => {
+    it('should include VA-JWT in JOSE header and validate sub/cnf', async () => {
+      const nonPrefixedId = 'verifier.example.org';
+      const client_id = `verifier_attestation:${nonPrefixedId}`;
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:web:example.org#keys-1';
+
+      // Build a VA-JWT-like token with sub and cnf.jwk matching our public key
+      const verifierConfig = JSON.parse(fs.readFileSync('./data/verifier-config.json', 'utf-8'));
+      const privateKeyPem = fs.readFileSync('./didjwks/did_private_pkcs8.key', 'utf-8');
+      const derivedJwk = crypto.createPublicKey(privateKeyPem).export({ format: 'jwk' });
+      const vaHeader = { alg: 'ES256', typ: 'JWT' };
+      const vaPayload = { sub: nonPrefixedId, cnf: { jwk: { kty: derivedJwk.kty, crv: derivedJwk.crv, x: derivedJwk.x, y: derivedJwk.y } } };
+      const vaJwt = `${Buffer.from(JSON.stringify(vaHeader)).toString('base64url')}.${Buffer.from(JSON.stringify(vaPayload)).toString('base64url')}.signature`;
+
+      const result = await buildVpRequestJWT(
+        client_id,
+        redirect_uri,
+        presentation_definition,
+        privateKeyPem,
+        client_metadata,
+        kid,
+        serverURL,
+        'vp_token',
+        nonce,
+        null,
+        null,
+        'direct_post',
+        undefined,
+        undefined,
+        null,
+        vaJwt
+      );
+
+      const decoded = jwt.decode(result, { complete: true });
+      expect(decoded.header).to.have.property('jwt');
+      expect(decoded.header.jwt).to.equal(vaJwt);
+    });
+
+    it('should throw if VA-JWT sub does not match non-prefixed client_id', async () => {
+      const client_id = `verifier_attestation:verifier.example.org`;
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:web:example.org#keys-1';
+
+      const privateKeyPem = fs.readFileSync('./didjwks/did_private_pkcs8.key', 'utf-8');
+      // Build VA-JWT with mismatching sub
+      const vaHeader = { alg: 'ES256', typ: 'JWT' };
+      const vaPayload = { sub: 'another.example.org' };
+      const vaJwt = `${Buffer.from(JSON.stringify(vaHeader)).toString('base64url')}.${Buffer.from(JSON.stringify(vaPayload)).toString('base64url')}.signature`;
+
+      try {
+        await buildVpRequestJWT(
+          client_id,
+          redirect_uri,
+          presentation_definition,
+          privateKeyPem,
+          client_metadata,
+          kid,
+          serverURL,
+          'vp_token',
+          nonce,
+          null,
+          null,
+          'direct_post',
+          undefined,
+          undefined,
+          null,
+          vaJwt
+        );
+        expect.fail('Should have thrown due to VA-JWT sub mismatch');
+      } catch (e) {
+        expect(e.message).to.include('sub does not match');
+      }
+    });
+
+    it('should throw if PoP key does not match VA-JWT cnf.jwk', async () => {
+      const nonPrefixedId = 'verifier.example.org';
+      const client_id = `verifier_attestation:${nonPrefixedId}`;
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:web:example.org#keys-1';
+
+      // Load a private key, but craft cnf.jwk that won't match
+      const privateKeyPem = fs.readFileSync('./didjwks/did_private_pkcs8.key', 'utf-8');
+      const vaHeader = { alg: 'ES256', typ: 'JWT' };
+      const vaPayload = { sub: nonPrefixedId, cnf: { jwk: { kty: 'EC', crv: 'P-256', x: 'AAAA', y: 'BBBB' } } };
+      const vaJwt = `${Buffer.from(JSON.stringify(vaHeader)).toString('base64url')}.${Buffer.from(JSON.stringify(vaPayload)).toString('base64url')}.signature`;
+
+      try {
+        await buildVpRequestJWT(
+          client_id,
+          redirect_uri,
+          presentation_definition,
+          privateKeyPem,
+          client_metadata,
+          kid,
+          serverURL,
+          'vp_token',
+          nonce,
+          null,
+          null,
+          'direct_post',
+          undefined,
+          undefined,
+          null,
+          vaJwt
+        );
+        expect.fail('Should have thrown due to PoP key mismatch');
+      } catch (e) {
+        expect(e.message).to.match(/PoP key|cnf/);
+      }
+    });
+  });
+
+  describe('X.509 client schemes', () => {
+    it('should sign with RS256 and include x5c for x509_san_dns', async () => {
+      const client_id = 'x509_san_dns:dss.aegean.gr';
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:web:example.org#keys-1';
+
+      const result = await buildVpRequestJWT(
+        client_id,
+        redirect_uri,
+        presentation_definition,
+        null,
+        client_metadata,
+        kid,
+        serverURL,
+        'vp_token',
+        nonce,
+        null,
+        null,
+        'direct_post'
+      );
+
+      const decoded = jwt.decode(result, { complete: true });
+      expect(decoded.header.alg).to.equal('RS256');
+      expect(decoded.header).to.have.property('x5c');
+      expect(decoded.header.x5c).to.be.an('array').that.is.not.empty;
+    });
+
+    it('should sign with RS256 and include x5c for x509_san_uri', async () => {
+      const client_id = 'x509_san_uri:https://verifier.example.org';
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:web:example.org#keys-1';
+
+      const result = await buildVpRequestJWT(
+        client_id,
+        redirect_uri,
+        presentation_definition,
+        null,
+        client_metadata,
+        kid,
+        serverURL,
+        'vp_token',
+        nonce,
+        null,
+        null,
+        'direct_post'
+      );
+
+      const decoded = jwt.decode(result, { complete: true });
+      expect(decoded.header.alg).to.equal('RS256');
+      expect(decoded.header).to.have.property('x5c');
+      expect(decoded.header.x5c).to.be.an('array').that.is.not.empty;
+    });
+
+    it('should require client_id to match leaf cert SHA-256 hash for x509_hash', async () => {
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:web:example.org#keys-1';
+
+      const certPem = fs.readFileSync('./x509/client_certificate.crt', 'utf8');
+      const certBase64 = certPem.replace('-----BEGIN CERTIFICATE-----', '').replace('-----END CERTIFICATE-----', '').replace(/\s+/g, '');
+      const certDer = Buffer.from(certBase64, 'base64');
+      const hash = crypto.createHash('sha256').update(certDer).digest();
+      const hashB64Url = Buffer.from(hash).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      const client_id = `x509_hash:${hashB64Url}`;
+
+      const result = await buildVpRequestJWT(
+        client_id,
+        redirect_uri,
+        presentation_definition,
+        null,
+        client_metadata,
+        kid,
+        serverURL,
+        'vp_token',
+        nonce,
+        null,
+        null,
+        'direct_post'
+      );
+
+      const decoded = jwt.decode(result, { complete: true });
+      expect(decoded.header.alg).to.equal('RS256');
+      expect(decoded.header).to.have.property('x5c');
+      expect(decoded.header.x5c).to.be.an('array').that.is.not.empty;
+    });
+
+    it('should throw when x509_hash client_id does not match cert hash', async () => {
+      const client_id = 'x509_hash:invalidhash';
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:web:example.org#keys-1';
+
+      try {
+        await buildVpRequestJWT(
+          client_id,
+          redirect_uri,
+          presentation_definition,
+          null,
+          client_metadata,
+          kid,
+          serverURL,
+          'vp_token',
+          nonce,
+          null,
+          null,
+          'direct_post'
+        );
+        expect.fail('Should have thrown for mismatched x509_hash client_id');
+      } catch (e) {
+        expect(e.message).to.include('x509_hash client_id mismatch');
+      }
+    });
+  });
+
+  describe('SD-JWT format identifier migration', () => {
+    it('should advertise dc+sd-jwt in client_metadata.vp_formats (not vc+sd-jwt)', async () => {
+      const client_id = 'decentralized_identifier:did:web:example.org';
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = {
+        vp_formats: {
+          'dc+sd-jwt': {
+            'sd-jwt_alg_values': ['ES256'],
+            'kb-jwt_alg_values': ['ES256']
+          }
+        }
+      };
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:web:example.org#keys-1';
+
+      const result = await buildVpRequestJWT(
+        client_id,
+        redirect_uri,
+        presentation_definition,
+        null,
+        client_metadata,
+        kid,
+        serverURL,
+        'vp_token',
+        nonce,
+        null,
+        null,
+        'direct_post'
+      );
+
+      const decoded = jwt.decode(result, { complete: true });
+      expect(decoded.payload.client_metadata).to.have.property('vp_formats');
+      expect(decoded.payload.client_metadata.vp_formats).to.have.property('dc+sd-jwt');
+      expect(decoded.payload.client_metadata.vp_formats).to.not.have.property('vc+sd-jwt');
+      const fmt = decoded.payload.client_metadata.vp_formats['dc+sd-jwt'];
+      expect(fmt).to.have.property('sd-jwt_alg_values');
+      expect(fmt).to.have.property('kb-jwt_alg_values');
+      expect(fmt['sd-jwt_alg_values']).to.be.an('array').that.is.not.empty;
+      expect(fmt['kb-jwt_alg_values']).to.be.an('array').that.is.not.empty;
+    });
+
+    it('should not introduce legacy vc+sd-jwt when building request object', async () => {
+      const client_id = 'decentralized_identifier:did:web:example.org';
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { client_name: 'Test' }; // no vp_formats provided
+      const serverURL = 'https://example.com';
+      const nonce = 'test-nonce-123';
+      const kid = 'did:web:example.org#keys-1';
+
+      const result = await buildVpRequestJWT(
+        client_id,
+        redirect_uri,
+        presentation_definition,
+        null,
+        client_metadata,
+        kid,
+        serverURL,
+        'vp_token',
+        nonce,
+        null,
+        null,
+        'direct_post'
+      );
+
+      const decoded = jwt.decode(result, { complete: true });
+      const vpFormats = decoded.payload.client_metadata?.vp_formats;
+      if (vpFormats) {
+        expect(vpFormats).to.not.have.property('vc+sd-jwt');
+      }
+    });
+  });
+
+  describe('State parameter requirements', () => {
+    it('should include state with at least 128 bits of entropy for direct_post', async () => {
+      const client_id = 'decentralized_identifier:did:web:example.org';
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const kid = 'did:web:example.org#keys-1';
+
+      const result = await buildVpRequestJWT(
+        client_id,
+        redirect_uri,
+        presentation_definition,
+        null,
+        client_metadata,
+        kid,
+        serverURL,
+        'vp_token',
+        null,
+        null,
+        null,
+        'direct_post'
+      );
+
+      const decoded = jwt.decode(result, { complete: true });
+      expect(decoded.payload).to.have.property('state');
+      // generateNonce(16) -> 16 bytes -> 32 hex chars
+      expect(decoded.payload.state).to.be.a('string');
+      expect(decoded.payload.state.length).to.be.at.least(32);
+    });
+
+    it('should include state with at least 128 bits of entropy for direct_post.jwt', async () => {
+      const client_id = 'decentralized_identifier:did:web:example.org';
+      const redirect_uri = 'https://example.com/callback';
+      const presentation_definition = { test: 'definition' };
+      const client_metadata = { test: 'metadata' };
+      const serverURL = 'https://example.com';
+      const kid = 'did:web:example.org#keys-1';
+
+      const result = await buildVpRequestJWT(
+        client_id,
+        redirect_uri,
+        presentation_definition,
+        null,
+        client_metadata,
+        kid,
+        serverURL,
+        'vp_token',
+        null,
+        null,
+        null,
+        'direct_post.jwt'
+      );
+
+      const decoded = jwt.decode(result, { complete: true });
+      expect(decoded.payload).to.have.property('state');
+      expect(decoded.payload.state).to.be.a('string');
+      expect(decoded.payload.state.length).to.be.at.least(32);
+    });
+  });
+
   describe('Verifier Config Enhancement', () => {
     it('should have required encryption metadata in verifier config', () => {
       const verifierConfig = JSON.parse(fs.readFileSync('./data/verifier-config.json', 'utf-8'));
