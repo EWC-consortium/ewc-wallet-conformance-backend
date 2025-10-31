@@ -802,16 +802,21 @@ verifierRouter.get("/generateVPRequest-jwt", async (req, res) => {
 verifierRouter.get("/vpRequestJwt/:id", async (req, res) => {
   const uuid = req.params.id ? req.params.id : uuidv4();
   //url.searchParams.get("presentation_definition");
-  const stateParam = uuidv4();
+  const state = generateNonce(16);
   const nonce = generateNonce(16);
 
-  const response_uri = serverURL + "/direct_post_jwt" + "/" + uuid;
-  let clientId = serverURL + "/direct_post_jwt" + "/" + uuid;
-  sessions.push(uuid);
-  verificationSessions.push({
+  const response_uri = serverURL + "/direct_post/" + uuid;
+  let clientId = serverURL + "/direct_post/" + uuid;
+
+  // Store session with state and nonce using Redis instead of in-memory array
+  await storeVPSession(uuid, {
     uuid: uuid,
     status: "pending",
     claims: null,
+    presentation_definition: presentation_definition_jwt,
+    nonce: nonce,
+    state: state,
+    response_mode: "direct_post"
   });
 
   clientMetadata.presentation_definition_uri =
@@ -827,7 +832,7 @@ verifierRouter.get("/vpRequestJwt/:id", async (req, res) => {
     response_mode: "direct_post",
     presentation_definition: presentation_definition_jwt,
     nonce: nonce,
-    state: uuid,
+    state: state,
   };
 
   // console.log("will send vpRequest");
@@ -898,22 +903,16 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
     uuid
   });
   
-  const stateParam = uuidv4();
+  const state = generateNonce(16);
   const nonce = generateNonce(16);
   
   await logDebug(uuid, "Generated parameters for VP request", {
-    stateParam,
+    state,
     nonce
   });
 
-  const response_uri = `${serverURL}/direct_post_jwt/${uuid}`;
-  let clientId = `${serverURL}/direct_post_jwt/${uuid}`;
-  sessions.push(uuid);
-  verificationSessions.push({
-    uuid: uuid,
-    status: "pending",
-    claims: null,
-  });
+  const response_uri = `${serverURL}/direct_post/${uuid}`;
+  let clientId = `${serverURL}/direct_post/${uuid}`;
 
   let presentationDefinition;
   if (type === "pid") {
@@ -943,6 +942,17 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
     hasPresentationDefinition: !!presentationDefinition
   });
 
+  // Store session with state and nonce using Redis
+  await storeVPSession(uuid, {
+    uuid: uuid,
+    status: "pending",
+    claims: null,
+    presentation_definition: presentationDefinition,
+    nonce: nonce,
+    state: state,
+    response_mode: "direct_post"
+  });
+
   await logDebug(uuid, "Building VP request JWT");
   const vpRequestJWT = await buildVpRequestJWT(
     clientId,
@@ -957,7 +967,12 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
     nonce,
     null, // dcql_query
     null, // transaction_data
-    "direct_post" // response_mode
+    "direct_post", // response_mode
+    undefined, // audience
+    undefined, // wallet_nonce
+    undefined, // wallet_metadata
+    undefined, // va_jwt
+    state // CRITICAL: pass state to ensure it matches session
   );
   
   await logInfo(uuid, "VP request JWT generated successfully", {

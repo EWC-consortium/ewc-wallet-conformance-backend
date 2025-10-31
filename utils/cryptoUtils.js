@@ -129,7 +129,12 @@ buildVpRequestJWT(
   state = null // Add state parameter (last param to match test ordering)
 ) {
   if(!nonce) nonce = generateNonce(16);
-  if(!state) state = generateNonce(16); // Only generate if not provided
+  if(!state) {
+    // State is REQUIRED for direct_post modes per OpenID4VP spec
+    // Generate only if not provided to maintain backwards compatibility with tests
+    state = generateNonce(16);
+    console.warn("WARNING: state parameter not provided to buildVpRequestJWT, generating random state. This should be explicitly provided.");
+  }
 
   // Validate response_mode
   const allowedResponseModes = ["direct_post", "direct_post.jwt", "dc_api.jwt", "dc_api"];
@@ -514,7 +519,7 @@ export async function buildPaymentVpRequestJWT(
       .setProtectedHeader(header)
       .sign(await jose.importPKCS8(privateKey, "RS256"));
 
-    return { jwt, base64EncodedTxData };
+    return { jwt, base64EncodedTxData, nonce, state };
   } else if (client_id.startsWith("did:")) {
     //TODO NOT COMPLETED SHOULD RETURN txDATA HASH
     const signingKey = {

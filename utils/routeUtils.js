@@ -820,6 +820,7 @@ export async function processVPRequest(params) {
       audience,
       walletNonce,
       walletMetadata,
+      null, // va_jwt - Verifier Attestation JWT (not used in this flow)
       vpSession.state
     );
     
@@ -936,14 +937,17 @@ export async function handleSessionCreation(sessionId, presentationDefinition, r
   });
   
   const nonce = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
+  const state = generateNonce(CONFIG.DEFAULT_NONCE_LENGTH);
   
-  await logDebug(sessionId, "Generated nonce for new session", {
-    nonce
+  await logDebug(sessionId, "Generated nonce and state for new session", {
+    nonce,
+    state
   });
 
   await storeVPSessionData(sessionId, {
     presentation_definition: presentationDefinition,
     nonce,
+    state,
     sdsRequested: getSDsFromPresentationDef(presentationDefinition),
     response_mode: responseMode,
   });

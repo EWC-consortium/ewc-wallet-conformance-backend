@@ -51,6 +51,8 @@ redirectUriRouter.get("/generateVPRequest", async (req, res) => {
     presentation_definition: presentation_definition_sdJwt,
     credentialRequested: vctField?.filter,
     nonce: nonce,
+    state: state,
+    response_mode: responseMode,
     sdsRequested: paths,
   });
 
@@ -119,7 +121,9 @@ redirectUriRouter.get("/generateVPRequestDCQL", async (req, res) => {
     status: "pending",
     claims: null,
     dcql_query: dcql_query,
-    nonce: nonce
+    nonce: nonce,
+    state: state,
+    response_mode: "direct_post"
   });
 
   const vpRequest = buildVPbyValue(
@@ -193,6 +197,8 @@ redirectUriRouter.get("/generateVPRequestTransaction", async (req, res) => {
     claims: null,
     presentation_definition: presentation_definition,
     nonce: nonce,
+    state: state,
+    response_mode: "direct_post",
     transaction_data: [base64UrlEncodedTxData] // Store as array of encoded strings
   });
 

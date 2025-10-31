@@ -192,7 +192,7 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
   const hash = crypto.createHash("sha256");
   hash.update(JSON.stringify(presentation_definition));
 
-  let { jwt, base64EncodedTxData } = await buildPaymentVpRequestJWT(
+  let { jwt, base64EncodedTxData, nonce, state } = await buildPaymentVpRequestJWT(
     clientId,
     response_uri,
     presentation_definition,
@@ -213,6 +213,9 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
   );
   session.txData = base64EncodedTxData;
   session.presentation_definition = presentation_definition;
+  session.nonce = nonce;
+  session.state = state;
+  session.response_mode = "direct_post";
   //update session with tx data
   await storeVPSession(uuid, session);
 
