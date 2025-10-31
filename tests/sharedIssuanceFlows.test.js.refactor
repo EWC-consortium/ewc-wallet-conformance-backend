@@ -1,0 +1,81 @@
+// REFACTORED VERSION - Tests the actual implementation
+// This is a template showing how to refactor to test the real router
+// The key changes:
+// 1. Import the real router instead of creating a mock
+// 2. Use sinon.replace to stub dependencies before import
+// 3. Mount the real router instead of testRouter
+
+import { expect } from 'chai';
+import request from 'supertest';
+import express from 'express';
+import sinon from 'sinon';
+
+// Set up environment for testing
+process.env.ALLOW_NO_REDIS = 'true';
+process.env.SERVER_URL = 'http://localhost:3000';
+
+// Create Express app
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+describe('Shared Issuance Flows - Real Implementation', () => {
+  let app;
+  let sharedRouter;
+  let sandbox;
+  let stubs = {};
+
+  before(async () => {
+    // Create app
+    app = express();
+    app.use(express.json());
+    
+    // Import the real router
+    const sharedModule = await import('../routes/issue/sharedIssuanceFlows.js');
+    sharedRouter = sharedModule.default;
+    
+    // Mount at /shared to match test expectations
+    app.use('/shared', sharedRouter);
+  });
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    
+    // Stub dependencies using sinon.replace
+    // Note: This requires the modules to be importable and stubbable
+    // You'll need to stub:
+    // - cacheServiceRedis functions
+    // - cryptoUtils functions  
+    // - tokenUtils functions
+    // - credGenerationUtils functions
+    // - fs.readFileSync for config files
+    
+    // Example:
+    // const cacheServiceRedisModule = await import('../services/cacheServiceRedis.js');
+    // stubs.getPreAuthSession = sandbox.stub(cacheServiceRedisModule, 'getPreAuthSession');
+    // stubs.getPreAuthSession.resolves({ status: 'pending' });
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  describe('POST /shared/token_endpoint', () => {
+    it('MUST return authorization_pending when external completion is pending', async () => {
+      // Stub the dependencies
+      // stubs.getPreAuthSession.resolves({ status: 'pending_external' });
+      // stubs.checkAndSetPollTime.resolves(true);
+      
+      const response = await request(app)
+        .post('/shared/token_endpoint')
+        .send({
+          grant_type: 'urn:ietf:params:oauth:grant-type:pre-authorized_code',
+          'pre-authorized_code': 'pending-session'
+        })
+        .expect(400);
+
+      expect(response.body).to.have.property('error', 'authorization_pending');
+    });
+  });
+});
+

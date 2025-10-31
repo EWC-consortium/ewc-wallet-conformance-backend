@@ -1156,7 +1156,7 @@
           ]
         }
       ],
-      "cryptographic_binding_methods_supported": ["jwk"],
+      "cryptographic_binding_methods_supported": ["cose_key"],
       "display": [
         {
           "name": "Person Identification Data (mDoc)",

@@ -32,6 +32,8 @@ import {
   storeNonce,
   checkNonce,
   deleteNonce,
+  checkAndSetPollTime,
+  clearPollTime,
 } from "../../services/cacheServiceRedis.js";
 
 import * as jose from "jose";
@@ -53,7 +55,8 @@ import {
 const sharedRouter = express.Router();
 
 // Configuration constants
-const SERVER_URL = process.env.SERVER_URL || "http://localhost:3000";
+const getServerUrl = () => process.env.SERVER_URL || "http://localhost:3000";
+const SERVER_URL = getServerUrl(); // Keep for backward compatibility
 const TOKEN_EXPIRES_IN = 86400;
 const NONCE_EXPIRES_IN = 86400;
 
@@ -78,7 +81,9 @@ const ERROR_MESSAGES = {
   SESSION_LOST: "Session lost after proof validation.",
   CREDENTIAL_DENIED: "Credential request denied",
   STORAGE_FAILED: "Storage operation failed",
-  NONCE_GENERATION_FAILED: "Nonce generation failed"
+  NONCE_GENERATION_FAILED: "Nonce generation failed",
+  AUTHORIZATION_PENDING: "Authorization pending",
+  SLOW_DOWN: "Slow down"
 };
 
 // Helper to load issuer configuration
@@ -168,8 +173,46 @@ const validateCredentialRequest = (requestBody) => {
     throw new Error(ERROR_MESSAGES.INVALID_CREDENTIAL_REQUEST);
   }
 
-  if (!requestBody.proof || !requestBody.proof.jwt) {
+  // V1.0 requires proofs (plural) - reject legacy proof (singular)
+  if (requestBody.proof) {
+    throw new Error(ERROR_MESSAGES.INVALID_PROOF + ": V1.0 requires 'proofs' (plural), not 'proof' (singular)");
+  }
+
+  if (!requestBody.proofs || typeof requestBody.proofs !== 'object' || Array.isArray(requestBody.proofs)) {
     throw new Error(ERROR_MESSAGES.INVALID_PROOF);
+  }
+
+  // V1.0 requires exactly one proof type
+  const proofTypes = Object.keys(requestBody.proofs);
+  if (proofTypes.length !== 1) {
+    throw new Error(ERROR_MESSAGES.INVALID_PROOF + ": V1.0 requires exactly one proof type in proofs object");
+  }
+
+  // Get the proof type (jwt, mso_mdoc, etc.)
+  const proofType = proofTypes[0];
+  const proofValue = requestBody.proofs[proofType];
+
+  // Ensure proof value exists
+  if (!proofValue || (typeof proofValue === 'string' && proofValue.trim() === '')) {
+    throw new Error(ERROR_MESSAGES.INVALID_PROOF + ": proof value is missing or empty");
+  }
+
+  // Handle jwt proof type - can be string or array
+  if (proofType === 'jwt') {
+    if (Array.isArray(proofValue)) {
+      if (proofValue.length === 0) {
+        throw new Error(ERROR_MESSAGES.INVALID_PROOF + ": proofs.jwt array must not be empty");
+      }
+      // Use first JWT if array
+      requestBody.proofJwt = proofValue[0];
+    } else if (typeof proofValue === 'string') {
+      requestBody.proofJwt = proofValue;
+    } else {
+      throw new Error(ERROR_MESSAGES.INVALID_PROOF + ": proofs.jwt must be a string or array");
+    }
+  } else {
+    // For other proof types, store as-is for now
+    requestBody.proofJwt = proofValue;
   }
 
   return credential_configuration_id || credential_identifier;
@@ -294,12 +337,15 @@ const resolveDidWebPublicKey = async (didWeb) => {
 // Verify proof JWT signature and claims
 const verifyProofJWT = async (proofJwt, publicKeyForProof, flowType) => {
   try {
+    // Verify signature and other claims
+    // Note: Nonce validation is done earlier in the credential endpoint handler
+    // to prioritize PoP failure recovery
     const proofPayload = jwt.verify(
       proofJwt,
       await publicKeyToPem(publicKeyForProof),
       {
         algorithms: [jwt.decode(proofJwt, { complete: true })?.header?.alg],
-        audience: SERVER_URL,
+        audience: getServerUrl(),
       }
     );
 
@@ -308,47 +354,52 @@ const verifyProofJWT = async (proofJwt, publicKeyForProof, flowType) => {
       throw new Error(ERROR_MESSAGES.INVALID_PROOF_ISS);
     }
 
-    // Verify nonce
-    const nonceExists = await checkNonce(proofPayload.nonce);
-    if (!nonceExists) {
-      throw new Error(ERROR_MESSAGES.INVALID_PROOF_NONCE);
-    }
-
-    // Delete the nonce to prevent replay attacks
-    await deleteNonce(proofPayload.nonce);
-
     console.log(`Proof JWT validated. Issuer (Wallet): ${proofPayload.iss}, Nonce verified.`);
     return proofPayload;
   } catch (error) {
     if (error.message.includes("signature verification failed")) {
       throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_SIGNATURE}: ${error.message}`);
     }
+    
     throw error;
   }
 };
 
 // Get session object from token
 const getSessionFromToken = async (token) => {
-  const preAuthsessionKey = await getSessionKeyFromAccessToken(token);
   let sessionObject;
   let flowType = "pre-auth";
+  let sessionKey;
 
+  const preAuthsessionKey = await getSessionKeyFromAccessToken(token);
   if (preAuthsessionKey) {
-    sessionObject = await getPreAuthSession(preAuthsessionKey);
-    if (!sessionObject) {
-      sessionObject = await getCodeFlowSession(preAuthsessionKey);
+    const preAuthSession = await getPreAuthSession(preAuthsessionKey);
+    if (preAuthSession) {
+      sessionObject = preAuthSession;
+      sessionKey = preAuthsessionKey;
+    } else {
+      const codeSession = await getCodeFlowSession(preAuthsessionKey);
+      if (codeSession) {
+        sessionObject = codeSession;
+        sessionKey = preAuthsessionKey;
+        flowType = "code";
+      }
     }
   }
 
   if (!sessionObject) {
     const codeSessionKey = await getSessionAccessToken(token);
     if (codeSessionKey) {
-      sessionObject = await getCodeFlowSession(codeSessionKey);
-      flowType = "code";
+      const codeSession = await getCodeFlowSession(codeSessionKey);
+      if (codeSession) {
+        sessionObject = codeSession;
+        sessionKey = codeSessionKey;
+        flowType = "code";
+      }
     }
   }
 
-  return { sessionObject, flowType };
+  return { sessionObject, flowType, sessionKey };
 };
 
 // Handle pre-authorized code flow
@@ -359,10 +410,29 @@ const handlePreAuthorizedCodeFlow = async (preAuthorizedCode, authorizationDetai
     throw new Error(ERROR_MESSAGES.INVALID_GRANT);
   }
 
+  // Check if authorization is still pending external completion
+  if (existingPreAuthSession.status === 'pending_external') {
+    // Atomically check and set poll time using Redis (thread-safe)
+    // Returns false if polled too recently (within minPollIntervalSeconds)
+    const minPollIntervalSeconds = 5;
+    const pollAllowed = await checkAndSetPollTime(preAuthorizedCode, minPollIntervalSeconds);
+    
+    if (!pollAllowed) {
+      const error = new Error(ERROR_MESSAGES.SLOW_DOWN);
+      error.errorCode = 'slow_down';
+      throw error;
+    }
+    
+    // Return authorization_pending error
+    const error = new Error(ERROR_MESSAGES.AUTHORIZATION_PENDING);
+    error.errorCode = 'authorization_pending';
+    throw error;
+  }
+
   const parsedAuthDetails = parseAuthorizationDetails(authorizationDetails);
   const chosenCredentialConfigurationId = parsedAuthDetails?.[0]?.credential_configuration_id;
 
-  const generatedAccessToken = buildAccessToken(SERVER_URL, loadCryptographicKeys().privateKey);
+  const generatedAccessToken = buildAccessToken(getServerUrl(), loadCryptographicKeys().privateKey);
   const cNonceForSession = generateNonce();
 
   // Update session
@@ -371,6 +441,9 @@ const handlePreAuthorizedCodeFlow = async (preAuthorizedCode, authorizationDetai
   existingPreAuthSession.c_nonce = cNonceForSession;
 
   await storePreAuthSession(preAuthorizedCode, existingPreAuthSession);
+
+  // Clear poll tracking for successful issuance
+  await clearPollTime(preAuthorizedCode);
 
   // Prepare response
   const tokenResponse = {
@@ -415,7 +488,7 @@ const handleAuthorizationCodeFlow = async (code, code_verifier, authorizationDet
 
   const parsedAuthDetails = parseAuthorizationDetails(authorizationDetails);
   const chosenCredentialConfigurationId = parsedAuthDetails?.[0]?.credential_configuration_id;
-  const generatedAccessToken = buildAccessToken(SERVER_URL, loadCryptographicKeys().privateKey);
+  const generatedAccessToken = buildAccessToken(getServerUrl(), loadCryptographicKeys().privateKey);
   const cNonceForSession = generateNonce();
 
   // Update session
@@ -453,7 +526,7 @@ const handleImmediateCredentialIssuance = async (requestBody, sessionObject, eff
   const credential = await handleCredentialGenerationBasedOnFormat(
     requestBody,
     sessionObject,
-    SERVER_URL,
+    getServerUrl(),
     'dc+sd-jwt'
   );
 
@@ -479,7 +552,8 @@ const handleDeferredCredentialIssuance = async (requestBody, sessionObject) => {
   return {
     transaction_id,
     c_nonce: generateNonce(),
-    c_nonce_expires_in: NONCE_EXPIRES_IN
+    c_nonce_expires_in: NONCE_EXPIRES_IN,
+    interval: 5 // V1.0 requirement: polling interval in seconds for deferred credential status checks
   };
 };
 
@@ -516,6 +590,21 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
   } catch (error) {
     console.error("Token endpoint error:", error);
     
+    // Handle authorization_pending and slow_down errors
+    if (error.errorCode === 'authorization_pending') {
+      return res.status(400).json({
+        error: "authorization_pending",
+        error_description: error.message,
+      });
+    }
+    
+    if (error.errorCode === 'slow_down') {
+      return res.status(400).json({
+        error: "slow_down",
+        error_description: error.message,
+      });
+    }
+    
     if (error.message.includes(ERROR_MESSAGES.INVALID_GRANT) || 
         error.message.includes(ERROR_MESSAGES.INVALID_GRANT_CODE) ||
         error.message.includes(ERROR_MESSAGES.PKCE_FAILED)) {
@@ -537,6 +626,10 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
 // *****************************************************************
 
 sharedRouter.post("/credential", async (req, res) => {
+  let sessionObject;
+  let sessionKey;
+  let flowType;
+  
   try {
     const authHeader = req.headers["authorization"];
     const token = authHeader && authHeader.split(" ")[1];
@@ -546,7 +639,10 @@ sharedRouter.post("/credential", async (req, res) => {
     const effectiveConfigurationId = validateCredentialRequest(requestBody);
 
     // Get session
-    const { sessionObject, flowType } = await getSessionFromToken(token);
+    const sessionData = await getSessionFromToken(token);
+    sessionObject = sessionData.sessionObject;
+    flowType = sessionData.flowType;
+    sessionKey = sessionData.sessionKey;
     
     if (!sessionObject) {
       return res.status(500).json({
@@ -558,12 +654,46 @@ sharedRouter.post("/credential", async (req, res) => {
     // Validate proof if configuration ID is available
     if (effectiveConfigurationId) {
       try {
-        const decodedProofHeader = validateProofJWT(requestBody.proof.jwt, effectiveConfigurationId);
-        
-        if (decodedProofHeader) {
-          const publicKeyForProof = await resolvePublicKeyForProof(decodedProofHeader);
-          await verifyProofJWT(requestBody.proof.jwt, publicKeyForProof, flowType);
+        // Ensure proofJwt is set (should be set by validateCredentialRequest)
+        if (!requestBody.proofJwt) {
+          throw new Error(ERROR_MESSAGES.INVALID_PROOF);
         }
+        
+        // First, check nonce validity BEFORE any other validation
+        // This is critical for PoP failure recovery - we need to catch nonce errors
+        // even if public key resolution or signature verification fails
+        const decodedPayloadForNonce = jwt.decode(requestBody.proofJwt, { complete: false });
+        
+        // Check if nonce is missing
+        if (!decodedPayloadForNonce || !decodedPayloadForNonce.nonce) {
+          throw new Error(ERROR_MESSAGES.INVALID_PROOF_NONCE);
+        }
+        
+        // Check if nonce is valid/expired
+        const nonceExists = await checkNonce(decodedPayloadForNonce.nonce);
+        if (!nonceExists) {
+          // Nonce exists but is invalid/expired - throw error for PoP failure recovery
+          throw new Error(ERROR_MESSAGES.INVALID_PROOF_NONCE);
+        }
+        
+        // Store nonce value for deletion after successful signature verification
+        const nonceValue = decodedPayloadForNonce.nonce;
+        
+        const decodedProofHeader = validateProofJWT(requestBody.proofJwt, effectiveConfigurationId);
+        
+        // Always verify proof JWT, even if algorithm validation was skipped
+        // If header validation was skipped, decode the header to get public key info
+        const headerForVerification = decodedProofHeader || jwt.decode(requestBody.proofJwt, { complete: true })?.header;
+        
+        if (!headerForVerification) {
+          throw new Error(ERROR_MESSAGES.INVALID_PROOF_MALFORMED);
+        }
+        
+        const publicKeyForProof = await resolvePublicKeyForProof(headerForVerification);
+        await verifyProofJWT(requestBody.proofJwt, publicKeyForProof, flowType);
+        
+        // Delete the nonce after successful signature verification
+        await deleteNonce(nonceValue);
       } catch (error) {
         console.error("Proof validation error:", error);
         
@@ -581,10 +711,8 @@ sharedRouter.post("/credential", async (req, res) => {
           });
         }
 
-        return res.status(500).json({
-          error: "server_error",
-          error_description: ERROR_MESSAGES.SERVER_ERROR,
-        });
+        error.proofValidationError = true;
+        throw error;
       }
     }
 
@@ -593,14 +721,67 @@ sharedRouter.post("/credential", async (req, res) => {
       const response = await handleDeferredCredentialIssuance(requestBody, sessionObject);
       return res.status(202).json(response);
     } else {
-      const response = await handleImmediateCredentialIssuance(requestBody, sessionObject, effectiveConfigurationId);
-      return res.json(response);
+      try {
+        const response = await handleImmediateCredentialIssuance(requestBody, sessionObject, effectiveConfigurationId);
+        return res.json(response);
+      } catch (credError) {
+        console.error("Credential generation error:", credError);
+        // If credential generation fails, it's a server error, not a client error
+        return res.status(500).json({
+          error: "server_error",
+          error_description: credError.message || "Failed to generate credential",
+        });
+      }
     }
   } catch (error) {
     console.error("Credential endpoint error:", error);
-    
-    if (error.message.includes(ERROR_MESSAGES.INVALID_CREDENTIAL_REQUEST) ||
-        error.message.includes(ERROR_MESSAGES.INVALID_PROOF)) {
+
+    const proofRelatedErrors = [
+      ERROR_MESSAGES.INVALID_PROOF,
+      ERROR_MESSAGES.INVALID_PROOF_MALFORMED,
+      ERROR_MESSAGES.INVALID_PROOF_ALGORITHM,
+      ERROR_MESSAGES.INVALID_PROOF_PUBLIC_KEY,
+      ERROR_MESSAGES.INVALID_PROOF_UNABLE,
+      ERROR_MESSAGES.INVALID_PROOF_SIGNATURE,
+      ERROR_MESSAGES.INVALID_PROOF_ISS,
+      ERROR_MESSAGES.INVALID_PROOF_NONCE,
+    ];
+
+    if (
+      error.proofValidationError ||
+      proofRelatedErrors.some((msg) => error.message.includes(msg))
+    ) {
+      const errorResponse = {
+        error: "invalid_proof",
+        error_description: error.message,
+      };
+
+      if (error.message.includes(ERROR_MESSAGES.INVALID_PROOF_NONCE)) {
+        try {
+          const refreshedNonce = generateNonce();
+          await storeNonce(refreshedNonce, NONCE_EXPIRES_IN);
+
+          if (sessionObject && sessionKey) {
+            sessionObject.c_nonce = refreshedNonce;
+
+            if (flowType === "code") {
+              await storeCodeFlowSession(sessionKey, sessionObject);
+            } else {
+              await storePreAuthSession(sessionKey, sessionObject);
+            }
+          }
+
+          errorResponse.c_nonce = refreshedNonce;
+          errorResponse.c_nonce_expires_in = NONCE_EXPIRES_IN;
+        } catch (nonceError) {
+          console.error("Failed to issue refreshed c_nonce after proof failure:", nonceError);
+        }
+      }
+
+      return res.status(400).json(errorResponse);
+    }
+
+    if (error.message.includes(ERROR_MESSAGES.INVALID_CREDENTIAL_REQUEST)) {
       return res.status(400).json({
         error: "invalid_credential_request",
         error_description: error.message,
@@ -641,7 +822,7 @@ sharedRouter.post("/credential_deferred", async (req, res) => {
 
     const credential = await handleCredentialGenerationBasedOnFormatDeferred(
       sessionObject,
-      SERVER_URL
+      getServerUrl()
     );
 
     return res.status(200).json({

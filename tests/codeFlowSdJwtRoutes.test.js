@@ -890,6 +890,53 @@ describe('Code Flow SD-JWT Routes', () => {
       expect(response.header.location).to.include('error=invalid_request');
       expect(response.header.location).to.include(encodeURIComponent('Invalid response_type'));
     });
+
+    it('should carry wallet_issuer_id and user_hint from PAR and trigger VP path for CP-in-Issuance', async () => {
+      // Use a shared PAR map so we can assert contents after POST
+      const sharedParMap = new Map();
+      mockCacheService.getPushedAuthorizationRequests.returns(sharedParMap);
+
+      // Create PAR with wallet_issuer_id and user_hint
+      const parData = {
+        client_id: 'test-client-id',
+        response_type: 'code',
+        redirect_uri: 'openid4vp://',
+        code_challenge: 'test-challenge',
+        code_challenge_method: 'S256',
+        state: 'test-state',
+        issuer_state: 'test-issuer-state',
+        wallet_issuer_id: 'https://wallet.example.com',
+        user_hint: 'user@example.com'
+      };
+
+      const parRes = await request(app)
+        .post('/codeflow/par')
+        .send(parData)
+        .expect(200);
+
+      const requestUri = parRes.body.request_uri;
+      const stored = sharedParMap.get(requestUri);
+      expect(stored).to.exist;
+      expect(stored.wallet_issuer_id).to.equal('https://wallet.example.com');
+      expect(stored.user_hint).to.equal('user@example.com');
+
+      // Prepare a dynamic session so the authorize route will build a VP request
+      mockCacheService.getCodeFlowSession.resolves({
+        isDynamic: true,
+        client_id_scheme: 'redirect_uri',
+        requests: { redirectUri: 'openid4vp://' },
+        results: { state: 'test-state' }
+      });
+
+      const authRes = await request(app)
+        .get('/codeflow/authorize')
+        .query({ request_uri: requestUri, nonce: 'test-nonce' })
+        .expect(302);
+
+      // VP path should be triggered
+      expect(mockTokenUtils.buildVPbyValue.called).to.be.true;
+      expect(authRes.header.location).to.be.a('string');
+    });
   });
 
   describe('GET /codeflow/x509VPrequest_dynamic/:id', () => {

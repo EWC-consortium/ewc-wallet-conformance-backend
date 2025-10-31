@@ -14,7 +14,11 @@ export const client = redis.createClient({
     console.log("Connected to Redis");
   } catch (err) {
     console.error("Error connecting to Redis:", err);
-    process.exit(1);
+    if (process.env.ALLOW_NO_REDIS === 'true' || process.env.NODE_ENV === 'test') {
+      console.warn('Redis connection failed; continuing without Redis for tests.');
+    } else {
+      process.exit(1);
+    }
   }
 })();
 
@@ -271,6 +275,49 @@ export async function deleteNonce(nonce) {
   } catch (err) {
     console.error("Error deleting nonce:", err);
     return false;
+  }
+}
+
+// Function to atomically check and set last poll time for slow_down detection
+// Returns true if poll is allowed (enough time has passed), false if polled too recently
+export async function checkAndSetPollTime(preAuthorizedCode, minPollIntervalSeconds = 5) {
+  try {
+    if (!client.isReady) {
+      console.error("Redis client is not ready");
+      throw new Error("Redis client is not ready");
+    }
+    
+    const key = `poll-times:${preAuthorizedCode}`;
+    const now = Date.now();
+    
+    // Try to set the key only if it doesn't exist (NX flag)
+    // Set expiration to the minimum poll interval
+    const result = await client.set(key, now.toString(), {
+      EX: minPollIntervalSeconds,
+      NX: true // Only set if key doesn't exist
+    });
+    
+    // If result is OK, the key was set successfully (poll allowed)
+    // If result is null, the key already exists (polled too recently)
+    return result === 'OK';
+  } catch (err) {
+    console.error("Error checking/setting poll time:", err);
+    // On error, allow the poll to proceed (fail open)
+    return true;
+  }
+}
+
+// Function to clear poll tracking for a session
+export async function clearPollTime(preAuthorizedCode) {
+  try {
+    if (!client.isReady) {
+      return;
+    }
+    
+    const key = `poll-times:${preAuthorizedCode}`;
+    await client.del(key);
+  } catch (err) {
+    console.error("Error clearing poll time:", err);
   }
 }
 

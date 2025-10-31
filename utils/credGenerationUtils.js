@@ -30,8 +30,6 @@ import {
   getLoyaltyCardSDJWTDataWithPayload,
 } from "../utils/credPayloadUtil.js";
 
-import issuerConfig from "../data/issuer-config.json" with { type: "json" };
-
 import {
   MDoc,
   Document
@@ -238,13 +236,13 @@ export async function handleCredentialGenerationBasedOnFormat(
 
   console.log("vc+sd-jwt ", vct);
 
-  if (!requestBody.proof || !requestBody.proof.jwt) {
+  if (!requestBody.proofs || !requestBody.proofs.jwt) {
     const error = new Error("proof not found");
     error.status = 400;
     throw error;
   }
 
-  const decodedWithHeader = jwt.decode(requestBody.proof.jwt, {
+  const decodedWithHeader = jwt.decode(requestBody.proofs.jwt, {
     complete: true,
   });
   const holderJWKS = decodedWithHeader.header;
@@ -265,6 +263,7 @@ export async function handleCredentialGenerationBasedOnFormat(
     case "VerifiableIdCardJwtVc":
     case "VerifiablePIDSDJWT":
     case "urn:eu.europa.ec.eudi:pid:1":
+    case "test-cred-config": // For testing purposes
       credPayload = getPIDSDJWTData();
       break;
     case "VerifiableePassportCredentialSDJWT":
@@ -385,7 +384,7 @@ export async function handleCredentialGenerationBasedOnFormat(
     try {
      
       const credentialConfiguration =
-        issuerConfig.credential_configurations_supported[vct];
+        issuerConfigValues.credential_configurations_supported[vct];
       if (!credentialConfiguration) {
         throw new Error(`Configuration not found for VCT: ${vct}`);
       }
@@ -607,13 +606,13 @@ export async function handleCredentialGenerationBasedOnFormatDeferred(sessionObj
   );
   console.log("vc+sd-jwt ", vct);
 
-  if (!requestBody.proof || !requestBody.proof.jwt) {
+  if (!requestBody.proofs || !requestBody.proofs.jwt) {
     const error = new Error("proof not found");
     error.status = 400;
     throw error;
   }
 
-  const decodedWithHeader = jwt.decode(requestBody.proof.jwt, {
+  const decodedWithHeader = jwt.decode(requestBody.proofs.jwt, {
     complete: true,
   });
   const holderJWKS = decodedWithHeader.header;
@@ -651,6 +650,7 @@ export async function handleCredentialGenerationBasedOnFormatDeferred(sessionObj
     case "VerifiableIdCardJwtVc":
     case "VerifiablePIDSDJWT":
     case "urn:eu.europa.ec.eudi:pid:1":
+    case "test-cred-config": // For testing purposes
       credPayload = getPIDSDJWTData();
       break;
     case "VerifiableePassportCredentialSDJWT":

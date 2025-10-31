@@ -33,15 +33,21 @@ const jwks = pemToJWK(publicKeyPem, "public");
  */
 
 metadataRouter.get(
-  "/.well-known/openid-credential-issuer",
+  [
+    "/.well-known/openid-credential-issuer",
+    "/.well-known/openid-credential-issuer/:suffix(*)",
+  ],
   async (req, res) => {
-    issuerConfig.credential_issuer = serverURL;
+    const rawSuffix = req.params?.suffix || "";
+    const normalizedSuffix = rawSuffix.replace(/^\/+/, "");
+    const issuerBase = normalizedSuffix ? `${serverURL}/${normalizedSuffix}` : serverURL;
+
+    issuerConfig.credential_issuer = issuerBase;
     issuerConfig.authorization_servers = [serverURL];
-    issuerConfig.credential_endpoint = serverURL + "/credential";
-    issuerConfig.deferred_credential_endpoint =
-      serverURL + "/credential_deferred";
-    issuerConfig.nonce_endpoint = serverURL + "/nonce";
-    issuerConfig.notification_endpoint = serverURL + "/notification";
+    issuerConfig.credential_endpoint = issuerBase + "/credential";
+    issuerConfig.deferred_credential_endpoint = issuerBase + "/credential_deferred";
+    issuerConfig.nonce_endpoint = issuerBase + "/nonce";
+    issuerConfig.notification_endpoint = issuerBase + "/notification";
 
     if (issuerConfig.batch_credential_endpoint) {
       console.warn("Warning: batch_credential_endpoint is part of issuerConfig but removed from spec draft -14. Consider removing from data/issuer-config.json");
