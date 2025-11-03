@@ -226,14 +226,30 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
 
       const tokensToProcess = [];
       if (typeof vpToken === 'object' && vpToken !== null && !Array.isArray(vpToken)) {
-        // This is the expected DCQL case. vpToken is an object like { cmwallet: "..." }
-        tokensToProcess.push(...Object.values(vpToken));
+        // vpToken is an object like { cmwallet: ["...", "..."], other: "..." }
+        for (const value of Object.values(vpToken)) {
+          if (Array.isArray(value)) {
+            for (const item of value) {
+              if (typeof item === 'string') tokensToProcess.push(item);
+            }
+          } else if (typeof value === 'string') {
+            tokensToProcess.push(value);
+          }
+        }
       } else if (typeof vpToken === 'string') {
         // Fallback for single token or stringified JSON
         try {
           const parsed = JSON.parse(vpToken);
           if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-            tokensToProcess.push(...Object.values(parsed));
+            for (const value of Object.values(parsed)) {
+              if (Array.isArray(value)) {
+                for (const item of value) {
+                  if (typeof item === 'string') tokensToProcess.push(item);
+                }
+              } else if (typeof value === 'string') {
+                tokensToProcess.push(value);
+              }
+            }
           } else {
             tokensToProcess.push(vpToken);
           }

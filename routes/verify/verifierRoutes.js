@@ -668,9 +668,61 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         claimsFromExtraction = result.extractedClaims;
         jwtFromKeybind = result.keybindJwt;
         
+        // Log VP token structure for debugging
+        const vpTokenForDebug = req.body["vp_token"];
+        if (vpTokenForDebug) {
+          if (typeof vpTokenForDebug === 'object' && vpTokenForDebug !== null) {
+            // vp_token is an object
+            await logDebug(sessionId, "VP token structure analysis", {
+              vpTokenType: "object",
+              vpTokenKeys: Object.keys(vpTokenForDebug),
+              hasArrays: Object.values(vpTokenForDebug).some(Array.isArray)
+            });
+          } else if (typeof vpTokenForDebug === 'string') {
+            // vp_token is a string - check if it's JSON or JWT
+            if (vpTokenForDebug.trim().startsWith('{') || vpTokenForDebug.trim().startsWith('[')) {
+              // Looks like JSON
+              try {
+                const parsed = JSON.parse(vpTokenForDebug);
+                await logDebug(sessionId, "VP token structure analysis", {
+                  vpTokenType: "string (JSON)",
+                  parsedType: typeof parsed,
+                  isObject: typeof parsed === 'object' && parsed !== null,
+                  parsedKeys: typeof parsed === 'object' && parsed !== null ? Object.keys(parsed) : []
+                });
+              } catch (e) {
+                await logDebug(sessionId, "VP token structure analysis - JSON parse failed", {
+                  vpTokenType: "string (looks like JSON)",
+                  error: e.message
+                });
+              }
+            } else {
+              // Try to decode as JWT
+              try {
+                const decodedDebug = jwt.decode(vpTokenForDebug, { complete: true });
+                await logDebug(sessionId, "VP token structure analysis", {
+                  vpTokenType: "string (JWT)",
+                  hasPayload: !!decodedDebug?.payload,
+                  payloadKeys: decodedDebug?.payload ? Object.keys(decodedDebug.payload) : [],
+                  hasNonce: !!decodedDebug?.payload?.nonce,
+                  hasVpClaim: !!decodedDebug?.payload?.vp,
+                  vpClaimKeys: decodedDebug?.payload?.vp ? Object.keys(decodedDebug.payload.vp) : []
+                });
+              } catch (e) {
+                await logDebug(sessionId, "VP token structure analysis - JWT decode failed", {
+                  vpTokenType: "string (unknown format)",
+                  error: e.message
+                });
+              }
+            }
+          }
+        }
+        
         await logInfo(sessionId, "Claims extracted successfully", {
-          claimsCount: Object.keys(claimsFromExtraction || {}).length,
-          hasKeybindJwt: !!jwtFromKeybind
+          claimsCount: Array.isArray(claimsFromExtraction) ? claimsFromExtraction.length : Object.keys(claimsFromExtraction || {}).length,
+          hasKeybindJwt: !!jwtFromKeybind,
+          keybindJwtHasPayload: !!jwtFromKeybind?.payload,
+          keybindJwtHasNonce: !!jwtFromKeybind?.payload?.nonce
         });
       }catch(error){
         console.error("Error processing direct_post response:", error);
@@ -683,25 +735,212 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       const vpToken = req.body["vp_token"];
 
       // Verify nonce
+      // According to OpenID4VP spec, nonce can be in multiple locations:
+      // 1. Key-binding JWT (for SD-JWT presentations)
+      // 2. VP token payload directly
+      // 3. VP token's vp claim (for nested VP structures)
       let submittedNonce;
       if (jwtFromKeybind && jwtFromKeybind.payload) {
         // If a key-binding JWT was extracted, this is an SD-JWT presentation.
         // The nonce MUST be taken from the key-binding JWT.
         submittedNonce = jwtFromKeybind.payload.nonce;
-      } else {
-        // For regular JWT-based VPs
-        const decodedVpToken = jwt.decode(vpToken, { complete: true });
-        if (decodedVpToken && decodedVpToken.payload) {
-          submittedNonce = decodedVpToken.payload.nonce;
+        await logDebug(sessionId, "Nonce extracted from key-binding JWT", {
+          hasNonce: !!submittedNonce
+        });
+      }
+      
+      // If not found in key-binding JWT, check VP token
+      // Note: vp_token can be either:
+      // 1. A JWT string (direct_post with JWT VP)
+      // 2. A JSON string that parses to an object containing credential arrays (e.g., '{"cmwallet": ["..."]}')
+      // 3. An already-parsed object containing credential arrays
+      if (!submittedNonce && vpToken) {
+        let vpTokenToProcess = vpToken;
+        
+        // First, try to parse if it's a JSON string
+        if (typeof vpToken === 'string') {
+          // Check if it looks like JSON (starts with { or [)
+          if (vpToken.trim().startsWith('{') || vpToken.trim().startsWith('[')) {
+            try {
+              vpTokenToProcess = JSON.parse(vpToken);
+              await logDebug(sessionId, "Parsed VP token from JSON string", {
+                parsedType: typeof vpTokenToProcess,
+                isObject: typeof vpTokenToProcess === 'object' && vpTokenToProcess !== null
+              });
+            } catch (e) {
+              // Not JSON, treat as JWT string
+              await logDebug(sessionId, "VP token string is not JSON, treating as JWT", {
+                error: e.message
+              });
+            }
+          }
         }
+        
+        // Now process the VP token
+        if (typeof vpTokenToProcess === 'object' && vpTokenToProcess !== null && !Array.isArray(vpTokenToProcess)) {
+          // vp_token is an object like {"cmwallet": ["credential1", "credential2"]}
+          // Extract credential strings and decode them to find nonce
+          await logDebug(sessionId, "VP token is an object, extracting credentials", {
+            vpTokenKeys: Object.keys(vpTokenToProcess)
+          });
+          
+          const credentialArrays = Object.values(vpTokenToProcess).filter(Array.isArray);
+          await logDebug(sessionId, "Found credential arrays", {
+            arrayCount: credentialArrays.length,
+            totalCredentials: credentialArrays.reduce((sum, arr) => sum + arr.length, 0)
+          });
+          
+          outerLoop: for (const credArray of credentialArrays) {
+            for (const credString of credArray) {
+              if (typeof credString === 'string') {
+                await logDebug(sessionId, "Processing credential", {
+                  credentialPreview: credString.substring(0, 50) + "...",
+                  credentialLength: credString.length,
+                  hasTilde: credString.includes('~')
+                });
+                
+                try {
+                  // Try to decode as SD-JWT first
+                  if (credString.includes('~')) {
+                    // This is an SD-JWT - nonce should be in key-binding JWT if present
+                    await logDebug(sessionId, "Decoding as SD-JWT");
+                    const decodedSdJwt = await decodeSdJwt(credString, digest);
+                    
+                    await logDebug(sessionId, "SD-JWT decoded", {
+                      hasJwt: !!decodedSdJwt?.jwt,
+                      hasPayload: !!decodedSdJwt?.jwt?.payload,
+                      hasKbJwt: !!decodedSdJwt?.kbJwt,
+                      payloadKeys: decodedSdJwt?.jwt?.payload ? Object.keys(decodedSdJwt.jwt.payload) : []
+                    });
+                    
+                    // First check key-binding JWT (if not already extracted)
+                    if (decodedSdJwt?.kbJwt) {
+                      try {
+                        await logDebug(sessionId, "Key-binding JWT info", {
+                          kbJwtType: typeof decodedSdJwt.kbJwt,
+                          kbJwtIsString: typeof decodedSdJwt.kbJwt === 'string',
+                          kbJwtPreview: typeof decodedSdJwt.kbJwt === 'string' 
+                            ? decodedSdJwt.kbJwt.substring(0, 50) + '...'
+                            : JSON.stringify(decodedSdJwt.kbJwt).substring(0, 100),
+                          hasPayloadProperty: 'payload' in (decodedSdJwt.kbJwt || {})
+                        });
+                        
+                        // Check if kbJwt is already a decoded object with payload
+                        let kbJwtDecoded;
+                        if (typeof decodedSdJwt.kbJwt === 'object' && decodedSdJwt.kbJwt.payload) {
+                          // Already decoded
+                          kbJwtDecoded = decodedSdJwt.kbJwt;
+                        } else if (typeof decodedSdJwt.kbJwt === 'string') {
+                          // Need to decode
+                          kbJwtDecoded = jwt.decode(decodedSdJwt.kbJwt, { complete: true });
+                        }
+                        
+                        await logDebug(sessionId, "Key-binding JWT decoded", {
+                          hasDecoded: !!kbJwtDecoded,
+                          hasPayload: !!kbJwtDecoded?.payload,
+                          hasNonce: !!kbJwtDecoded?.payload?.nonce,
+                          payloadKeys: kbJwtDecoded?.payload ? Object.keys(kbJwtDecoded.payload) : []
+                        });
+                        
+                        if (kbJwtDecoded?.payload?.nonce) {
+                          submittedNonce = kbJwtDecoded.payload.nonce;
+                          await logDebug(sessionId, "Nonce found in key-binding JWT from SD-JWT", {
+                            nonce: submittedNonce
+                          });
+                          break outerLoop;
+                        }
+                      } catch (e) {
+                        await logDebug(sessionId, "Failed to decode key-binding JWT", {
+                          error: e.message,
+                          stack: e.stack
+                        });
+                      }
+                    }
+                    
+                    // Check if nonce is in the SD-JWT payload itself
+                    if (!submittedNonce && decodedSdJwt?.jwt?.payload) {
+                      submittedNonce = decodedSdJwt.jwt.payload.nonce;
+                      if (submittedNonce) {
+                        await logDebug(sessionId, "Nonce found in SD-JWT payload", {
+                          nonce: submittedNonce
+                        });
+                        break outerLoop;
+                      } else {
+                        await logDebug(sessionId, "No nonce in SD-JWT payload", {
+                          payloadKeys: Object.keys(decodedSdJwt.jwt.payload)
+                        });
+                      }
+                    }
+                  } else {
+                    // Regular JWT - decode and check payload
+                    await logDebug(sessionId, "Decoding as regular JWT");
+                    const decodedCred = jwt.decode(credString, { complete: true });
+                    if (decodedCred && decodedCred.payload) {
+                      submittedNonce = decodedCred.payload.nonce || decodedCred.payload.vp?.nonce;
+                      if (submittedNonce) {
+                        await logDebug(sessionId, "Nonce found in JWT credential", {
+                          nonce: submittedNonce
+                        });
+                        break outerLoop;
+                      }
+                    }
+                  }
+                } catch (e) {
+                  // Continue to next credential
+                  await logDebug(sessionId, "Failed to decode credential for nonce extraction", {
+                    error: e.message,
+                    stack: e.stack
+                  });
+                }
+              }
+            }
+          }
+        } else if (typeof vpTokenToProcess === 'string') {
+          // vp_token is a JWT string - try to decode it
+          const decodedVpToken = jwt.decode(vpTokenToProcess, { complete: true });
+          if (decodedVpToken && decodedVpToken.payload) {
+            // Check top-level payload first (most common case)
+            submittedNonce = decodedVpToken.payload.nonce;
+            
+            // If not found, check vp claim (for nested VP structures)
+            if (!submittedNonce && decodedVpToken.payload.vp) {
+              submittedNonce = decodedVpToken.payload.vp.nonce;
+              
+              // Also check if vp is an object with nested properties
+              if (!submittedNonce && decodedVpToken.payload.vp.nonce === undefined) {
+                // Check if vp is a string that needs to be decoded
+                if (typeof decodedVpToken.payload.vp === 'string') {
+                  try {
+                    const nestedVp = jwt.decode(decodedVpToken.payload.vp, { complete: true });
+                    if (nestedVp && nestedVp.payload) {
+                      submittedNonce = nestedVp.payload.nonce || nestedVp.payload.vp?.nonce;
+                    }
+                  } catch (e) {
+                    // Not a JWT, continue
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        await logDebug(sessionId, "VP token nonce extraction completed", {
+          originalVpTokenType: typeof vpToken,
+          processedVpTokenType: typeof vpTokenToProcess,
+          isObject: typeof vpTokenToProcess === 'object' && vpTokenToProcess !== null,
+          hasNonce: !!submittedNonce
+        });
       }
 
- 
-        if (!submittedNonce) {
-          console.log("No submitted nonce found in vp_token");
-          await logError(sessionId, "No submitted nonce found in vp_token");
-          return res.status(400).json({ error: "submitted nonce not found in vp_token" });
-        }
+      if (!submittedNonce) {
+        await logError(sessionId, "No submitted nonce found in vp_token", {
+          hasVpToken: !!vpToken,
+          hasKeybindJwt: !!jwtFromKeybind,
+          vpTokenPreview: vpToken ? vpToken.substring(0, 100) : null
+        });
+        console.log("No submitted nonce found in vp_token");
+        return res.status(400).json({ error: "submitted nonce not found in vp_token" });
+      }
         
         await logDebug(sessionId, "Nonce found in VP token", {
           submittedNonce,
