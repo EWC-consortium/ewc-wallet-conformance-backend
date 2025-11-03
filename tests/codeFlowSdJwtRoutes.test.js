@@ -9,6 +9,9 @@ import imageDataURI from 'image-data-uri';
 import { streamToBuffer } from '@jorgeferrero/stream-to-buffer';
 import { v4 as uuidv4 } from 'uuid';
 
+// Load verifier config for client_metadata
+const verifierConfig = JSON.parse(fs.readFileSync('./data/verifier-config.json', 'utf-8'));
+
 // Create Express app
 const app = express();
 app.use(express.json());
@@ -330,6 +333,17 @@ testRouter.get('/authorize', async (req, res) => {
           nonce
         );
         return res.redirect(302, redirectUrl);
+      } else if (existingCodeSession.client_id_scheme === 'x509_san_dns') {
+        const request_uri = `http://localhost:3000/x509VPrequest_dynamic/${finalIssuerState}`;
+        const clientId = 'dss.aegean.gr';
+        const vpRequest = `openid4vp://?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(request_uri)}&request_uri_method=get`;
+        return res.redirect(302, vpRequest);
+      } else if (existingCodeSession.client_id_scheme === 'did') {
+        const request_uri = `http://localhost:3000/didJwksVPrequest_dynamic/${finalIssuerState}`;
+        const controller = 'localhost:3000';
+        const clientId = `did:web:${controller}`;
+        const vpRequest = `openid4vp://?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(request_uri)}&request_uri_method=get`;
+        return res.redirect(302, vpRequest);
       }
     } else {
       // Non-dynamic flow
@@ -364,21 +378,9 @@ testRouter.get('/x509VPrequest_dynamic/:id', async (req, res) => {
     const uuid = req.params.id || 'test-uuid-123';
     const response_uri = 'http://localhost:3000/direct_post_vci/' + uuid;
 
-    const client_metadata = {
-      client_name: 'UAegean EWC Verifier',
-      logo_uri: 'https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png',
-      location: 'Greece',
-      cover_uri: 'string',
-      description: 'EWC pilot case verification',
-      vp_formats: {
-        'vc+sd-jwt': {
-          'sd-jwt_alg_values': ['ES256', 'ES384'],
-          'kb-jwt_alg_values': ['ES256', 'ES384'],
-        },
-      },
-    };
+    const client_metadata = verifierConfig;
 
-    const presentation_definition_sdJwt = { test: 'presentation_definition' };
+    const presentation_definition_sdJwt = null;
     const clientId = 'dss.aegean.gr';
     
     const signedVPJWT = await mockCryptoUtils.buildVpRequestJWT(
@@ -404,23 +406,11 @@ testRouter.get('/didJwksVPrequest_dynamic/:id', async (req, res) => {
     const uuid = req.params.id || 'test-uuid-123';
     const response_uri = 'http://localhost:3000/direct_post_vci/' + uuid;
 
-    const client_metadata = {
-      client_name: 'UAegean EWC Verifier',
-      logo_uri: 'https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png',
-      location: 'Greece',
-      cover_uri: 'string',
-      description: 'EWC pilot case verification',
-      vp_formats: {
-        'vc+sd-jwt': {
-          'sd-jwt_alg_values': ['ES256', 'ES384'],
-          'kb-jwt_alg_values': ['ES256', 'ES384'],
-        },
-      },
-    };
+    const client_metadata = verifierConfig;
 
     const privateKeyPem = 'mock-private-key';
     const clientId = 'did:web:localhost:3000';
-    const presentation_definition_sdJwt = { test: 'presentation_definition' };
+    const presentation_definition_sdJwt = null;
 
     const signedVPJWT = await mockCryptoUtils.buildVpRequestJWT(
       clientId,
@@ -446,19 +436,7 @@ testRouter.get('/id_token_x509_request_dynamic/:id', async (req, res) => {
     const existingCodeSession = await mockCacheService.getCodeFlowSession(uuid);
     const response_uri = 'http://localhost:3000/direct_post_vci/' + (existingCodeSession?.requests?.state || 'test-state');
     
-    const client_metadata = {
-      client_name: 'UAegean EWC Verifier',
-      logo_uri: 'https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png',
-      location: 'Greece',
-      cover_uri: 'string',
-      description: 'EWC pilot case verification',
-      vp_formats: {
-        'vc+sd-jwt': {
-          'sd-jwt_alg_values': ['ES256', 'ES384'],
-          'kb-jwt_alg_values': ['ES256', 'ES384'],
-        },
-      },
-    };
+    const client_metadata = verifierConfig;
     
     const clientId = 'dss.aegean.gr';
     const signedVPJWT = await mockCryptoUtils.buildVpRequestJWT(
@@ -486,23 +464,11 @@ testRouter.get('/id_token_did_request_dynamic/:id', async (req, res) => {
     const existingCodeSession = await mockCacheService.getCodeFlowSession(uuid);
     const response_uri = 'http://localhost:3000/direct_post_vci/' + (existingCodeSession?.requests?.state || 'test-state');
     
-    const client_metadata = {
-      client_name: 'UAegean EWC Verifier',
-      logo_uri: 'https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png',
-      location: 'Greece',
-      cover_uri: 'string',
-      description: 'EWC pilot case verification',
-      vp_formats: {
-        'vc+sd-jwt': {
-          'sd-jwt_alg_values': ['ES256', 'ES384'],
-          'kb-jwt_alg_values': ['ES256', 'ES384'],
-        },
-      },
-    };
+    const client_metadata = verifierConfig;
 
     const privateKeyPem = 'mock-private-key';
     const clientId = 'did:web:localhost:3000';
-    const presentation_definition_sdJwt = { test: 'presentation_definition' };
+    const presentation_definition_sdJwt = null;
 
     const signedVPJWT = await mockCryptoUtils.buildVpRequestJWT(
       clientId,
@@ -789,6 +755,58 @@ describe('Code Flow SD-JWT Routes', () => {
 
       expect(response.header.location).to.include('code=');
       expect(response.header.location).to.include('state=test-state');
+    });
+
+    it('should include request_uri_method=get for dynamic x509 scheme', async () => {
+      const mockSession = {
+        isDynamic: true,
+        client_id_scheme: 'x509_san_dns',
+        requests: { redirectUri: 'openid4vp://' },
+        results: { state: 'test-state' }
+      };
+      mockCacheService.getCodeFlowSession.resolves(mockSession);
+
+      const response = await request(app)
+        .get('/codeflow/authorize')
+        .query({
+          response_type: 'code',
+          issuer_state: 'test-issuer-x509',
+          state: 'test-state',
+          client_id: 'test-client-id',
+          scope: 'urn:eu.europa.ec.eudi:pid:1',
+          client_id_scheme: 'x509_san_dns'
+        })
+        .expect(302);
+
+      expect(response.header.location).to.include('openid4vp://');
+      expect(response.header.location).to.include('request_uri=');
+      expect(response.header.location).to.include('request_uri_method=get');
+    });
+
+    it('should include request_uri_method=get for dynamic did scheme', async () => {
+      const mockSession = {
+        isDynamic: true,
+        client_id_scheme: 'did',
+        requests: { redirectUri: 'openid4vp://' },
+        results: { state: 'test-state' }
+      };
+      mockCacheService.getCodeFlowSession.resolves(mockSession);
+
+      const response = await request(app)
+        .get('/codeflow/authorize')
+        .query({
+          response_type: 'code',
+          issuer_state: 'test-issuer-did',
+          state: 'test-state',
+          client_id: 'test-client-id',
+          scope: 'urn:eu.europa.ec.eudi:pid:1',
+          client_id_scheme: 'did'
+        })
+        .expect(302);
+
+      expect(response.header.location).to.include('openid4vp://');
+      expect(response.header.location).to.include('request_uri=');
+      expect(response.header.location).to.include('request_uri_method=get');
     });
 
     it('should handle dynamic authorization with redirect_uri scheme', async () => {

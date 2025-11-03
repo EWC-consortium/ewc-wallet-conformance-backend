@@ -26,14 +26,10 @@ describe('Direct Post JWT Fixes', () => {
     it('should include encryption metadata for direct_post.jwt', async () => {
       const client_id = 'did:jwk:test';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = {
         client_name: 'Test Verifier',
-        vp_formats: {
-          'dc+sd-jwt': {
-            'sd-jwt_alg_values': ['ES256']
-          }
-        },
         // Add the encryption metadata that should be present
         jwks: {
           keys: [{
@@ -62,7 +58,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null, // dcql_query
+        dcql_query, // dcql_query
         null, // transaction_data
         'direct_post.jwt'
       );
@@ -80,14 +76,10 @@ describe('Direct Post JWT Fixes', () => {
     it('should not include encryption metadata for direct_post', async () => {
       const client_id = 'did:jwk:test';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = {
         client_name: 'Test Verifier',
-        vp_formats: {
-          'dc+sd-jwt': {
-            'sd-jwt_alg_values': ['ES256']
-          }
-        }
       };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -103,7 +95,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null, // dcql_query
+        dcql_query, // dcql_query
         null, // transaction_data
         'direct_post' // Not direct_post.jwt
       );
@@ -119,7 +111,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should set correct audience for direct_post.jwt', async () => {
       const client_id = 'did:jwk:test';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -135,7 +128,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null, // dcql_query
+        dcql_query, // dcql_query
         null, // transaction_data
         'direct_post.jwt'
       );
@@ -149,7 +142,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should set correct audience for dc_api.jwt', async () => {
       const client_id = 'did:jwk:test';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -165,7 +159,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null, // dcql_query
+        dcql_query, // dcql_query
         null, // transaction_data
         'dc_api.jwt'
       );
@@ -253,7 +247,8 @@ describe('Direct Post JWT Fixes', () => {
       for (const mode of validModes) {
         const client_id = 'did:jwk:test';
         const redirect_uri = 'https://example.com/callback';
-        const presentation_definition = { test: 'definition' };
+        const presentation_definition = null;
+        const dcql_query = { test: 'query' };
         const client_metadata = { test: 'metadata' };
         const serverURL = 'https://example.com';
         const nonce = 'test-nonce-123';
@@ -269,7 +264,7 @@ describe('Direct Post JWT Fixes', () => {
           serverURL,
           'vp_token',
           nonce,
-          null,
+          dcql_query,
           null,
           mode
         );
@@ -282,7 +277,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should reject invalid response modes', async () => {
       const client_id = 'did:jwk:test';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -299,7 +295,7 @@ describe('Direct Post JWT Fixes', () => {
           serverURL,
           'vp_token',
           nonce,
-          null,
+          dcql_query,
           null,
           'invalid_mode'
         );
@@ -314,7 +310,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should include response_uri and omit redirect_uri for direct_post', async () => {
       const client_id = 'did:jwk:test';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -330,7 +327,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null,
+        dcql_query,
         null,
         'direct_post'
       );
@@ -343,7 +340,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should include response_uri and omit redirect_uri for direct_post.jwt', async () => {
       const client_id = 'did:jwk:test';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -359,7 +357,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null,
+        dcql_query,
         null,
         'direct_post.jwt'
       );
@@ -374,7 +372,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should not include client_id_scheme and should carry scheme in client_id', async () => {
       const client_id = 'decentralized_identifier:did:web:example.org';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -390,7 +389,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null,
+        dcql_query,
         null,
         'direct_post'
       );
@@ -403,7 +402,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should omit client_metadata for redirect_uri scheme', async () => {
       const client_id = 'redirect_uri:https://verifier.example.org/cb';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -419,7 +419,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null,
+        dcql_query,
         null,
         'direct_post'
       );
@@ -435,7 +435,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should include client_metadata and sign with DID for decentralized_identifier scheme', async () => {
       const client_id = 'decentralized_identifier:did:web:example.org';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -451,7 +452,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null,
+        dcql_query,
         null,
         'direct_post'
       );
@@ -469,7 +470,8 @@ describe('Direct Post JWT Fixes', () => {
       const nonPrefixedId = 'verifier.example.org';
       const client_id = `verifier_attestation:${nonPrefixedId}`;
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -493,7 +495,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null,
+        dcql_query,
         null,
         'direct_post',
         undefined,
@@ -510,7 +512,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should throw if VA-JWT sub does not match non-prefixed client_id', async () => {
       const client_id = `verifier_attestation:verifier.example.org`;
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -533,7 +536,7 @@ describe('Direct Post JWT Fixes', () => {
           serverURL,
           'vp_token',
           nonce,
-          null,
+          dcql_query,
           null,
           'direct_post',
           undefined,
@@ -551,7 +554,8 @@ describe('Direct Post JWT Fixes', () => {
       const nonPrefixedId = 'verifier.example.org';
       const client_id = `verifier_attestation:${nonPrefixedId}`;
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -574,7 +578,7 @@ describe('Direct Post JWT Fixes', () => {
           serverURL,
           'vp_token',
           nonce,
-          null,
+          dcql_query,
           null,
           'direct_post',
           undefined,
@@ -593,7 +597,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should sign with RS256 and include x5c for x509_san_dns', async () => {
       const client_id = 'x509_san_dns:dss.aegean.gr';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -609,7 +614,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null,
+        dcql_query,
         null,
         'direct_post'
       );
@@ -623,7 +628,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should sign with RS256 and include x5c for x509_san_uri', async () => {
       const client_id = 'x509_san_uri:https://verifier.example.org';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -639,7 +645,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null,
+        dcql_query,
         null,
         'direct_post'
       );
@@ -652,7 +658,8 @@ describe('Direct Post JWT Fixes', () => {
 
     it('should require client_id to match leaf cert SHA-256 hash for x509_hash', async () => {
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -675,7 +682,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null,
+        dcql_query,
         null,
         'direct_post'
       );
@@ -689,7 +696,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should throw when x509_hash client_id does not match cert hash', async () => {
       const client_id = 'x509_hash:invalidhash';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -706,7 +714,7 @@ describe('Direct Post JWT Fixes', () => {
           serverURL,
           'vp_token',
           nonce,
-          null,
+          dcql_query,
           null,
           'direct_post'
         );
@@ -718,17 +726,18 @@ describe('Direct Post JWT Fixes', () => {
   });
 
   describe('SD-JWT format identifier migration', () => {
-    it('should advertise dc+sd-jwt in client_metadata.vp_formats (not vc+sd-jwt)', async () => {
+    it('should advertise dc+sd-jwt in client_metadata.vp_formats_supported (not vc+sd-jwt)', async () => {
       const client_id = 'decentralized_identifier:did:web:example.org';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = {
-        vp_formats: {
+        vp_formats_supported: {
           'dc+sd-jwt': {
-            'sd-jwt_alg_values': ['ES256'],
-            'kb-jwt_alg_values': ['ES256']
-          }
-        }
+            'sd-jwt_alg_values': ['ES256', 'ES384'],
+            'kb-jwt_alg_values': ['ES256', 'ES384'],
+          },
+        },
       };
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -744,26 +753,21 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null,
+        dcql_query,
         null,
         'direct_post'
       );
 
       const decoded = jwt.decode(result, { complete: true });
-      expect(decoded.payload.client_metadata).to.have.property('vp_formats');
-      expect(decoded.payload.client_metadata.vp_formats).to.have.property('dc+sd-jwt');
-      expect(decoded.payload.client_metadata.vp_formats).to.not.have.property('vc+sd-jwt');
-      const fmt = decoded.payload.client_metadata.vp_formats['dc+sd-jwt'];
-      expect(fmt).to.have.property('sd-jwt_alg_values');
-      expect(fmt).to.have.property('kb-jwt_alg_values');
-      expect(fmt['sd-jwt_alg_values']).to.be.an('array').that.is.not.empty;
-      expect(fmt['kb-jwt_alg_values']).to.be.an('array').that.is.not.empty;
+      expect(decoded.payload.client_metadata.vp_formats_supported).to.have.property('dc+sd-jwt');
+      expect(decoded.payload.client_metadata.vp_formats_supported).to.not.have.property('vc+sd-jwt');
     });
 
     it('should not introduce legacy vc+sd-jwt when building request object', async () => {
       const client_id = 'decentralized_identifier:did:web:example.org';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { client_name: 'Test' }; // no vp_formats provided
       const serverURL = 'https://example.com';
       const nonce = 'test-nonce-123';
@@ -779,13 +783,13 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         nonce,
-        null,
+        dcql_query,
         null,
         'direct_post'
       );
 
       const decoded = jwt.decode(result, { complete: true });
-      const vpFormats = decoded.payload.client_metadata?.vp_formats;
+      const vpFormats = decoded.payload.client_metadata?.vp_formats_supported;
       if (vpFormats) {
         expect(vpFormats).to.not.have.property('vc+sd-jwt');
       }
@@ -796,7 +800,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should include state with at least 128 bits of entropy for direct_post', async () => {
       const client_id = 'decentralized_identifier:did:web:example.org';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const kid = 'did:web:example.org#keys-1';
@@ -811,7 +816,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         null,
-        null,
+        dcql_query,
         null,
         'direct_post'
       );
@@ -826,7 +831,8 @@ describe('Direct Post JWT Fixes', () => {
     it('should include state with at least 128 bits of entropy for direct_post.jwt', async () => {
       const client_id = 'decentralized_identifier:did:web:example.org';
       const redirect_uri = 'https://example.com/callback';
-      const presentation_definition = { test: 'definition' };
+      const presentation_definition = null;
+      const dcql_query = { test: 'query' };
       const client_metadata = { test: 'metadata' };
       const serverURL = 'https://example.com';
       const kid = 'did:web:example.org#keys-1';
@@ -841,7 +847,7 @@ describe('Direct Post JWT Fixes', () => {
         serverURL,
         'vp_token',
         null,
-        null,
+        dcql_query,
         null,
         'direct_post.jwt'
       );

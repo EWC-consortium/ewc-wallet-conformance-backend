@@ -169,6 +169,61 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
     // Non-PEX flow (e.g., for DCQL) where presentation_submission is not provided.
     console.log("Processing with non-PEX flow (no presentation_submission).");
     try {
+      // Helper to select values from an object using DCQL claim path arrays
+      // Each DCQL path is an array of segments, e.g., ["org.iso.18013.5.1", "family_name"]
+      const selectByDcqlPaths = (sourceObj, dcqlPaths) => {
+        if (!sourceObj || typeof sourceObj !== 'object') return {};
+        const result = {};
+        const setDeep = (obj, pathSegments, value) => {
+          let cursor = obj;
+          for (let i = 0; i < pathSegments.length; i++) {
+            const segment = pathSegments[i];
+            if (i === pathSegments.length - 1) {
+              cursor[segment] = value;
+            } else {
+              if (cursor[segment] === undefined || typeof cursor[segment] !== 'object' || Array.isArray(cursor[segment])) {
+                cursor[segment] = {};
+              }
+              cursor = cursor[segment];
+            }
+          }
+        };
+        const getDeep = (obj, pathSegments) => {
+          let cursor = obj;
+          for (const segment of pathSegments) {
+            if (!cursor || typeof cursor !== 'object') return undefined;
+            cursor = cursor[segment];
+          }
+          return cursor;
+        };
+
+        for (const p of dcqlPaths) {
+          // Support both ["a","b"] and "a.b" just in case
+          const segments = Array.isArray(p) ? p : (typeof p === 'string' ? p.split('.') : []);
+          if (!segments.length) continue;
+          const value = getDeep(sourceObj, segments);
+          if (value !== undefined) {
+            setDeep(result, segments, value);
+          }
+        }
+        return result;
+      };
+
+      // Collect requested DCQL claim paths (arrays of segments)
+      const vpSessionForDcql = await getVPSession(sessionId).catch(() => null);
+      const dcqlClaimPaths = [];
+      if (vpSessionForDcql && vpSessionForDcql.dcql_query && Array.isArray(vpSessionForDcql.dcql_query.credentials)) {
+        for (const cred of vpSessionForDcql.dcql_query.credentials) {
+          if (cred && Array.isArray(cred.claims)) {
+            for (const claim of cred.claims) {
+              if (claim && claim.path) {
+                dcqlClaimPaths.push(claim.path);
+              }
+            }
+          }
+        }
+      }
+
       const tokensToProcess = [];
       if (typeof vpToken === 'object' && vpToken !== null && !Array.isArray(vpToken)) {
         // This is the expected DCQL case. vpToken is an object like { cmwallet: "..." }
@@ -211,16 +266,30 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
                 if (vcJwt.includes("~")) {
                   const decodedVc = await decodeSdJwt(vcJwt, digest);
                   const vcClaims = await getClaims(decodedVc.jwt.payload, decodedVc.disclosures, digest);
-                  extractedClaims.push(vcClaims);
+                  // Apply DCQL claim filtering if dcql_query provided in session
+                  if (dcqlClaimPaths.length > 0) {
+                    extractedClaims.push(selectByDcqlPaths(vcClaims, dcqlClaimPaths));
+                  } else {
+                    extractedClaims.push(vcClaims);
+                  }
                 } else {
                   const decodedVc = await decodeJwtVC(vcJwt);
                   if (decodedVc && decodedVc.payload) {
-                    extractedClaims.push(decodedVc.payload);
+                    if (dcqlClaimPaths.length > 0) {
+                      extractedClaims.push(selectByDcqlPaths(decodedVc.payload, dcqlClaimPaths));
+                    } else {
+                      extractedClaims.push(decodedVc.payload);
+                    }
                   }
                 }
               }
             } else {
-              extractedClaims.push(claims); // single VC
+              // single VC
+              if (dcqlClaimPaths.length > 0) {
+                extractedClaims.push(selectByDcqlPaths(claims, dcqlClaimPaths));
+              } else {
+                extractedClaims.push(claims);
+              }
             }
           } else { // Handle standard JWT
             const decodedJwt = await decodeJwtVC(token);
@@ -230,11 +299,20 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
                 for (const vcJwt of payload.vp.verifiableCredential) {
                   const decodedVc = await decodeJwtVC(vcJwt);
                   if (decodedVc && decodedVc.payload) {
-                    extractedClaims.push(decodedVc.payload);
+                    if (dcqlClaimPaths.length > 0) {
+                      extractedClaims.push(selectByDcqlPaths(decodedVc.payload, dcqlClaimPaths));
+                    } else {
+                      extractedClaims.push(decodedVc.payload);
+                    }
                   }
                 }
               } else {
-                extractedClaims.push(payload); // single VC
+                // single VC
+                if (dcqlClaimPaths.length > 0) {
+                  extractedClaims.push(selectByDcqlPaths(payload, dcqlClaimPaths));
+                } else {
+                  extractedClaims.push(payload);
+                }
               }
             } else {
                console.warn("Could not decode non-SD-JWT, skipping:", token);

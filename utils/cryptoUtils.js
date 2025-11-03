@@ -162,7 +162,8 @@ buildVpRequestJWT(
     state: state,
     // For redirect_uri scheme, client_metadata MUST be omitted (wallet discovers metadata)
     ...(isRedirectUriScheme ? {} : { client_metadata: client_metadata }),
-    iss: client_id,
+    // NOTE: Per OpenID4VP, wallets MUST ignore an iss claim in the authorization request.
+    // To avoid confusion for implementers, we intentionally omit iss here.
     aud: audience, // Use the audience parameter
   };
 
@@ -200,12 +201,12 @@ buildVpRequestJWT(
   // console.log("wallet_nonce", wallet_nonce);
   if(wallet_nonce) jwtPayload.wallet_nonce = wallet_nonce;
 
-  // Add presentation_definition if provided and no dcql_query
-  if (presentation_definition && !dcql_query) {
-    jwtPayload.presentation_definition = presentation_definition;
+  // OpenID4VP v1.0: Only DCQL is supported; PEX (presentation_definition) is not supported
+  if (presentation_definition) {
+    throw new Error("Presentation Exchange (presentation_definition) is not supported; use dcql_query per OpenID4VP 1.0");
   }
 
-  // Add dcql_query if provided
+  // Add dcql_query if provided (required in place of PEX)
   if (dcql_query) {
     jwtPayload.dcql_query = dcql_query;
   }
@@ -478,7 +479,8 @@ export async function buildPaymentVpRequestJWT(
     nonce: nonce,
     state: state,
     client_metadata: client_metadata, //
-    iss: client_id,//serverURL,
+    // NOTE: Per OpenID4VP, wallets MUST ignore an iss claim in the authorization request.
+    // To avoid confusion for implementers, we intentionally omit iss here.
     aud: "https://self-issued.me/v2",
     scope: "openid",
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 1, // Token expiration time (1 days)

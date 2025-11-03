@@ -268,7 +268,7 @@ function handleX509Scheme(existingCodeSession, requestData) {
 
   const request_uri = `${SERVER_URL}/x509VPrequest_dynamic/${issuerState}`;
   const clientId = "dss.aegean.gr";
-  const vpRequest = `openid4vp://?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(request_uri)}`;
+  const vpRequest = `openid4vp://?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(request_uri)}&request_uri_method=get`;
 
   return vpRequest;
 }
@@ -298,7 +298,7 @@ function handleDidScheme(existingCodeSession, requestData) {
 
   const controller = buildDidController();
   const clientId = `did:web:${controller}`;
-  const vpRequest = `openid4vp://?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(request_uri)}`;
+  const vpRequest = `openid4vp://?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(request_uri)}&request_uri_method=get`;
 
   return vpRequest;
 }
@@ -309,7 +309,7 @@ function handlePaymentScheme(existingCodeSession, requestData) {
   console.log("client_id_scheme payment");
   const request_uri = `${SERVER_URL}/payment-request/${issuerState}`;
   const clientId = "dss.aegean.gr";
-  const vpRequest = `openid4vp://?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(request_uri)}`;
+  const vpRequest = `openid4vp://?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(request_uri)}&request_uri_method=get`;
 
   return vpRequest;
 }

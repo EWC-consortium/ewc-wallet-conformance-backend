@@ -34,7 +34,7 @@ export const CLIENT_METADATA = {
   location: "Greece",
   cover_uri: "string",
   description: "EWC pilot case verification",
-  vp_formats: {
+  vp_formats_supported: {
     "dc+sd-jwt": {
       "sd-jwt_alg_values": ["ES256", "ES384"],
       "kb-jwt_alg_values": ["ES256", "ES384"],

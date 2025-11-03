@@ -128,7 +128,8 @@ paymentRouter.post("/generatePaymentRequest", async (req, res) => {
     "openid4vp://?client_id=" +
     encodeURIComponent(client_id) +
     "&request_uri=" +
-    encodeURIComponent(request_uri);
+    encodeURIComponent(request_uri) +
+    "&request_uri_method=get";
 
   console.log(`pushing to sessions ${uuid}`);
   storeVPSession(uuid, {
@@ -172,11 +173,7 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
     location: "Greece",
     cover_uri: "string",
     description: "EWC pilot merchant",
-    vp_formats: {
-      jwt_vp: {
-        alg: ["EdDSA", "ES256K"],
-      },
-    },
+
   };
 
   const clientId = "dss.aegean.gr"; // serverURL.replace("https://","") // ; //TODO this should match the server url (without http stuff)
