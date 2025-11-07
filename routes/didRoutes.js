@@ -100,6 +100,8 @@ didRouter.get("/generateVPRequest", async (req, res) => {
   //     .sign(privateKeyObj);
   // const verifier_attestations = [{format:"jwt", "data": attestationJwt}];
 
+  const verifier_attestations = null;
+
   storeVPSession(uuid, {
     uuid: uuid,
     status: "pending",

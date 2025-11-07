@@ -294,6 +294,26 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
         if (existingCodeSession) {
           // authorizationDetails =existingCodeSession.authorization_details;
           let scope = existingCodeSession.scope;
+          let parsedAuthDetails = authorizationDetails || existingCodeSession.authorization_details;
+          let chosenCredentialConfigurationId = existingCodeSession.chosenCredentialConfigurationId || scope;
+
+          if (parsedAuthDetails) {
+            try {
+              if (typeof parsedAuthDetails === "string") {
+                parsedAuthDetails = JSON.parse(decodeURIComponent(parsedAuthDetails));
+              }
+
+              if (Array.isArray(parsedAuthDetails) && parsedAuthDetails.length > 0) {
+                const first = parsedAuthDetails[0];
+                if (first && typeof first === "object" && first.credential_configuration_id) {
+                  chosenCredentialConfigurationId = first.credential_configuration_id;
+                  existingCodeSession.chosenCredentialConfigurationId = chosenCredentialConfigurationId;
+                }
+              }
+            } catch (e) {
+              console.error("Error parsing authorization_details for authorization_code flow:", e);
+            }
+          }
 
           const pkceVerified = await validatePKCE(
             existingCodeSession,
@@ -334,11 +354,32 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
             // c_nonce: cNonceForSession,
             // c_nonce_expires_in: 86400, removed in ID2
           };
-          if (authorizationDetails) {
-            parsedAuthDetails.credential_identifiers = [
-              chosenCredentialConfigurationId,
-            ];
-            tokenResponse.authorization_details = parsedAuthDetails;
+          if (parsedAuthDetails) {
+            try {
+              if (Array.isArray(parsedAuthDetails)) {
+                parsedAuthDetails = parsedAuthDetails.map((detail, idx) => {
+                  if (detail && typeof detail === "object") {
+                    return {
+                      ...detail,
+                      credential_identifiers: [
+                        chosenCredentialConfigurationId || detail.credential_configuration_id || scope,
+                      ],
+                    };
+                  }
+                  return detail;
+                });
+              } else if (typeof parsedAuthDetails === "object") {
+                parsedAuthDetails = {
+                  ...parsedAuthDetails,
+                  credential_identifiers: [
+                    chosenCredentialConfigurationId || parsedAuthDetails.credential_configuration_id || scope,
+                  ],
+                };
+              }
+              tokenResponse.authorization_details = parsedAuthDetails;
+            } catch (e) {
+              console.error("Error enriching authorization_details for token response:", e);
+            }
           }
           // else{
           //   tokenResponse.authorization_details = [
