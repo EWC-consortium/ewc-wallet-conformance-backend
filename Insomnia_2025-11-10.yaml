@@ -1,0 +1,436 @@
+_type: export
+__export_format: 4
+__export_date: 2025-11-10T20:37:21.495Z
+__export_source: insomnia.desktop.app:v2021.4.0
+resources:
+  - _id: req_89a83e2648fe403597ed308600a3feb8
+    parentId: fld_624176e56b804d2caaf0e813db0abe49
+    modified: 1762806427356
+    created: 1762806344516
+    url: http://localhost:3000/mdl/generateVPRequest?sessionId=123455&response_mode=direct_post
+    name: x509, GET, mDL request
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762806344516
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: fld_624176e56b804d2caaf0e813db0abe49
+    parentId: fld_4ca08fda40314c5599d9df80ba85b75f
+    modified: 1762787483071
+    created: 1762787483071
+    name: vp1.0
+    description: ""
+    environment: {}
+    environmentPropertyOrder: null
+    metaSortKey: -1762787483071
+    _type: request_group
+  - _id: fld_4ca08fda40314c5599d9df80ba85b75f
+    parentId: wrk_2bedc52299204c2c8ee7a94a4a38ae05
+    modified: 1711703048577
+    created: 1711703048577
+    name: local
+    description: ""
+    environment: {}
+    environmentPropertyOrder: null
+    metaSortKey: -1711703048577
+    _type: request_group
+  - _id: wrk_2bedc52299204c2c8ee7a94a4a38ae05
+    parentId: null
+    modified: 1710947591977
+    created: 1710947591977
+    name: RFC_Issuer
+    description: ""
+    scope: collection
+    _type: workspace
+  - _id: req_f7ab4ba7cf844c628b019372039c7fc0
+    parentId: fld_624176e56b804d2caaf0e813db0abe49
+    modified: 1762806275715
+    created: 1762806191644
+    url: http://localhost:3000/did-jwk/generateVPRequestDCQL?sessionId=1234&response_mode=direct_post.jwt
+    name: did:jwk, POST, direct_post.jwt
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762806191644
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_a3e366647366411bb4ddeac6889025c5
+    parentId: fld_624176e56b804d2caaf0e813db0abe49
+    modified: 1762806109520
+    created: 1762806086249
+    url: http://localhost:3000/did-jwk/generateVPRequestDCQL?sessionId=123456&response_mode=direct_post
+    name: did:jwk, POST, DCQL
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762806086249
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_dab468cd23814cf1a4f9788716001c32
+    parentId: fld_624176e56b804d2caaf0e813db0abe49
+    modified: 1762806077525
+    created: 1762791639717
+    url: http://localhost:3000/did-jwk/generateVPRequestDCQLGET?sessionId=1233&response_mode=direct_post
+    name: did:jwk, GET, DCQL
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762791639717
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_288f936964164d66ac6f849a016dd745
+    parentId: fld_624176e56b804d2caaf0e813db0abe49
+    modified: 1762791598009
+    created: 1762791527757
+    url: http://localhost:3000/did/generateVPRequestDCQL?sessionId=123&response_mode=direct_post
+    name: did:web, POST, DCQL
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762791527758
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_116aef4023ac443889908c8f82973eee
+    parentId: fld_624176e56b804d2caaf0e813db0abe49
+    modified: 1762791452133
+    created: 1762791401103
+    url: http://localhost:3000/x509/generateVPRequestDCQLGET?sessionId=11111&response_mode=direct_post
+    name: x509, POST, tx-data payload
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762791401103
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_854b479db3e64cca8529c1d5e32ba81a
+    parentId: fld_624176e56b804d2caaf0e813db0abe49
+    modified: 1762791363730
+    created: 1762791353450
+    url: http://localhost:3000/x509/generateVPRequestDCQLGET?sessionId=123&response_mode=direct_post
+    name: RFC002 x509, GET, DCQL
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762791353450
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_72be74ae359d4689809ce93ec516e99b
+    parentId: fld_624176e56b804d2caaf0e813db0abe49
+    modified: 1762791247333
+    created: 1762787595870
+    url: http://localhost:3000/x509/generateVPRequestDCQL?sessionId=121121&response_mode=direct_post.jwt
+    name: x509, POST, direct_post.jwt
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762787595870
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_3c6f3d8432f04520b07b5b1d228a8e90
+    parentId: fld_624176e56b804d2caaf0e813db0abe49
+    modified: 1762787517465
+    created: 1762787499815
+    url: http://localhost:3000/x509/generateVPRequestDCQL?sessionId=1234&response_mode=direct_post
+    name: x509, POST, DCQL query
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762787499815
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_7727008708534642912cab7a3240c73a
+    parentId: fld_577673557ccc407e9427747e32960f04
+    modified: 1762787476047
+    created: 1762787461357
+    url: http://localhost:3000/offer-no-code?credentialType=org.iso.18013.5.1.mDL&sessionId=12334&signatureType=x509
+    name: Pre-auth, no PIN, mDL
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762787461357
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: fld_577673557ccc407e9427747e32960f04
+    parentId: fld_4ca08fda40314c5599d9df80ba85b75f
+    modified: 1762786224064
+    created: 1762786224064
+    name: vci1.0
+    description: ""
+    environment: {}
+    environmentPropertyOrder: null
+    metaSortKey: -1762786224064
+    _type: request_group
+  - _id: req_569a5f905b4f4f629122b7e22015e7cb
+    parentId: fld_577673557ccc407e9427747e32960f04
+    modified: 1762787448205
+    created: 1762787433202
+    url: http://localhost:3000/offer-tx-code?credentialType=urn:eu.europa.ec.eudi:pid:1&sessionId=12333&signatureType=x509
+    name: Pre-auth, tx-code (PIN), SD-JWT, X.509
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762787433202
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_6df506ce190047c9a233d825277633f0
+    parentId: fld_577673557ccc407e9427747e32960f04
+    modified: 1762787420260
+    created: 1762787405614
+    url: http://localhost:3000/offer-no-code?credentialType=urn:eu.europa.ec.eudi:pid:1&sessionId=123&signatureType=x509
+    name: Pre-auth, no PIN, SD-JWT, X.509
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762787405614
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_fd78e1dd921d45c68ee2f0307d367093
+    parentId: fld_577673557ccc407e9427747e32960f04
+    modified: 1762787383190
+    created: 1762787355459
+    url: http://localhost:3000/offer-code-sd-jwt?credentialType=org.iso.18013.5.1.mDL&sessionId=12345&client_id_scheme=x509_san_dns&signatureType=x509
+    name: Auth code, mDL, X.509 signer
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762787355459
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_750280e627914753844e9a69a74c81d4
+    parentId: fld_577673557ccc407e9427747e32960f04
+    modified: 1762787337292
+    created: 1762787314292
+    url: http://localhost:3000/offer-code-sd-jwt?credentialType=urn:eu.europa.ec.eudi:pid:1&sessionId=1234&client_id_scheme=x509_san_dns&signatureType=did:web
+    name: Auth code, SD-JWT, did:web signer
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762787314292
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_1290d29602fb448f97cbff244110ccb3
+    parentId: fld_577673557ccc407e9427747e32960f04
+    modified: 1762786458017
+    created: 1762786416287
+    url: http://localhost:3000/offer-code-sd-jwt?credentialType=urn:eu.europa.ec.eudi:pid:1&sessionId=<SESSION_ID>&client_id_scheme=x509_san_dns&signatureType=kid-jwk
+    name: Auth code, SD-JWT, kid-referenced JWK
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762786416287
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_5b1e8623cf5c4f9c8589fcf19d143090
+    parentId: fld_577673557ccc407e9427747e32960f04
+    modified: 1762786403664
+    created: 1762786375923
+    url: http://localhost:3000/offer-code-sd-jwt?credentialType=urn:eu.europa.ec.eudi:pid:1&sessionId=1234&client_id_scheme=x509_san_dns&signatureType=jwk
+    name: Auth code, SD-JWT, embedded JWK
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762786375923
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: req_46cb26c1fb024d5d8e0093752d08ebd9
+    parentId: fld_577673557ccc407e9427747e32960f04
+    modified: 1762786248195
+    created: 1762786238025
+    url: http://localhost:3000/offer-code-sd-jwt?credentialType=urn:eu.europa.ec.eudi:pid:1&sessionId=123&client_id_scheme=x509_san_dns&signatureType=x509
+    name: Auth code, SD-JWT, X.509 signer
+    description: ""
+    method: GET
+    body: {}
+    parameters: []
+    headers: []
+    authentication: {}
+    metaSortKey: -1762786238025
+    isPrivate: false
+    settingStoreCookies: true
+    settingSendCookies: true
+    settingDisableRenderRequestBody: false
+    settingEncodeUrl: true
+    settingRebuildPath: true
+    settingFollowRedirects: global
+    _type: request
+  - _id: env_50007f56f650ca7c88eb227887f9042a2a74a76a
+    parentId: wrk_2bedc52299204c2c8ee7a94a4a38ae05
+    modified: 1710947592230
+    created: 1710947592230
+    name: Base Environment
+    data: {}
+    dataPropertyOrder: null
+    color: null
+    isPrivate: false
+    metaSortKey: 1710947592230
+    _type: environment
+  - _id: jar_50007f56f650ca7c88eb227887f9042a2a74a76a
+    parentId: wrk_2bedc52299204c2c8ee7a94a4a38ae05
+    modified: 1762167180671
+    created: 1710947592247
+    name: Default Jar
+    cookies:
+      - key: JSESSIONID
+        value: 7F01CB2A82F0793DAC5CFC1527AA09EA
+        domain: demo.certification.openid.net
+        path: /
+        secure: true
+        httpOnly: true
+        hostOnly: true
+        creation: 2025-11-03T10:53:00.662Z
+        lastAccessed: 2025-11-03T10:53:00.662Z
+        id: "22320896956796443"
+    _type: cookie_jar
+  - _id: spc_72ff03617c2e44ef81d8794c0c166fdf
+    parentId: wrk_2bedc52299204c2c8ee7a94a4a38ae05
+    modified: 1710947591982
+    created: 1710947591982
+    fileName: RFC_Issuer
+    contents: ""
+    contentType: yaml
+    _type: api_spec

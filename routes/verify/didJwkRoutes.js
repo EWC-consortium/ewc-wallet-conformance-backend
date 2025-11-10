@@ -49,8 +49,9 @@ const didJwkIdentifier = generateDidJwkIdentifier(privateKey);
  * Generate VP request with presentation definition
  */
 didJwkRouter.get("/generateVPRequest", async (req, res) => {
+  const sessionId = req.query.sessionId || uuidv4();
   try {
-    const sessionId = req.query.sessionId || uuidv4();
+    
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
     const { client_id, kid } = generateDidJwkIdentifiers(didJwkIdentifier);
     

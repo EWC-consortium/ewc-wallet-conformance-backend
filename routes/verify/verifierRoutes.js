@@ -518,6 +518,12 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       });
       
       try {
+        let vpToken;
+        let decodedVpToken;
+        let primaryVpJwt;
+        let decryptedResponseNonce; // Nonce from decrypted response payload (VP 1.0)
+        let outerJwtPayload; // The outer Authorization Response JWT payload
+
         // Check if it's encrypted (JWE has 5 parts)
         if (jwtResponse.split('.').length === 5) {
           console.log("Processing encrypted JWE response for direct_post.jwt");
@@ -530,32 +536,184 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             decryptedType: typeof decrypted
           });
           
-          let vpToken;
-          
           if (typeof decrypted === 'string') {
             // OpenID4VP spec compliant: JWE decrypted to JWT string
             console.log("Processing JWT string from JWE (per OpenID4VP spec)");
             const decodedPayload = jwt.decode(decrypted);
             vpToken = decodedPayload?.vp_token;
             
+            // In VP 1.0, nonce may be in the decoded JWT payload itself
+            if (decodedPayload?.nonce && typeof decodedPayload.nonce === 'string') {
+              await logDebug(sessionId, "Found nonce in decoded JWT payload", {
+                nonce: decodedPayload.nonce
+              });
+              decryptedResponseNonce = decodedPayload.nonce;
+            }
+            
             if (!vpToken) {
               console.log("No VP token in decrypted JWT response");
               return res.status(400).json({ error: "No VP token in decrypted JWT response" });
             }
+            if (typeof vpToken === 'string') {
+              primaryVpJwt = vpToken;
+            }
           } else if (decrypted && decrypted.vp_token) {
             // Wallet-specific behavior: JWE decrypted to payload object
             console.log("Processing payload object from JWE (wallet-specific behavior)");
+            await logDebug(sessionId, "Decrypted payload keys", {
+              allKeys: Object.keys(decrypted),
+              hasNonce: 'nonce' in decrypted,
+              hasVpToken: 'vp_token' in decrypted
+            });
             vpToken = decrypted.vp_token;
+            
+            // Handle case where vp_token is JSON-stringified (wallet quirk)
+            if (typeof vpToken === 'string' && (vpToken.trim().startsWith('{') || vpToken.trim().startsWith('['))) {
+              try {
+                const parsed = JSON.parse(vpToken);
+                await logDebug(sessionId, "VP token was JSON-stringified, parsed successfully", {
+                  originalType: 'string',
+                  parsedType: typeof parsed,
+                  isArray: Array.isArray(parsed),
+                  keys: typeof parsed === 'object' && parsed !== null ? Object.keys(parsed) : 'N/A'
+                });
+                vpToken = parsed;
+              } catch (parseError) {
+                await logWarn(sessionId, "Failed to parse JSON-stringified vp_token", {
+                  error: parseError.message
+                });
+                // Keep as string, maybe it's actually an SD-JWT
+              }
+            }
+            // await logDebug(sessionId, "vp_token object received", {
+            //   keys: Object.keys(vpToken),
+            //   types: Object.fromEntries(
+            //     Object.entries(vpToken).map(([key, value]) => [key, Array.isArray(value) ? 'array' : typeof value])
+            //   )
+            // });
+            
+            // In VP 1.0, nonce may be in the decrypted response payload itself
+            if (decrypted.nonce && typeof decrypted.nonce === 'string') {
+              await logDebug(sessionId, "Found nonce in decrypted response payload", {
+                nonce: decrypted.nonce
+              });
+              // Store for later nonce verification
+              decryptedResponseNonce = decrypted.nonce;
+            }
+            
+            // VP 1.0: For encrypted responses, state acts as the correlation mechanism
+            // The wallet includes state in the encrypted payload for verification
+            if (decrypted.state && typeof decrypted.state === 'string') {
+              await logDebug(sessionId, "Found state in decrypted response payload (VP 1.0)", {
+                state: decrypted.state
+              });
+              // Verify state matches the session
+              if (vpSession.state && decrypted.state !== vpSession.state) {
+                await logError(sessionId, "State mismatch in encrypted response", {
+                  expected: vpSession.state,
+                  received: decrypted.state
+                });
+                return res.status(400).json({ error: "State mismatch in encrypted response" });
+              }
+            }
           } else {
             return res.status(400).json({ error: "Failed to decrypt JWE response or no vp_token found" });
           }
           
           console.log("Extracted vp_token for processing");
           
+          // Debug: Log the actual VP token structure before processing
+          await logDebug(sessionId, "VP token full structure", {
+            type: typeof vpToken,
+            isObject: typeof vpToken === 'object' && vpToken !== null,
+            isArray: Array.isArray(vpToken),
+            isString: typeof vpToken === 'string',
+            stringLength: typeof vpToken === 'string' ? vpToken.length : 'N/A',
+            keys: typeof vpToken === 'object' && vpToken !== null ? Object.keys(vpToken) : 'N/A',
+            valueTypes: typeof vpToken === 'object' && vpToken !== null 
+              ? Object.fromEntries(Object.entries(vpToken).map(([k, v]) => [k, Array.isArray(v) ? `array[${v.length}]` : typeof v]))
+              : 'N/A'
+          });
+          
+          // If vpToken is a string, analyze it
+          if (typeof vpToken === 'string') {
+            const tildeCount = (vpToken.match(/~/g) || []).length;
+            const lastTildeIndex = vpToken.lastIndexOf('~');
+            const hasKeyBinding = lastTildeIndex > 0 && lastTildeIndex < vpToken.length - 1;
+            await logDebug(sessionId, "VP token string analysis", {
+              length: vpToken.length,
+              tildeCount,
+              hasKeyBinding,
+              startsWithEyJ: vpToken.startsWith('eyJ'),
+              preview: vpToken.substring(0, 150) + '...',
+              lastSegmentPreview: hasKeyBinding 
+                ? vpToken.substring(lastTildeIndex + 1, Math.min(lastTildeIndex + 151, vpToken.length))
+                : 'No key-binding segment found',
+              tokenEnd: vpToken.substring(Math.max(0, vpToken.length - 200))
+            });
+          }
+          
+          if (typeof vpToken === 'object' && vpToken !== null) {
+            for (const [key, value] of Object.entries(vpToken)) {
+              if (typeof value === 'string') {
+                const tildeCount = (value.match(/~/g) || []).length;
+                await logDebug(sessionId, `VP token credential [${key}]`, {
+                  length: value.length,
+                  tildeCount,
+                  hasKeyBinding: tildeCount >= 1, // SD-JWT format: issuer-signed~disclosure1~...~keyBindingJWT
+                  preview: value.substring(0, 200) + '...' + value.substring(value.length - 100)
+                });
+              } else if (Array.isArray(value)) {
+                await logDebug(sessionId, `VP token credential [${key}] is array`, {
+                  arrayLength: value.length,
+                  firstItemType: value.length > 0 ? typeof value[0] : 'N/A',
+                  firstItemPreview: value.length > 0 && typeof value[0] === 'string' 
+                    ? value[0].substring(0, 100) + '...'
+                    : 'N/A'
+                });
+                // Check each item in the array for SD-JWT key-binding
+                for (let i = 0; i < value.length; i++) {
+                  if (typeof value[i] === 'string') {
+                    const tildeCount = (value[i].match(/~/g) || []).length;
+                    const lastTildeIndex = value[i].lastIndexOf('~');
+                    const hasKeyBinding = lastTildeIndex > 0 && lastTildeIndex < value[i].length - 1;
+                    await logDebug(sessionId, `VP token credential [${key}][${i}] analysis`, {
+                      length: value[i].length,
+                      tildeCount,
+                      hasKeyBinding,
+                      lastSegmentPreview: hasKeyBinding 
+                        ? value[i].substring(lastTildeIndex + 1, Math.min(lastTildeIndex + 101, value[i].length)) + '...'
+                        : 'No key-binding segment found',
+                      fullTokenEnd: value[i].substring(Math.max(0, value[i].length - 150))
+                    });
+                  }
+                }
+              } else {
+                await logDebug(sessionId, `VP token credential [${key}] unexpected type`, {
+                  type: typeof value
+                });
+              }
+            }
+          }
+          
           // Process the VP token as before
-          const result = await extractClaimsFromRequest({ body: { vp_token: vpToken } }, digest);
+          const result = await extractClaimsFromRequest(
+            { body: { vp_token: vpToken }, params: { id: sessionId } },
+            digest
+          );
           claimsFromExtraction = result.extractedClaims;
           jwtFromKeybind = result.keybindJwt;
+          
+          await logDebug(sessionId, "After extractClaimsFromRequest", {
+            resultKeys: Object.keys(result),
+            hasKeybindJwt: 'keybindJwt' in result,
+            keybindJwtValue: result.keybindJwt,
+            keybindJwtType: typeof result.keybindJwt,
+            keybindJwtAvailable: !!result.keybindJwt,
+            keybindJwtKeys: result.keybindJwt && typeof result.keybindJwt === 'object' ? Object.keys(result.keybindJwt) : 'N/A',
+            keybindJwtPayload: result.keybindJwt && result.keybindJwt.payload ? Object.keys(result.keybindJwt.payload) : 'N/A',
+            claimsCount: result.extractedClaims ? result.extractedClaims.length : 0
+          });
         } else {
           console.log("Processing unencrypted JWT response for direct_post.jwt");
           // If not encrypted, just verify the signed JWT
@@ -567,27 +725,102 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             console.log("No VP token in JWT response");
             return res.status(400).json({ error: "No VP token in JWT response" });
           }
+          if (typeof vpToken === 'string') {
+            primaryVpJwt = vpToken;
+          }
+          
+          // In VP 1.0, nonce may be in the response JWT payload itself
+          if (decodedJWT?.nonce && typeof decodedJWT.nonce === 'string') {
+            await logDebug(sessionId, "Found nonce in response JWT payload", {
+              nonce: decodedJWT.nonce
+            });
+            decryptedResponseNonce = decodedJWT.nonce;
+          }
           
           // Process the VP token as before
-          const result = await extractClaimsFromRequest({ body: { vp_token: vpToken } }, digest);
+          const result = await extractClaimsFromRequest(
+            { body: { vp_token: vpToken }, params: { id: sessionId } },
+            digest
+          );
           claimsFromExtraction = result.extractedClaims;
           jwtFromKeybind = result.keybindJwt;
         }
 
         // Verify nonce
         let submittedNonce;
-        if (jwtFromKeybind && jwtFromKeybind.payload) {
+        
+        // In VP 1.0 direct_post.jwt, nonce is typically in the response JWT payload itself
+        if (decryptedResponseNonce) {
+          submittedNonce = decryptedResponseNonce;
+          await logDebug(sessionId, "Using nonce from response payload", {
+            nonce: submittedNonce
+          });
+        }
+        
+        if (!primaryVpJwt && typeof vpToken === 'object' && vpToken !== null) {
+          for (const value of Object.values(vpToken)) {
+            if (typeof value === 'string') {
+              primaryVpJwt = value;
+              break;
+            } else if (Array.isArray(value)) {
+              const firstString = value.find((item) => typeof item === 'string');
+              if (firstString) {
+                primaryVpJwt = firstString;
+                break;
+              }
+            }
+          }
+        }
+
+        if (!submittedNonce && jwtFromKeybind && jwtFromKeybind.payload) {
           submittedNonce = jwtFromKeybind.payload.nonce;
-        } else {
-          let decodedVpToken = jwt.decode(vpToken, { complete: true });
+        }
+
+        if (!submittedNonce) {
+          if (!decodedVpToken && primaryVpJwt && typeof primaryVpJwt === 'string') {
+            decodedVpToken = jwt.decode(primaryVpJwt, { complete: true });
+          } else if (!decodedVpToken && typeof vpToken === 'string') {
+            decodedVpToken = jwt.decode(vpToken, { complete: true });
+          }
+
           if (decodedVpToken && decodedVpToken.payload) {
             submittedNonce = decodedVpToken.payload.nonce;
+
+            if (!submittedNonce && decodedVpToken.payload.vp_token) {
+              try {
+                const nestedDecoded = jwt.decode(decodedVpToken.payload.vp_token, { complete: true });
+                if (nestedDecoded?.payload?.nonce) {
+                  submittedNonce = nestedDecoded.payload.nonce;
+                }
+              } catch (innerDecodeError) {
+                console.warn("Failed to decode nested vp_token for nonce extraction:", innerDecodeError);
+              }
+            }
+          }
+        }
+
+        if (!submittedNonce && typeof vpToken === 'object' && vpToken !== null) {
+          if (typeof vpToken.nonce === 'string') {
+            submittedNonce = vpToken.nonce;
+          } else if (vpToken.proof && typeof vpToken.proof.nonce === 'string') {
+            submittedNonce = vpToken.proof.nonce;
           }
         }
 
         if (!submittedNonce) {
           console.log("No submitted nonce found in vp_token");
-          return res.status(400).json({ error: "submitted nonce not found in vp_token" });
+          await logError(sessionId, "VP 1.0 violation: nonce not found in VP token", {
+            message: "Per OpenID4VP 1.0 spec, nonce MUST be in the key-binding JWT of SD-JWT credentials",
+            jwtFromKeybindAvailable: !!jwtFromKeybind,
+            jwtFromKeybindType: typeof jwtFromKeybind,
+            primaryVpJwt: primaryVpJwt ? primaryVpJwt.substring(0, 100) + '...' : 'none',
+            vpTokenType: typeof vpToken,
+            vpTokenIsObject: typeof vpToken === 'object' && vpToken !== null,
+            vpTokenKeys: typeof vpToken === 'object' && vpToken !== null ? Object.keys(vpToken) : 'N/A'
+          });
+          return res.status(400).json({ 
+            error: "submitted nonce not found in vp_token - wallet must include nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec" 
+          });
         }
         
         if (vpSession.nonce != submittedNonce) {

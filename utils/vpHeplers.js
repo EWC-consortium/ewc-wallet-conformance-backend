@@ -265,14 +265,33 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
 
         try {
           if (token.includes("~")) { // Heuristic for SD-JWT
+            console.log(`[DEBUG extractClaimsFromRequest] Processing SD-JWT token, length: ${token.length}, tildes: ${(token.match(/~/g) || []).length}`);
             const decodedSdJwt = await decodeSdJwt(token, digest);
+            console.log(`[DEBUG extractClaimsFromRequest] decodeSdJwt result:`, {
+              hasKbJwt: !!decodedSdJwt.kbJwt,
+              kbJwtType: typeof decodedSdJwt.kbJwt,
+              kbJwtValue: decodedSdJwt.kbJwt 
+                ? (typeof decodedSdJwt.kbJwt === 'string' 
+                    ? decodedSdJwt.kbJwt.substring(0, 100) + '...' 
+                    : JSON.stringify(decodedSdJwt.kbJwt).substring(0, 200))
+                : 'null/undefined',
+              decodedKeys: Object.keys(decodedSdJwt),
+              kbJwtIsObject: typeof decodedSdJwt.kbJwt === 'object',
+              kbJwtKeys: decodedSdJwt.kbJwt && typeof decodedSdJwt.kbJwt === 'object' ? Object.keys(decodedSdJwt.kbJwt) : 'N/A'
+            });
             if (decodedSdJwt.kbJwt) {
               try {
                 keybindJwt = jwt.decode(decodedSdJwt.kbJwt, { complete: true });
+                console.log(`[DEBUG extractClaimsFromRequest] Successfully decoded kbJwt:`, {
+                  hasPayload: !!keybindJwt.payload,
+                  payloadKeys: keybindJwt.payload ? Object.keys(keybindJwt.payload) : 'N/A'
+                });
               } catch (e) {
-                console.warn("Failed to decode kbJwt, passing raw string.");
+                console.warn("Failed to decode kbJwt, passing raw string.", e);
                 keybindJwt = decodedSdJwt.kbJwt;
               }
+            } else {
+              console.warn(`[DEBUG extractClaimsFromRequest] No kbJwt found in decodedSdJwt despite token having tildes`);
             }
             const claims = await getClaims(decodedSdJwt.jwt.payload, decodedSdJwt.disclosures, digest);
 

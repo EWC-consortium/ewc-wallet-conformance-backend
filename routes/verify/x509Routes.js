@@ -247,8 +247,8 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
 x509Router
   .route("/x509VPrequest/:id")
   .post(express.urlencoded({ extended: true }), async (req, res) => {
+    const sessionId = req.params.id;
     try {
-      const sessionId = req.params.id;
       const { wallet_nonce: walletNonce, wallet_metadata: walletMetadata } = req.body;
 
       await logInfo(sessionId, "Processing POST VP request", { 

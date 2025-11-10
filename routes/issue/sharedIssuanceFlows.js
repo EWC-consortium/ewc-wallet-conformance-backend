@@ -175,6 +175,7 @@ const validateCredentialRequest = (requestBody) => {
 
   // V1.0 requires proofs (plural) - reject legacy proof (singular)
   if (requestBody.proof) {
+    console.log("requestBody.proof", requestBody.proof);
     throw new Error(ERROR_MESSAGES.INVALID_PROOF + ": V1.0 requires 'proofs' (plural), not 'proof' (singular)");
   }
 

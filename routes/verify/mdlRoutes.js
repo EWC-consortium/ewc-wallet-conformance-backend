@@ -61,7 +61,8 @@ mdlRouter.get("/generateVPRequest", async (req, res) => {
     const result = await generateVPRequest({
       sessionId,
       responseMode,
-      presentationDefinition: presentationDefinitionMdl,
+      // presentationDefinition: presentationDefinitionMdl,
+      dcql_query: DEFAULT_MDL_DCQL_QUERY,
       clientId: CONFIG.CLIENT_ID,
       privateKey: null,
       clientMetadata,
@@ -145,9 +146,8 @@ mdlRouter
     }
   })
   .get(async (req, res) => {
+    let sessionId = req.params.id;
     try {
-      let sessionId = req.params.id;
-      
       await logInfo(sessionId, "Processing GET mDL VP request", {
         endpoint: "GET /VPrequest/:id",
         hasSessionId: !!sessionId
