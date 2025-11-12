@@ -848,12 +848,14 @@ sharedRouter.post("/nonce", async (req, res) => {
     const newCNonce = generateNonce();
     await storeNonce(newCNonce, NONCE_EXPIRES_IN);
 
+    res.set("Cache-Control", "no-store");
     res.status(200).json({
       c_nonce: newCNonce,
       c_nonce_expires_in: NONCE_EXPIRES_IN,
     });
   } catch (error) {
     console.error("Nonce endpoint error:", error);
+    res.set("Cache-Control", "no-store");
     res.status(500).json({
       error: "server_error",
       error_description: ERROR_MESSAGES.STORAGE_FAILED,
