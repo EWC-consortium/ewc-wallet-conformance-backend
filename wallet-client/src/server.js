@@ -39,13 +39,14 @@ app.post("/issue", async (req, res) => {
     }
 
     const offerConfig = await resolveOfferConfig(deepLink);
+    const offeredConfigurationIds = getOfferedConfigurationIds(offerConfig);
     try {
       console.log("[/issue] offer.credential_issuer=", offerConfig?.credential_issuer);
-      console.log("[/issue] offer.config_ids=", offerConfig?.credential_configuration_ids);
+      console.log("[/issue] offer.config_ids=", offeredConfigurationIds);
       console.log("[/issue] offer.grants=", Object.keys(offerConfig?.grants || {}));
       console.log("[/issue] offer full structure:", JSON.stringify(offerConfig, null, 2));
     } catch {}
-    const { credential_configuration_ids, grants } = offerConfig;
+    const { grants } = offerConfig;
     const apiBase = (offerConfig.credential_issuer || issuerBase).replace(/\/$/, "");
     const issuerMeta = await discoverIssuerMetadata(apiBase);
     try {
@@ -55,7 +56,7 @@ app.post("/issue", async (req, res) => {
       const cfgKeys = Object.keys(issuerMeta?.credential_configurations_supported || {});
       console.log("[/issue] issuerMeta.credential_configurations_supported keys=", cfgKeys.slice(0, 5), cfgKeys.length > 5 ? `(+${cfgKeys.length - 5} more)` : "");
     } catch {}
-    const configurationId = req.body.credential || credential_configuration_ids?.[0];
+    const configurationId = pickConfigurationId(offerConfig, req.body.credential);
     if (!configurationId) {
       console.warn("[/issue] no credential_configuration_id available in offer or request.");
       return res.status(400).json({ error: "invalid_request", error_description: "No credential_configuration_id available" });
@@ -172,12 +173,13 @@ app.post("/session", async (req, res) => {
       const issuerBaseDefault = (req.body.issuer || "http://localhost:3000").replace(/\/$/, "");
       sessionLog("[/session] VCI deepLink:", deepLink);
       const offerCfg = await resolveOfferConfig(deepLink, sessionId);
-      const { credential_configuration_ids, grants } = offerCfg;
+      const offeredConfigurationIds = getOfferedConfigurationIds(offerCfg);
+      const { grants } = offerCfg;
       const apiBase = (offerCfg.credential_issuer || issuerBaseDefault).replace(/\/$/, "");
       const issuerMeta = await discoverIssuerMetadata(apiBase, sessionId);
       try {
         sessionLog("[/session] offer.credential_issuer=", offerCfg?.credential_issuer);
-        sessionLog("[/session] offer.config_ids=", credential_configuration_ids);
+        sessionLog("[/session] offer.config_ids=", offeredConfigurationIds);
         sessionLog("[/session] offer.grants=", Object.keys(grants || {}));
         sessionLog("[/session] offer full structure:", JSON.stringify(offerCfg, null, 2));
         sessionLog("[/session] issuerMeta.token_endpoint=", issuerMeta?.token_endpoint);
@@ -186,7 +188,7 @@ app.post("/session", async (req, res) => {
         const cfgKeys = Object.keys(issuerMeta?.credential_configurations_supported || {});
         sessionLog("[/session] issuerMeta.credential_configurations_supported keys=", cfgKeys.slice(0, 5), cfgKeys.length > 5 ? `(+${cfgKeys.length - 5} more)` : "");
       } catch {}
-      const configurationId = req.body.credential || credential_configuration_ids?.[0];
+      const configurationId = pickConfigurationId(offerCfg, req.body.credential);
       if (!configurationId) {
         console.warn("[/session] no credential_configuration_id available in offer or request. Aborting.");
         const failed = await setStatus("failed", { error: "No credential_configuration_id available" });
@@ -290,13 +292,14 @@ app.post("/issue-codeflow", async (req, res) => {
     if (!deepLink) return res.status(400).json({ error: "invalid_request", error_description: "Missing offer or fetchOfferPath" });
 
     const offerCfg = await resolveOfferConfig(deepLink);
+    const offeredConfigurationIds = getOfferedConfigurationIds(offerCfg);
     try {
       console.log("[/issue-codeflow] offer.credential_issuer=", offerCfg?.credential_issuer);
-      console.log("[/issue-codeflow] offer.config_ids=", offerCfg?.credential_configuration_ids);
+      console.log("[/issue-codeflow] offer.config_ids=", offeredConfigurationIds);
       console.log("[/issue-codeflow] offer.grants=", Object.keys(offerCfg?.grants || {}));
       console.log("[/issue-codeflow] offer full structure:", JSON.stringify(offerCfg, null, 2));
     } catch {}
-    const { credential_configuration_ids, grants } = offerCfg;
+    const { grants } = offerCfg;
     const apiBase = (offerCfg.credential_issuer || issuerBaseInput).replace(/\/$/, "");
     const issuerMeta = await discoverIssuerMetadata(apiBase);
     try {
@@ -318,7 +321,7 @@ app.post("/issue-codeflow", async (req, res) => {
       return res.status(400).json({ error: "unsupported_grant_type", error_description: "authorization_code grant with issuer_state required" });
     }
 
-    const configurationId = req.body.credential || credential_configuration_ids?.[0];
+    const configurationId = pickConfigurationId(offerCfg, req.body.credential);
     if (!configurationId) return res.status(400).json({ error: "invalid_request", error_description: "No credential_configuration_id available" });
 
     const result = await runAuthorizationCodeIssuance({
@@ -356,6 +359,13 @@ async function resolveOfferConfig(deepLink, logSessionId) {
   const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   const url = new URL(deepLink.replace(/^haip:\/\//, "openid-credential-offer://"));
   if (url.protocol !== "openid-credential-offer:") throw new Error("Unsupported offer scheme");
+  const inlineOffer = url.searchParams.get("credential_offer");
+  if (inlineOffer) {
+    const parsed = parseCredentialOfferParam(inlineOffer);
+    try { slog("[offer] parsed inline offer", { hasCredentialIssuer: !!parsed?.credential_issuer, cfgCount: getOfferedConfigurationIds(parsed).length }); } catch {}
+    return parsed;
+  }
+
   const encoded = url.searchParams.get("credential_offer_uri");
   if (!encoded) throw new Error("Missing credential_offer_uri in offer");
   const offerUri = decodeURIComponent(encoded);
@@ -364,8 +374,48 @@ async function resolveOfferConfig(deepLink, logSessionId) {
   console.log("[offer] credential_offer_uri status:", res.status); try { slog("[offer] offer status", { status: res.status }); } catch {}
   if (!res.ok) throw new Error(`Offer-config error ${res.status}`);
   const json = await res.json();
-  try { slog("[offer] offer fetched", { hasCredentialIssuer: !!json?.credential_issuer, cfgCount: (json?.credential_configuration_ids || []).length }); } catch {}
+  try { slog("[offer] offer fetched", { hasCredentialIssuer: !!json?.credential_issuer, cfgCount: getOfferedConfigurationIds(json).length }); } catch {}
   return json;
+}
+
+function parseCredentialOfferParam(value) {
+  const attempts = new Set([value]);
+  try {
+    attempts.add(decodeURIComponent(value));
+  } catch {
+    // ignore decode errors
+  }
+
+  for (const attempt of attempts) {
+    try {
+      return JSON.parse(attempt);
+    } catch {
+      try {
+        const decoded = Buffer.from(attempt, "base64url").toString("utf8");
+        return JSON.parse(decoded);
+      } catch {
+        // continue
+      }
+    }
+  }
+
+  throw new Error("Unable to parse credential_offer parameter");
+}
+
+function getOfferedConfigurationIds(offer) {
+  if (!offer || typeof offer !== "object") return [];
+  const ids = Array.isArray(offer.credential_configuration_ids) ? offer.credential_configuration_ids : [];
+  if (ids.length > 0) return ids;
+  const legacy = offer.credentials;
+  if (Array.isArray(legacy)) return legacy;
+  if (legacy && typeof legacy === "object") return Object.keys(legacy);
+  return [];
+}
+
+function pickConfigurationId(offer, requestedId) {
+  if (requestedId) return requestedId;
+  const ids = getOfferedConfigurationIds(offer);
+  return ids.length > 0 ? ids[0] : undefined;
 }
 
 async function discoverIssuerMetadata(credentialIssuerBase, logSessionId) {
@@ -528,11 +578,20 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   console.log("[preauth] apiBase=", apiBase, "configurationId=", configurationId); try { slog("[preauth] apiBase", { apiBase, configurationId }); } catch {}
   console.log("[preauth] tokenEndpoint=", tokenEndpoint); try { slog("[preauth] tokenEndpoint", { tokenEndpoint }); } catch {}
   console.log("[preauth] requesting token..."); try { slog("[preauth] requesting token"); } catch {}
-  const tokenRes = await httpPostForm(tokenEndpoint, {
+  const tokenAuthzDetails = [
+    {
+      type: "openid_credential",
+      credential_configuration_id: configurationId,
+      ...(issuerMeta?.credential_issuer ? { locations: [issuerMeta.credential_issuer] } : {}),
+    },
+  ];
+  const tokenPayload = {
     grant_type: "urn:ietf:params:oauth:grant-type:pre-authorized_code",
     "pre-authorized_code": preAuthorizedCode,
     ...(txCode ? { tx_code: txCode } : {}),
-  }, logSessionId);
+    authorization_details: JSON.stringify(tokenAuthzDetails),
+  };
+  const tokenRes = await httpPostForm(tokenEndpoint, tokenPayload, logSessionId);
   console.log("[preauth] tokenRes.status=", tokenRes.status); try { slog("[preauth] tokenRes.status", { status: tokenRes.status }); } catch {}
   if (!tokenRes.ok) {
     const text = await tokenRes.text().catch(() => "");
@@ -544,9 +603,10 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   }
   const tokenBody = await tokenRes.json();
   const accessToken = tokenBody.access_token;
-  let c_nonce;
-  console.log("[preauth] got access_token=", accessToken ? "yes" : "no"); try { slog("[preauth] token received", { hasAccessToken: !!accessToken }); } catch {}
-  if (issuerMeta.nonce_endpoint) {
+  let c_nonce = tokenBody.c_nonce;
+  let c_nonce_expires_in = tokenBody.c_nonce_expires_in;
+  console.log("[preauth] got access_token=", accessToken ? "yes" : "no", "c_nonce=", c_nonce ? "yes" : "no"); try { slog("[preauth] token received", { hasAccessToken: !!accessToken, hasCNonce: !!c_nonce }); } catch {}
+  if (!c_nonce && issuerMeta.nonce_endpoint) {
     const nonceEndpoint = issuerMeta.nonce_endpoint;
     console.log("[preauth] nonceEndpoint=", nonceEndpoint); try { slog("[preauth] nonceEndpoint", { nonceEndpoint }); } catch {}
     const nonceRes = await httpPostJson(nonceEndpoint, {}, logSessionId); try { slog("[preauth] nonce request", { endpoint: nonceEndpoint, status: nonceRes.status }); } catch {}
@@ -560,11 +620,9 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
     }
     const nonceJson = await nonceRes.json();
     c_nonce = nonceJson.c_nonce;
-    console.log("[preauth] obtained c_nonce from nonce endpoint"); try { slog("[preauth] obtained c_nonce from nonce endpoint"); } catch {}
-  } else if (tokenBody.c_nonce) {
-    c_nonce = tokenBody.c_nonce;
-    console.log("[preauth] using c_nonce from token response (legacy)"); try { slog("[preauth] using c_nonce from token response (legacy)"); } catch {}
-  } else {
+    c_nonce_expires_in = nonceJson.c_nonce_expires_in;
+    console.log("[preauth] obtained c_nonce from nonce endpoint"); try { slog("[preauth] obtained c_nonce from nonce endpoint", { hasExpiresIn: !!c_nonce_expires_in }); } catch {}
+  } else if (!c_nonce) {
     console.warn("[preauth] no nonce endpoint and no c_nonce from token; proceeding without nonce (may be rejected)"); try { slog("[preauth] no c_nonce available"); } catch {}
   }
 
@@ -587,9 +645,13 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   const credentialEndpoint = issuerMeta.credential_endpoint || `${apiBase}/credential`;
   console.log("[preauth] credentialEndpoint=", credentialEndpoint); try { slog("[preauth] credentialEndpoint", { credentialEndpoint }); } catch {}
   console.log("[preauth] requesting credential..."); try { slog("[preauth] requesting credential"); } catch {}
-  const credReq = { credential_configuration_id: configurationId, proof: { proof_type: "jwt", jwt: proofJwt } };
-  console.log("[preauth] credential request:", JSON.stringify(credReq, null, 2)); try { slog("[preauth] credential request body", { hasBody: true }); } catch {}
-  console.log("[preauth] access_token preview:", accessToken.substring(0, 20) + "..."); try { slog("[preauth] access_token preview", { preview: accessToken.substring(0, 20) + "..." }); } catch {}
+  const credReq = { credential_configuration_id: configurationId, proofs: { jwt: [proofJwt] } };
+  console.log("[preauth] credential request:", JSON.stringify({ ...credReq, proofs: { jwt: ["<redacted>"] } }, null, 2)); try { slog("[preauth] credential request body", { hasBody: true }); } catch {}
+  if (accessToken) {
+    console.log("[preauth] access_token preview:", `${accessToken.substring(0, 20)}...`); try { slog("[preauth] access_token preview", { preview: `${accessToken.substring(0, 20)}...` }); } catch {}
+  } else {
+    console.warn("[preauth] access_token missing in token response"); try { slog("[preauth] access_token missing"); } catch {}
+  }
   try { slog("[preauth] credential request", { configurationId, hasProof: !!proofJwt }); } catch {}
   
   const credRes = await fetch(credentialEndpoint, {
@@ -631,7 +693,7 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
       if (defRes.ok) {
         const body = await defRes.json();
         try { slog("[preauth] deferred ready"); } catch {}
-        await validateAndStoreCredential({ configurationId, credential: body, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce } }, logSessionId);
+        await validateAndStoreCredential({ configurationId, credential: body, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce, c_nonce_expires_in } }, logSessionId);
         return body;
       }
     }
@@ -646,7 +708,7 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   }
   const credBody = await credRes.json();
   try { slog("[preauth] credential received"); } catch {}
-  await validateAndStoreCredential({ configurationId, credential: credBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce } }, logSessionId);
+  await validateAndStoreCredential({ configurationId, credential: credBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce, c_nonce_expires_in } }, logSessionId);
   return credBody;
 }
 
@@ -782,6 +844,7 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   const tokenBody = await tokenRes.json();
   const accessToken = tokenBody.access_token;
   let c_nonce = tokenBody.c_nonce;
+  let c_nonce_expires_in = tokenBody.c_nonce_expires_in;
   console.log("[codeflow] got access_token=", accessToken ? "yes" : "no", "c_nonce=", c_nonce ? "yes" : "no"); try { slog("[codeflow] token received", { hasAccessToken: !!accessToken, hasCNonce: !!c_nonce }); } catch {}
   if (c_nonce) {
     console.log("[codeflow] using c_nonce from token response"); try { slog("[codeflow] using c_nonce from token"); } catch {}
@@ -798,6 +861,7 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
     }
     const nonceJson = await nonceRes.json();
     c_nonce = nonceJson.c_nonce;
+    c_nonce_expires_in = nonceJson.c_nonce_expires_in;
   } else {
     console.log("[codeflow] no c_nonce in token and no nonce_endpoint; proceeding without nonce"); try { slog("[codeflow] no c_nonce available"); } catch {}
   }
@@ -820,7 +884,8 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   const credentialEndpoint = issuerMeta.credential_endpoint || `${apiBase}/credential`;
   console.log("[codeflow] credentialEndpoint=", credentialEndpoint); try { slog("[codeflow] credentialEndpoint", { credentialEndpoint }); } catch {}
   console.log("[codeflow] requesting credential..."); try { slog("[codeflow] requesting credential"); } catch {}
-  const credReq = { credential_configuration_id: configurationId, proof: { proof_type: "jwt", jwt: proofJwt } };
+  const credReq = { credential_configuration_id: configurationId, proofs: { jwt: [proofJwt] } };
+  console.log("[codeflow] credential request:", JSON.stringify({ ...credReq, proofs: { jwt: ["<redacted>"] } }, null, 2)); try { slog("[codeflow] credential request body", { hasBody: true }); } catch {}
   const credRes = await fetch(credentialEndpoint, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
@@ -841,7 +906,7 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
       if (defRes.ok) {
         const body = await defRes.json();
         try { slog("[codeflow] deferred ready"); } catch {}
-        await validateAndStoreCredential({ configurationId, credential: body, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce } }, logSessionId);
+        await validateAndStoreCredential({ configurationId, credential: body, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce, c_nonce_expires_in } }, logSessionId);
         return body;
       }
     }
@@ -856,7 +921,7 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   }
   const credBody = await credRes.json();
   try { slog("[codeflow] credential received"); } catch {}
-  await validateAndStoreCredential({ configurationId, credential: credBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce } }, logSessionId);
+  await validateAndStoreCredential({ configurationId, credential: credBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce, c_nonce_expires_in } }, logSessionId);
   return credBody;
 }
 
@@ -913,22 +978,55 @@ async function validateAndStoreCredential({ configurationId, credential, issuerM
 
 function extractCredentialToken(credentialEnvelope) {
   if (!credentialEnvelope) return null;
-  if (typeof credentialEnvelope === 'string') return credentialEnvelope;
-  if (credentialEnvelope.credential && typeof credentialEnvelope.credential === 'string') return credentialEnvelope.credential;
-  if (credentialEnvelope.credentials) {
-    for (const value of Object.values(credentialEnvelope.credentials)) {
-      if (typeof value === 'string') return value;
-      if (value && typeof value === 'object') {
-        for (const sub of Object.values(value)) {
-          if (typeof sub === 'string') return sub;
-        }
+  if (typeof credentialEnvelope === "string") return credentialEnvelope;
+
+  const seen = new Set();
+  const candidates = [];
+  let fallback = null;
+
+  function isLikelyCredentialString(str) {
+    if (typeof str !== "string") return false;
+    if (str.includes("~")) return true; // SD-JWT
+    if (str.split(".").length >= 3) return true; // JWS-style token
+    if (str.length > 80 && /^[A-Za-z0-9._~-]+$/.test(str)) return true; // base64ish (mdoc, etc.)
+    return false;
+  }
+
+  function visit(value) {
+    if (value === null || typeof value === "undefined") return;
+    if (typeof value === "string") {
+      if (isLikelyCredentialString(value)) {
+        candidates.push(value);
+      } else if (!fallback) {
+        fallback = value;
       }
+      return;
+    }
+
+    if (typeof value !== "object") return;
+    if (seen.has(value)) return;
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      for (const entry of value) visit(entry);
+      return;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(value, "credential")) {
+      visit(value.credential);
+    }
+    if (Object.prototype.hasOwnProperty.call(value, "credentials")) {
+      visit(value.credentials);
+    }
+
+    for (const key of Object.keys(value)) {
+      if (key === "credential" || key === "credentials") continue;
+      visit(value[key]);
     }
   }
-  for (const v of Object.values(credentialEnvelope)) {
-    if (typeof v === 'string') return v;
-  }
-  return null;
+
+  visit(credentialEnvelope);
+  return candidates[0] || fallback;
 }
 
 async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonce }, logSessionId) {

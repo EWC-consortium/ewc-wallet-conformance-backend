@@ -29,13 +29,28 @@ async function main() {
   }
 
   const offerConfig = await resolveOfferConfig(deepLink);
-  const { credential_issuer, credential_configuration_ids, grants } = offerConfig;
+  const {
+    credential_issuer,
+    credential_configuration_ids: offerConfigIds,
+    credentials: legacyCredentialIds,
+    grants,
+  } = offerConfig;
 
-  const configurationId = argv.credential || credential_configuration_ids?.[0];
+  const normalizedConfigIds = Array.isArray(offerConfigIds) && offerConfigIds.length > 0
+    ? offerConfigIds
+    : Array.isArray(legacyCredentialIds)
+      ? legacyCredentialIds
+      : legacyCredentialIds && typeof legacyCredentialIds === "object"
+        ? Object.keys(legacyCredentialIds)
+        : [];
+
+  const configurationId = argv.credential || normalizedConfigIds?.[0];
   if (!configurationId) {
     console.error("No credential_configuration_id available in offer; use --credential");
     process.exit(1);
   }
+
+  const apiBase = (credential_issuer || issuerBase).replace(/\/$/, "");
 
   const preAuthGrant = grants?.["urn:ietf:params:oauth:grant-type:pre-authorized_code"];
   if (!preAuthGrant) {
@@ -46,12 +61,21 @@ async function main() {
   const preAuthorizedCode = preAuthGrant["pre-authorized_code"]; // sessionId
   const txCode = preAuthGrant?.tx_code ? await promptTxCode(preAuthGrant.tx_code) : undefined;
 
-  const tokenEndpoint = `${issuerBase}/token_endpoint`;
-  const tokenRes = await httpPostJson(tokenEndpoint, {
+  const tokenEndpoint = `${apiBase}/token_endpoint`;
+  const authorizationDetails = configurationId ? [{
+    type: "openid_credential",
+    credential_configuration_id: configurationId,
+    ...(credential_issuer ? { locations: [credential_issuer] } : {}),
+  }] : undefined;
+  const tokenPayload = {
     grant_type: "urn:ietf:params:oauth:grant-type:pre-authorized_code",
     "pre-authorized_code": preAuthorizedCode,
     ...(txCode ? { tx_code: txCode } : {}),
-  });
+    ...(authorizationDetails && authorizationDetails.length
+      ? { authorization_details: JSON.stringify(authorizationDetails) }
+      : {}),
+  };
+  const tokenRes = await httpPostJson(tokenEndpoint, tokenPayload);
 
   if (!tokenRes.ok) {
     const err = await tokenRes.json().catch(() => ({}));
@@ -59,15 +83,24 @@ async function main() {
   }
   const tokenBody = await tokenRes.json();
   const accessToken = tokenBody.access_token;
+  let c_nonce = tokenBody.c_nonce;
+  let c_nonce_expires_in = tokenBody.c_nonce_expires_in;
 
-  // get c_nonce from nonce endpoint
-  const nonceEndpoint = `${issuerBase}/nonce`;
-  const nonceRes = await httpPostJson(nonceEndpoint, {});
-  if (!nonceRes.ok) {
-    const err = await nonceRes.json().catch(() => ({}));
-    throw new Error(`Nonce error ${nonceRes.status}: ${JSON.stringify(err)}`);
+  if (!c_nonce) {
+    const nonceEndpoint = `${apiBase}/nonce`;
+    const nonceRes = await httpPostJson(nonceEndpoint, {});
+    if (!nonceRes.ok) {
+      const err = await nonceRes.json().catch(() => ({}));
+      throw new Error(`Nonce error ${nonceRes.status}: ${JSON.stringify(err)}`);
+    }
+    const nonceJson = await nonceRes.json();
+    c_nonce = nonceJson.c_nonce;
+    c_nonce_expires_in = nonceJson.c_nonce_expires_in;
   }
-  const { c_nonce } = await nonceRes.json();
+
+  if (!c_nonce) {
+    throw new Error("Issuer did not provide c_nonce; cannot complete proof-of-possession flow.");
+  }
 
   // key management
   // In CLI mode we don't fetch issuerMeta; default to ES256 or allow override later if needed
@@ -78,7 +111,7 @@ async function main() {
   const proofJwt = await createProofJwt({
     privateJwk,
     publicJwk,
-    audience: issuerBase,
+    audience: credential_issuer || issuerBase,
     nonce: c_nonce,
     issuer: didJwk,
     typ: "openid4vci-proof+jwt",
@@ -86,10 +119,10 @@ async function main() {
   });
 
   // credential request
-  const credentialEndpoint = `${issuerBase}/credential`;
+  const credentialEndpoint = `${apiBase}/credential`;
   const credReq = {
     credential_configuration_id: configurationId,
-    proof: { proof_type: "jwt", jwt: proofJwt },
+    proofs: { jwt: [proofJwt] },
   };
 
   const credRes = await fetch(credentialEndpoint, {
@@ -107,14 +140,14 @@ async function main() {
     const start = Date.now();
     while (Date.now() - start < argv["poll-timeout"]) {
       await sleep(argv["poll-interval"]);
-      const defRes = await httpPostJson(`${issuerBase}/credential_deferred`, { transaction_id });
+      const defRes = await httpPostJson(`${apiBase}/credential_deferred`, { transaction_id });
       if (defRes.ok) {
         const body = await defRes.json();
         // store credential and key-binding material using preAuthorizedCode as session key
         await storeWalletCredentialByType(configurationId, {
           credential: body,
           keyBinding: { privateJwk, publicJwk, didJwk },
-          metadata: { configurationId, c_nonce },
+          metadata: { configurationId, c_nonce, c_nonce_expires_in, credential_issuer: credential_issuer || apiBase },
         });
         console.log(JSON.stringify(body, null, 2));
         return;
@@ -133,7 +166,7 @@ async function main() {
   await storeWalletCredentialByType(configurationId, {
     credential: credBody,
     keyBinding: { privateJwk, publicJwk, didJwk },
-    metadata: { configurationId, c_nonce },
+    metadata: { configurationId, c_nonce, c_nonce_expires_in, credential_issuer: credential_issuer || apiBase },
   });
   console.log(JSON.stringify(credBody, null, 2));
 }
@@ -156,6 +189,10 @@ async function resolveOfferConfig(deepLink) {
   if (url.protocol !== "openid-credential-offer:") {
     throw new Error("Unsupported offer scheme");
   }
+  const inlineOffer = url.searchParams.get("credential_offer");
+  if (inlineOffer) {
+    return parseCredentialOfferParam(inlineOffer);
+  }
   const encoded = url.searchParams.get("credential_offer_uri");
   if (!encoded) throw new Error("Missing credential_offer_uri in offer");
   const offerUri = decodeURIComponent(encoded);
@@ -165,6 +202,30 @@ async function resolveOfferConfig(deepLink) {
     throw new Error(`Offer-config error ${res.status}: ${JSON.stringify(err)}`);
   }
   return res.json();
+}
+
+function parseCredentialOfferParam(value) {
+  const attempts = new Set([value]);
+  try {
+    attempts.add(decodeURIComponent(value));
+  } catch {
+    // ignore decode errors
+  }
+
+  for (const attempt of attempts) {
+    try {
+      return JSON.parse(attempt);
+    } catch {
+      // not plain JSON, try base64url
+      try {
+        const decoded = Buffer.from(attempt, "base64url").toString("utf8");
+        return JSON.parse(decoded);
+      } catch {
+        // continue trying other attempts
+      }
+    }
+  }
+  throw new Error("Unable to parse credential_offer parameter");
 }
 
 async function promptTxCode(cfg) {
