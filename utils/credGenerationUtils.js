@@ -242,7 +242,9 @@ export async function handleCredentialGenerationBasedOnFormat(
     throw error;
   }
 
-  const decodedWithHeader = jwt.decode(requestBody.proofs.jwt, {
+  console.log("requestBody.proofs.jwt", requestBody.proofs.jwt);
+  console.log("decoding jwt");
+  const decodedWithHeader = jwt.decode(requestBody.proofs.jwt[0], {
     complete: true,
   });
   const holderJWKS = decodedWithHeader.header;

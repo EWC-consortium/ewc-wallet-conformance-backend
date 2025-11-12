@@ -1,0 +1,14 @@
+{
+  "keys": [
+    {
+      "kty": "EC",
+      "crv": "P-256",
+      "kid": "aegean#authentication-key",
+      "use": "sig",
+      "alg": "ES256",
+      "x": "7ymGipkLd1oxRGYCIat84OqzuPfL0YoL-rYAoKqPjxk",
+      "y": "EJLD8Db88LP2sd2HClVkZrdxl0yipmGUfKF85IfUU6Q",
+      "d": "CrRneDlM6XCO27ipNoAC3ncNfkcU3fTPIwktkgEVJz4"
+    }
+  ]
+}

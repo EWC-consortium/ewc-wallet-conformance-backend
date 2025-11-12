@@ -1,4 +1,4 @@
-import express from "express";
+import express, { urlencoded } from "express";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -328,7 +328,8 @@ async function handleNonDynamicAuthorization(existingCodeSession, requestData) {
   
   await storeCodeFlowSession(issuanceState, existingCodeSession);
 
-  return `${existingCodeSession.requests.redirectUri}?code=${authorizationCode}&state=${state}`;
+  const encodedIssuer = encodeURIComponent(SERVER_URL);
+  return `${existingCodeSession.requests.redirectUri}?code=${authorizationCode}&state=${state}&iss=${encodedIssuer}`;
 }
 
 async function buildVPRequestJWTForX509(uuid) {
@@ -515,7 +516,9 @@ codeFlowRouterSDJWT.post(["/par", "/authorize/par"], async (req, res) => {
     console.log("par state " + requestData.state);
     console.log("issuer state " + requestData.issuerState);
 
-    res.json(result);
+    // res.status(201).json(result);
+    res.statusCode = 201;
+    return res.json(result);
   } catch (error) {
     handleRouteError(error, "PAR endpoint", res);
   }

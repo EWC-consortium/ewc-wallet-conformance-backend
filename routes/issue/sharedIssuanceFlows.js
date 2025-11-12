@@ -173,6 +173,8 @@ const validateCredentialRequest = (requestBody) => {
     throw new Error(ERROR_MESSAGES.INVALID_CREDENTIAL_REQUEST);
   }
 
+  console.log("validateCredentialRequest requestBody", requestBody);
+
   // V1.0 requires proofs (plural) - reject legacy proof (singular)
   if (requestBody.proof) {
     console.log("requestBody.proof", requestBody.proof);
@@ -552,8 +554,6 @@ const handleDeferredCredentialIssuance = async (requestBody, sessionObject) => {
 
   return {
     transaction_id,
-    c_nonce: generateNonce(),
-    c_nonce_expires_in: NONCE_EXPIRES_IN,
     interval: 5 // V1.0 requirement: polling interval in seconds for deferred credential status checks
   };
 };
