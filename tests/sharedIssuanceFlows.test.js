@@ -847,7 +847,7 @@ describe('Shared Issuance Flows', () => {
           .set('Authorization', `Bearer ${accessToken}`)
           .send({
             credential_configuration_id: 'test-cred-config',
-            proofs: { jwt: jwtWithNonce }
+          proofs: { jwt: [jwtWithNonce] }
           })
           .expect(200);
         expect(res.body).to.have.property('credentials');
@@ -871,7 +871,7 @@ describe('Shared Issuance Flows', () => {
           .set('Authorization', `Bearer ${accessToken}`)
           .send({
             credential_configuration_id: 'test-cred-config',
-            proof: { jwt: jwtWithNonce }
+          proofs: { jwt: [jwtWithNonce] }
           });
 
         if (res.status === 200 && Array.isArray(res.body.credentials) && res.body.credentials.length > 1) {
@@ -894,7 +894,7 @@ describe('Shared Issuance Flows', () => {
           .set('Authorization', `Bearer ${accessToken}`)
           .send({
             credential_configuration_id: 'urn:eu.europa.ec.eudi:pid:1:mso_mdoc',
-            proof: { jwt: jwtWithNonce }
+          proofs: { jwt: [jwtWithNonce] }
           });
 
         if (res.status === 200) {

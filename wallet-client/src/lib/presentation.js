@@ -186,7 +186,18 @@ export async function performPresentation({ deepLink, verifierBase, credentialTy
   // Build key-binding JWT
   const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(keyPath || undefined);
   const didJwk = generateDidJwkFromPrivateJwk(publicJwk);
-  const kbJwt = await createProofJwt({ privateJwk, publicJwk, audience: verifierBase || clientId || responseUri, nonce, issuer: didJwk });
+  const kbAudience = clientId || responseUri || verifierBase;
+  if (!kbAudience) {
+    throw new Error("Unable to determine audience for key-binding JWT (missing client_id/response_uri)");
+  }
+  const kbJwt = await createProofJwt({
+    privateJwk,
+    publicJwk,
+    audience: kbAudience,
+    nonce,
+    issuer: didJwk,
+    typ: "openid4vp-proof+jwt",
+  });
   console.log("[present] Built kbJwt len:", kbJwt.length); try { slog("[present] kbJwt created", { length: kbJwt.length }); } catch {}
 
   // Debug: decode kbJwt to verify nonce

@@ -5676,7 +5676,7 @@ describe('OIDC4VCI V1.0 - API-backed Endpoint Validations', () => {
       const res = await request(app)
         .post('/par')
         .send(parBody)
-        .expect(200);
+        .expect(201);
 
       expect(res.body).to.have.property('request_uri');
       expect(res.body).to.have.property('expires_in');
@@ -5693,7 +5693,7 @@ describe('OIDC4VCI V1.0 - API-backed Endpoint Validations', () => {
       const res = await request(app)
         .post(parEndpoint.pathname)
         .send({ client_id: 'wallet', response_type: 'code', redirect_uri: 'openid4vp://' })
-        .expect(200);
+        .expect(201);
 
       expect(res.body).to.have.property('request_uri');
     });
