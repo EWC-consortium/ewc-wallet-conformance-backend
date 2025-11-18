@@ -46,7 +46,7 @@ const { presentationDefinition, clientMetadata, privateKey } = loadConfiguration
 const didJwkIdentifier = generateDidJwkIdentifier(privateKey);
 
 /**
- * Generate VP request with presentation definition
+ * Generate VP request with DCQL query
  */
 didJwkRouter.get("/generateVPRequest", async (req, res) => {
   const sessionId = req.query.sessionId || uuidv4();
@@ -65,12 +65,13 @@ didJwkRouter.get("/generateVPRequest", async (req, res) => {
     const result = await generateVPRequest({
       sessionId,
       responseMode,
-      presentationDefinition,
+      presentationDefinition: null,
       clientId: client_id,
     privateKey,
     clientMetadata,
     kid,
       serverURL: CONFIG.SERVER_URL,
+      dcqlQuery: DEFAULT_DCQL_QUERY,
       usePostMethod: true,
       routePath: "/did-jwk/didJwkVPrequest",
     });
@@ -92,7 +93,7 @@ didJwkRouter.get("/generateVPRequest", async (req, res) => {
 });
 
 /**
- * Generate VP request for GET method
+ * Generate VP request for GET method with DCQL query
  */
 didJwkRouter.get("/generateVPRequestGET", async (req, res) => {
   try {
@@ -110,12 +111,13 @@ didJwkRouter.get("/generateVPRequestGET", async (req, res) => {
     const result = await generateVPRequest({
       sessionId,
       responseMode,
-      presentationDefinition,
+      presentationDefinition: null,
       clientId: client_id,
       privateKey,
       clientMetadata,
       kid,
       serverURL: CONFIG.SERVER_URL,
+      dcqlQuery: DEFAULT_DCQL_QUERY,
       usePostMethod: false,
       routePath: "/did-jwk/didJwkVPrequest",
     });
@@ -229,7 +231,7 @@ didJwkRouter.get("/generateVPRequestDCQLGET", async (req, res) => {
 });
 
 /**
- * Generate VP request with transaction data
+ * Generate VP request with transaction data using DCQL query
  */
 didJwkRouter.get("/generateVPRequestTransaction", async (req, res) => {
   try {
@@ -244,19 +246,20 @@ didJwkRouter.get("/generateVPRequestTransaction", async (req, res) => {
       kid
     });
 
-    const transactionDataObj = createTransactionData(presentationDefinition);
+    const transactionDataObj = createTransactionData(DEFAULT_DCQL_QUERY);
   const base64UrlEncodedTxData = Buffer.from(JSON.stringify(transactionDataObj))
       .toString("base64url");
 
     const result = await generateVPRequest({
       sessionId,
       responseMode,
-      presentationDefinition,
+      presentationDefinition: null,
       clientId: client_id,
     privateKey,
     clientMetadata,
     kid,
       serverURL: CONFIG.SERVER_URL,
+      dcqlQuery: DEFAULT_DCQL_QUERY,
       transactionData: base64UrlEncodedTxData,
       usePostMethod: true,
       routePath: "/did-jwk/didJwkVPrequest",
@@ -321,6 +324,19 @@ didJwkRouter
         error: result.error,
         status: result.status
       });
+      // Mark session as failed
+      try {
+        const { getVPSession, storeVPSession } = await import("../../services/cacheServiceRedis.js");
+        const vpSession = await getVPSession(sessionId);
+        if (vpSession) {
+          vpSession.status = "failed";
+          vpSession.error = "processing_error";
+          vpSession.error_description = result.error;
+          await storeVPSession(sessionId, vpSession);
+        }
+      } catch (storageError) {
+        console.error("Failed to update session status after DID JWK VP request processing failure:", storageError);
+      }
       return res.status(result.status).json({ error: result.error });
     }
 

@@ -106,12 +106,13 @@ didRouter.get("/generateVPRequestGET", async (req, res) => {
     const result = await generateVPRequest({
       sessionId,
       responseMode,
-      presentationDefinition,
+      presentationDefinition:null,
       clientId: client_id,
       privateKey,
       clientMetadata,
       kid,
       serverURL: CONFIG.SERVER_URL,
+      dcqlQuery: DEFAULT_DCQL_QUERY,
       usePostMethod: false,
       routePath: "/did/VPrequest",
     });
@@ -271,6 +272,19 @@ didRouter
           error: result.error,
           status: result.status
         });
+        // Mark session as failed
+        try {
+          const { getVPSession, storeVPSession } = await import("../../services/cacheServiceRedis.js");
+          const vpSession = await getVPSession(sessionId);
+          if (vpSession) {
+            vpSession.status = "failed";
+            vpSession.error = "processing_error";
+            vpSession.error_description = result.error;
+            await storeVPSession(sessionId, vpSession);
+          }
+        } catch (storageError) {
+          console.error("Failed to update session status after DID VP request processing failure:", storageError);
+        }
         return res.status(result.status).json({ error: result.error });
       }
 

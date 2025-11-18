@@ -17,6 +17,11 @@ import receiptRouter from "./routes/receiptsRoutes.js";
 import mdlRouter from "./routes/verify/mdlRoutes.js";
 import loggingRouter from "./routes/loggingRoutes.js";
 import bodyParser from "body-parser"; // Body parser middleware
+import {
+  enableConsoleInterception,
+  setSessionContext,
+  clearSessionContext,
+} from "./services/cacheServiceRedis.js";
 
 import * as OpenApiValidator from "express-openapi-validator";
 
@@ -28,12 +33,43 @@ const apiSpec = path.join(process.cwd(), "openapi.yaml");
 const app = express();
 const port = 3000;
 
+// Enable console log interception globally
+// This will capture all console.log/warn/error/info/debug calls and store them in cache
+// when a session context is set via middleware
+enableConsoleInterception();
+
 // Middleware to parse URL-encoded bodies
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 // Middleware for post bodies
 app.use(bodyParser.json({ limit: "10mb" }));
 // Middleware for raw text bodies (needed for HAIP dc_api.jwt)
 app.use(bodyParser.text({ limit: "10mb", type: "application/jwt" }));
+
+// Global middleware to set session context for console log interception
+// Extracts sessionId from query params or request body
+// Note: URL params (req.params) are handled by route-specific middleware
+app.use((req, res, next) => {
+  // Try to extract sessionId from query params or request body
+  // req.params won't be available until after route matching, so route-specific
+  // middleware handles those cases (see didRoutes, x509Routes, etc.)
+  const sessionId = 
+    req.query.sessionId || 
+    (req.body && req.body.sessionId) ||
+    null;
+  
+  if (sessionId) {
+    setSessionContext(sessionId);
+    // Clear context when response finishes
+    res.on('finish', () => {
+      clearSessionContext();
+    });
+    res.on('close', () => {
+      clearSessionContext();
+    });
+  }
+  next();
+});
+
 //Middleware to log all requests to the server for debugging
 app.use((req, res, next) => {
   console.log(`---> 

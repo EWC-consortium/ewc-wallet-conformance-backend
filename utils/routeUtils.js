@@ -29,11 +29,11 @@ export const QR_CONFIG = {
 };
 
 export const CLIENT_METADATA = {
-  client_name: "UAegean EWC Verifier",
+  client_name: "UAegean WE BUILD Verifier",
   logo_uri: "https://studyingreece.edu.gr/wp-content/uploads/2023/03/25.png",
   location: "Greece",
   cover_uri: "string",
-  description: "EWC pilot case verification",
+  description: "WE BUILD pilot case verification",
   vp_formats_supported: {
     "dc+sd-jwt": {
       "sd-jwt_alg_values": ["ES256", "ES384"],
@@ -847,13 +847,25 @@ export async function processVPRequest(params) {
 
 /**
  * Create transaction data object with credential IDs
- * @param {Object} presentationDefinition - The presentation definition
+ * @param {Object} presentationDefinitionOrDcqlQuery - The presentation definition or DCQL query
  * @returns {Object} - The transaction data object
  */
-export function createTransactionData(presentationDefinition) {
-  const credentialIds = presentationDefinition.input_descriptors.map(
-    (descriptor) => descriptor.id
-  );
+export function createTransactionData(presentationDefinitionOrDcqlQuery) {
+  let credentialIds = [];
+  
+  // Handle Presentation Definition (PEX)
+  if (presentationDefinitionOrDcqlQuery?.input_descriptors) {
+    credentialIds = presentationDefinitionOrDcqlQuery.input_descriptors.map(
+      (descriptor) => descriptor.id
+    );
+  }
+  // Handle DCQL Query
+  else if (presentationDefinitionOrDcqlQuery?.credentials) {
+    credentialIds = presentationDefinitionOrDcqlQuery.credentials.map(
+      (credential) => credential.id
+    );
+  }
+  
   return {
     ...DEFAULT_TRANSACTION_DATA,
     credential_ids: credentialIds,

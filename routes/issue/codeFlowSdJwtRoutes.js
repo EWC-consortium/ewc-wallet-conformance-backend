@@ -597,6 +597,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     // Get and update session
     let existingCodeSession = await getCodeFlowSession(requestData.issuerState);
     if (!existingCodeSession) {
+      // Note: Can't mark session as failed since session doesn't exist
       throw new Error(ERROR_MESSAGES.ITB_SESSION_EXPIRED);
     }
 
@@ -644,6 +645,28 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     }
   } catch (error) {
     console.error("Error in authorize endpoint:", error);
+    
+    // Try to mark session as failed if we have issuerState
+    try {
+      const issuerState = req.query?.issuer_state ? decodeURIComponent(req.query.issuer_state) : null;
+      if (issuerState) {
+        const existingCodeSession = await getCodeFlowSession(issuerState);
+        if (existingCodeSession) {
+          existingCodeSession.status = "failed";
+          if (existingCodeSession.results) {
+            existingCodeSession.results.status = "failed";
+          } else {
+            existingCodeSession.results = { status: "failed" };
+          }
+          existingCodeSession.error = "invalid_request";
+          existingCodeSession.error_description = error.message;
+          await storeCodeFlowSession(issuerState, existingCodeSession);
+        }
+      }
+    } catch (sessionError) {
+      console.error("Failed to update session status after authorize error:", sessionError);
+    }
+    
     const errorRedirectUrl = `${DEFAULT_REDIRECT_URI}?error=invalid_request&error_description=${encodeURIComponent(error.message)}`;
     return res.redirect(302, errorRedirectUrl);
   }
@@ -711,6 +734,25 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
 
     if (!jwt) {
       console.log(ERROR_MESSAGES.NO_JWT_PRESENTED);
+      
+      // Try to mark session as failed if we have issuerState
+      try {
+        const existingCodeSession = await getCodeFlowSession(issuerState);
+        if (existingCodeSession) {
+          existingCodeSession.status = "failed";
+          if (existingCodeSession.results) {
+            existingCodeSession.results.status = "failed";
+          } else {
+            existingCodeSession.results = { status: "failed" };
+          }
+          existingCodeSession.error = "invalid_request";
+          existingCodeSession.error_description = ERROR_MESSAGES.NO_JWT_PRESENTED;
+          await storeCodeFlowSession(issuerState, existingCodeSession);
+        }
+      } catch (sessionError) {
+        console.error("Failed to update session status after JWT missing error:", sessionError);
+      }
+      
       return res.sendStatus(500);
     }
 
@@ -723,6 +765,7 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
     const existingCodeSession = await getCodeFlowSession(issuerState);
     if (!existingCodeSession) {
       console.log(ERROR_MESSAGES.ISSUANCE_SESSION_NOT_FOUND + " " + issuerState);
+      // Note: Can't mark session as failed since session doesn't exist
       return res.sendStatus(500);
     }
 
@@ -734,6 +777,27 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
     const redirectUrl = `${existingCodeSession.requests.redirectUri}?code=${authorizationCode}&state=${existingCodeSession.requests.state}`;
     return res.send({ redirect_uri: redirectUrl });
   } catch (error) {
+    // Try to mark session as failed if we have issuerState
+    try {
+      const issuerState = req.params?.id;
+      if (issuerState) {
+        const existingCodeSession = await getCodeFlowSession(issuerState);
+        if (existingCodeSession) {
+          existingCodeSession.status = "failed";
+          if (existingCodeSession.results) {
+            existingCodeSession.results.status = "failed";
+          } else {
+            existingCodeSession.results = { status: "failed" };
+          }
+          existingCodeSession.error = "server_error";
+          existingCodeSession.error_description = error.message;
+          await storeCodeFlowSession(issuerState, existingCodeSession);
+        }
+      }
+    } catch (sessionError) {
+      console.error("Failed to update session status after direct_post_vci error:", sessionError);
+    }
+    
     handleRouteError(error, "direct_post_vci", res);
   }
 });

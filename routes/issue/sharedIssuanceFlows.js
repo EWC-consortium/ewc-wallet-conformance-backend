@@ -486,6 +486,21 @@ const handleAuthorizationCodeFlow = async (code, code_verifier, authorizationDet
   );
 
   if (!pkceVerified) {
+    // Mark session as failed when PKCE verification fails
+    try {
+      existingCodeSession.status = "failed";
+      existingCodeSession.results.status = "failed";
+      existingCodeSession.error = "invalid_grant";
+      existingCodeSession.error_description = ERROR_MESSAGES.PKCE_FAILED;
+      
+      await storeCodeFlowSession(
+        existingCodeSession.results.issuerState,
+        existingCodeSession
+      );
+    } catch (storageError) {
+      console.error("Failed to update session status after PKCE failure:", storageError);
+    }
+    
     throw new Error(ERROR_MESSAGES.PKCE_FAILED);
   }
 
@@ -636,10 +651,7 @@ sharedRouter.post("/credential", async (req, res) => {
     const token = authHeader && authHeader.split(" ")[1];
     const requestBody = req.body;
 
-    // Validate credential request
-    const effectiveConfigurationId = validateCredentialRequest(requestBody);
-
-    // Get session
+    // Get session first so we can mark it as failed if validation fails
     const sessionData = await getSessionFromToken(token);
     sessionObject = sessionData.sessionObject;
     flowType = sessionData.flowType;
@@ -651,6 +663,9 @@ sharedRouter.post("/credential", async (req, res) => {
         error_description: ERROR_MESSAGES.SESSION_LOST,
       });
     }
+
+    // Validate credential request
+    const effectiveConfigurationId = validateCredentialRequest(requestBody);
 
     // Validate proof if configuration ID is available
     if (effectiveConfigurationId) {
@@ -727,6 +742,24 @@ sharedRouter.post("/credential", async (req, res) => {
         return res.json(response);
       } catch (credError) {
         console.error("Credential generation error:", credError);
+        
+        // Mark session as failed when credential generation fails
+        if (sessionObject && sessionKey) {
+          try {
+            sessionObject.status = "failed";
+            sessionObject.error = "server_error";
+            sessionObject.error_description = credError.message || "Failed to generate credential";
+
+            if (flowType === "code") {
+              await storeCodeFlowSession(sessionKey, sessionObject);
+            } else {
+              await storePreAuthSession(sessionKey, sessionObject);
+            }
+          } catch (storageError) {
+            console.error("Failed to update session status after credential generation failure:", storageError);
+          }
+        }
+        
         // If credential generation fails, it's a server error, not a client error
         return res.status(500).json({
           error: "server_error",
@@ -777,16 +810,67 @@ sharedRouter.post("/credential", async (req, res) => {
         } catch (nonceError) {
           console.error("Failed to issue refreshed c_nonce after proof failure:", nonceError);
         }
+      } else {
+        // Mark session as failed for other proof validation errors (non-nonce errors)
+        if (sessionObject && sessionKey) {
+          try {
+            sessionObject.status = "failed";
+            sessionObject.error = "invalid_proof";
+            sessionObject.error_description = error.message;
+
+            if (flowType === "code") {
+              await storeCodeFlowSession(sessionKey, sessionObject);
+            } else {
+              await storePreAuthSession(sessionKey, sessionObject);
+            }
+          } catch (storageError) {
+            console.error("Failed to update session status after proof validation failure:", storageError);
+          }
+        }
       }
 
       return res.status(400).json(errorResponse);
     }
 
     if (error.message.includes(ERROR_MESSAGES.INVALID_CREDENTIAL_REQUEST)) {
+      // Mark session as failed when credential request validation fails
+      if (sessionObject && sessionKey) {
+        try {
+          sessionObject.status = "failed";
+          sessionObject.error = "invalid_credential_request";
+          sessionObject.error_description = error.message;
+
+          if (flowType === "code") {
+            await storeCodeFlowSession(sessionKey, sessionObject);
+          } else {
+            await storePreAuthSession(sessionKey, sessionObject);
+          }
+        } catch (storageError) {
+          console.error("Failed to update session status after validation failure:", storageError);
+        }
+      }
+
       return res.status(400).json({
         error: "invalid_credential_request",
         error_description: error.message,
       });
+    }
+
+    // Mark session as failed for other credential request errors
+    if (sessionObject && sessionKey && error.message.includes("credential")) {
+      try {
+        sessionObject.status = "failed";
+        sessionObject.error = "credential_request_denied";
+        sessionObject.error_description = error.message;
+
+        if (flowType === "code") {
+          await storeCodeFlowSession(sessionKey, sessionObject);
+        } else {
+          await storePreAuthSession(sessionKey, sessionObject);
+        }
+      } catch (storageError) {
+        console.error("Failed to update session status after credential error:", storageError);
+      }
     }
 
     return res.status(400).json({

@@ -221,12 +221,13 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
     const result = await generateVPRequest({
       sessionId,
       responseMode,
-      presentationDefinition,
+      presentationDefinition: null,
       clientId: CONFIG.CLIENT_ID,
       privateKey: null,
       clientMetadata,
       kid: null,
       serverURL: CONFIG.SERVER_URL,
+      dcqlQuery: DEFAULT_DCQL_QUERY,
       transactionData: base64UrlEncodedTxData,
       usePostMethod: true,
       routePath: "/x509/x509VPrequest",
@@ -280,6 +281,19 @@ x509Router
           error: result.error, 
           status: result.status 
         });
+        // Mark session as failed
+        try {
+          const { getVPSession, storeVPSession } = await import("../../services/cacheServiceRedis.js");
+          const vpSession = await getVPSession(sessionId);
+          if (vpSession) {
+            vpSession.status = "failed";
+            vpSession.error = "processing_error";
+            vpSession.error_description = result.error;
+            await storeVPSession(sessionId, vpSession);
+          }
+        } catch (storageError) {
+          console.error("Failed to update session status after x509 VP request processing failure:", storageError);
+        }
         return res.status(result.status).json({ error: result.error });
       }
 
@@ -317,6 +331,19 @@ x509Router
           error: result.error, 
           status: result.status 
         });
+        // Mark session as failed
+        try {
+          const { getVPSession, storeVPSession } = await import("../../services/cacheServiceRedis.js");
+          const vpSession = await getVPSession(sessionId);
+          if (vpSession) {
+            vpSession.status = "failed";
+            vpSession.error = "processing_error";
+            vpSession.error_description = result.error;
+            await storeVPSession(sessionId, vpSession);
+          }
+        } catch (storageError) {
+          console.error("Failed to update session status after x509 VP request processing failure:", storageError);
+        }
         return res.status(result.status).json({ error: result.error });
       }
 

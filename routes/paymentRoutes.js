@@ -172,7 +172,7 @@ paymentRouter.get("/payment-request/:id", async (req, res) => {
       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQM7KDXeOMPwTHaVRdSVf1D91HIk59_NnpHHA&s",
     location: "Greece",
     cover_uri: "string",
-    description: "EWC pilot merchant",
+    description: "WE BUILD pilot merchant",
 
   };
 

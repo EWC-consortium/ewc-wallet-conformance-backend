@@ -24,7 +24,8 @@ const loggingRouter = express.Router();
  */
 loggingRouter.get("/logs/:sessionId", async (req, res) => {
   try {
-    const sessionId = req.params.sessionId;
+    // const sessionId = req.params.sessionId;
+    const sessionId = req.query.sessionId || req.params.sessionId || req.params.id;
     await logInfo(sessionId, "Retrieving session logs", { endpoint: "/logs/:sessionId" });
     
     const logs = await getSessionLogs(sessionId);

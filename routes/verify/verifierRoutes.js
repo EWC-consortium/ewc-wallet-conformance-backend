@@ -226,6 +226,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         const vpToken = req.body["vp_token"];
         if (!vpToken) {
           await logError(sessionId, "No vp_token found in mDL request body");
+          // Mark session as failed
+          try {
+            vpSession.status = "failed";
+            vpSession.error = "invalid_request";
+            vpSession.error_description = "No vp_token found in the request body.";
+            await storeVPSession(sessionId, vpSession);
+          } catch (storageError) {
+            console.error("Failed to update session status after vp_token missing error:", storageError);
+          }
           return res.status(400).json({ error: "No vp_token found in the request body." });
         }
         
@@ -254,6 +263,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             error: mdocResult.error,
             details: mdocResult.details
           });
+          // Mark session as failed
+          try {
+            vpSession.status = "failed";
+            vpSession.error = "verification_failed";
+            vpSession.error_description = `mDL verification failed: ${mdocResult.error}`;
+            await storeVPSession(sessionId, vpSession);
+          } catch (storageError) {
+            console.error("Failed to update session status after mDL verification failure:", storageError);
+          }
           return res.status(400).json({ 
             error: `mDL verification failed: ${mdocResult.error}`,
             details: mdocResult.details 
@@ -273,6 +291,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             requested: vpSession.sdsRequested,
             received: Object.keys(claims)
           });
+          // Mark session as failed
+          try {
+            vpSession.status = "failed";
+            vpSession.error = "claims_mismatch";
+            vpSession.error_description = "mDL claims do not match what was requested.";
+            await storeVPSession(sessionId, vpSession);
+          } catch (storageError) {
+            console.error("Failed to update session status after claims mismatch:", storageError);
+          }
           return res.status(400).json({
             error: "mDL claims do not match what was requested.",
             requested: vpSession.sdsRequested,
@@ -303,6 +330,17 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           error: error.message,
           stack: error.stack
         });
+        // Mark session as failed
+        try {
+          if (vpSession) {
+            vpSession.status = "failed";
+            vpSession.error = "server_error";
+            vpSession.error_description = `mDL verification failed: ${error.message}`;
+            await storeVPSession(sessionId, vpSession);
+          }
+        } catch (storageError) {
+          console.error("Failed to update session status after mDL processing error:", storageError);
+        }
         return res.status(400).json({ error: `mDL verification failed: ${error.message}` });
       }
     }
@@ -818,6 +856,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             vpTokenIsObject: typeof vpToken === 'object' && vpToken !== null,
             vpTokenKeys: typeof vpToken === 'object' && vpToken !== null ? Object.keys(vpToken) : 'N/A'
           });
+          // Mark session as failed
+          try {
+            vpSession.status = "failed";
+            vpSession.error = "invalid_request";
+            vpSession.error_description = "submitted nonce not found in vp_token - wallet must include nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec";
+            await storeVPSession(sessionId, vpSession);
+          } catch (storageError) {
+            console.error("Failed to update session status after nonce missing error:", storageError);
+          }
           return res.status(400).json({ 
             error: "submitted nonce not found in vp_token - wallet must include nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec" 
           });
@@ -825,6 +872,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         
         if (vpSession.nonce != submittedNonce) {
           console.log(`error nonces do not match ${submittedNonce} ${vpSession.nonce}`);
+          // Mark session as failed
+          try {
+            vpSession.status = "failed";
+            vpSession.error = "invalid_nonce";
+            vpSession.error_description = "submitted nonce doesn't match the auth request one";
+            await storeVPSession(sessionId, vpSession);
+          } catch (storageError) {
+            console.error("Failed to update session status after nonce mismatch:", storageError);
+          }
           return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
         }
 
@@ -835,12 +891,30 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
               expected: vpSession.client_id,
               received: jwtFromKeybind.payload.aud
             });
+            // Mark session as failed
+            try {
+              vpSession.status = "failed";
+              vpSession.error = "invalid_audience";
+              vpSession.error_description = "aud claim does not match verifier client_id";
+              await storeVPSession(sessionId, vpSession);
+            } catch (storageError) {
+              console.error("Failed to update session status after audience mismatch:", storageError);
+            }
             return res.status(400).json({ error: 'aud claim does not match verifier client_id' });
           }
         }
 
         // Process claims as before
         if (vpSession.sdsRequested && !hasOnlyAllowedFields(claimsFromExtraction, vpSession.sdsRequested)) {
+          // Mark session as failed
+          try {
+            vpSession.status = "failed";
+            vpSession.error = "claims_mismatch";
+            vpSession.error_description = "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(claimsFromExtraction);
+            await storeVPSession(sessionId, vpSession);
+          } catch (storageError) {
+            console.error("Failed to update session status after claims mismatch:", storageError);
+          }
           return res.status(400).json({
             error: "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(claimsFromExtraction),
           });
@@ -886,6 +960,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         const submittedState = req.body.state;
         if (!submittedState) {
           await logError(sessionId, "state parameter missing in direct_post");
+          // Mark session as failed
+          try {
+            vpSession.status = "failed";
+            vpSession.error = "invalid_request";
+            vpSession.error_description = "state parameter missing";
+            await storeVPSession(sessionId, vpSession);
+          } catch (storageError) {
+            console.error("Failed to update session status after state missing error:", storageError);
+          }
           return res.status(400).json({ error: 'state parameter missing' });
         }
         if (submittedState !== vpSession.state) {
@@ -893,6 +976,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             expected: vpSession.state,
             received: submittedState
           });
+          // Mark session as failed
+          try {
+            vpSession.status = "failed";
+            vpSession.error = "invalid_state";
+            vpSession.error_description = "state mismatch";
+            await storeVPSession(sessionId, vpSession);
+          } catch (storageError) {
+            console.error("Failed to update session status after state mismatch:", storageError);
+          }
           return res.status(400).json({ error: 'state mismatch' });
         }
 
@@ -1187,6 +1279,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           submittedNonce,
           expectedNonce: vpSession.nonce
         });
+        // Mark session as failed
+        try {
+          vpSession.status = "failed";
+          vpSession.error = "invalid_nonce";
+          vpSession.error_description = "submitted nonce doesn't match the auth request one";
+          await storeVPSession(sessionId, vpSession);
+        } catch (storageError) {
+          console.error("Failed to update session status after nonce mismatch:", storageError);
+        }
         return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
       }
       
@@ -1197,6 +1298,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             expected: vpSession.client_id,
             received: jwtFromKeybind.payload.aud
           });
+          // Mark session as failed
+          try {
+            vpSession.status = "failed";
+            vpSession.error = "invalid_audience";
+            vpSession.error_description = "aud claim does not match verifier client_id";
+            await storeVPSession(sessionId, vpSession);
+          } catch (storageError) {
+            console.error("Failed to update session status after audience mismatch:", storageError);
+          }
           return res.status(400).json({ error: 'aud claim does not match verifier client_id' });
         }
       }
@@ -1204,6 +1314,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       await logInfo(sessionId, "Nonce verification successful");
 
       if (vpSession.sdsRequested && !hasOnlyAllowedFields(claimsFromExtraction, vpSession.sdsRequested)) {
+        // Mark session as failed
+        try {
+          vpSession.status = "failed";
+          vpSession.error = "claims_mismatch";
+          vpSession.error_description = "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(claimsFromExtraction);
+          await storeVPSession(sessionId, vpSession);
+        } catch (storageError) {
+          console.error("Failed to update session status after claims mismatch:", storageError);
+        }
         return res.status(400).json({
           error: "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(claimsFromExtraction),
         });
@@ -1227,6 +1346,18 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       error: error.message,
       stack: error.stack
     });
+    // Try to mark session as failed if we have sessionId
+    try {
+      const vpSession = await getVPSession(sessionId);
+      if (vpSession) {
+        vpSession.status = "failed";
+        vpSession.error = "server_error";
+        vpSession.error_description = error.message;
+        await storeVPSession(sessionId, vpSession);
+      }
+    } catch (storageError) {
+      console.error("Failed to update session status after direct_post error:", storageError);
+    }
     return res.status(400).json({ error: error.message });
   }
 });

@@ -1,6 +1,6 @@
 {
     "client_id": "https://dss.aegean.gr",
-    "client_name": "UAegean EWC Verifier",
+    "client_name": "UAegean WE BUILD Verifier",
     "vp_formats_supported": [
       "jwt_vc_json",
       "ldp_vc"

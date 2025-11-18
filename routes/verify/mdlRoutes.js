@@ -128,6 +128,19 @@ mdlRouter
           error: result.error,
           status: result.status
         });
+        // Mark session as failed
+        try {
+          const { getVPSession, storeVPSession } = await import("../../services/cacheServiceRedis.js");
+          const vpSession = await getVPSession(sessionId);
+          if (vpSession) {
+            vpSession.status = "failed";
+            vpSession.error = "processing_error";
+            vpSession.error_description = result.error;
+            await storeVPSession(sessionId, vpSession);
+          }
+        } catch (storageError) {
+          console.error("Failed to update session status after mDL VP request processing failure:", storageError);
+        }
         return res.status(result.status).json({ error: result.error });
       }
 
