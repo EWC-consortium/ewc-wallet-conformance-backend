@@ -200,10 +200,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     const vpSession = await getVPSession(sessionId);
     
     if (!vpSession) {
-      console.warn(`Session ID ${sessionId} not found.`);
+      console.warn(`Session validation failed. Received: sessionId '${sessionId}' not found, expected: valid session ID`);
       await logError(sessionId, "Session ID not found", {
         sessionId,
-        error: `Session ID ${sessionId} not found.`
+        error: `Session validation failed. Received: sessionId '${sessionId}' not found, expected: valid session ID`
       });
       return res.status(400).json({ error: `Session ID ${sessionId} not found.` });
     }
@@ -225,17 +225,21 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       try {
         const vpToken = req.body["vp_token"];
         if (!vpToken) {
-          await logError(sessionId, "No vp_token found in mDL request body");
+          const received = req.body["vp_token"] === undefined ? "vp_token missing" : `vp_token is ${typeof req.body["vp_token"]}`;
+          await logError(sessionId, "No vp_token found in mDL request body", {
+            received,
+            expected: "vp_token string in request body"
+          });
           // Mark session as failed
           try {
             vpSession.status = "failed";
             vpSession.error = "invalid_request";
-            vpSession.error_description = "No vp_token found in the request body.";
+            vpSession.error_description = `No vp_token found in the request body. Received: ${received}, expected: vp_token string`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after vp_token missing error:", storageError);
           }
-          return res.status(400).json({ error: "No vp_token found in the request body." });
+          return res.status(400).json({ error: `No vp_token found in the request body. Received: ${received}, expected: vp_token string` });
         }
         
         await logDebug(sessionId, "VP token found in mDL request", {
@@ -258,8 +262,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         const mdocResult = await verifyMdlToken(vpToken, verificationOptions);
 
         if (!mdocResult.success) {
-          console.error("mDL verification failed:", mdocResult.error);
+          console.error(`mDL verification failed. Received: ${mdocResult.error}, expected: valid mDL token`);
           await logError(sessionId, "mDL verification failed", {
+            received: mdocResult.error,
+            expected: "valid mDL token",
             error: mdocResult.error,
             details: mdocResult.details
           });
@@ -267,13 +273,13 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           try {
             vpSession.status = "failed";
             vpSession.error = "verification_failed";
-            vpSession.error_description = `mDL verification failed: ${mdocResult.error}`;
+            vpSession.error_description = `mDL verification failed. Received: ${mdocResult.error}, expected: valid mDL token`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after mDL verification failure:", storageError);
           }
           return res.status(400).json({ 
-            error: `mDL verification failed: ${mdocResult.error}`,
+            error: `mDL verification failed. Received: ${mdocResult.error}, expected: valid mDL token`,
             details: mdocResult.details 
           });
         }
@@ -286,8 +292,12 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
         // Validate that extracted claims match what was requested
         if (vpSession.sdsRequested && !validateMdlClaims(claims, vpSession.sdsRequested)) {
-          console.log("mDL claims do not match what was requested.");
+          const receivedClaims = Object.keys(claims || {});
+          const requestedClaims = vpSession.sdsRequested;
+          console.log(`mDL claims mismatch. Received: [${receivedClaims.join(', ')}], expected: [${JSON.stringify(requestedClaims)}]`);
           await logError(sessionId, "mDL claims do not match what was requested", {
+            received: receivedClaims,
+            expected: requestedClaims,
             requested: vpSession.sdsRequested,
             received: Object.keys(claims)
           });
@@ -295,13 +305,13 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           try {
             vpSession.status = "failed";
             vpSession.error = "claims_mismatch";
-            vpSession.error_description = "mDL claims do not match what was requested.";
+            vpSession.error_description = `mDL claims mismatch. Received: [${receivedClaims.join(', ')}], expected: [${JSON.stringify(requestedClaims)}]`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after claims mismatch:", storageError);
           }
           return res.status(400).json({
-            error: "mDL claims do not match what was requested.",
+            error: `mDL claims mismatch. Received: [${receivedClaims.join(', ')}], expected: [${JSON.stringify(requestedClaims)}]`,
             requested: vpSession.sdsRequested,
             received: Object.keys(claims)
           });
@@ -375,9 +385,13 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         });
         
         if (!encryptedJWT) {
-          await logError(sessionId, "No encrypted JWT found in HAIP dc_api.jwt response");
+          const received = req.body.response === undefined ? "response parameter missing" : `response is ${typeof req.body.response}`;
+          await logError(sessionId, "No encrypted JWT found in HAIP dc_api.jwt response", {
+            received,
+            expected: "encrypted JWT string in response parameter"
+          });
           return res.status(400).json({ 
-            error: "No encrypted JWT found in HAIP dc_api.jwt response", 
+            error: `No encrypted JWT found in HAIP dc_api.jwt response. Received: ${received}, expected: encrypted JWT string in response parameter`, 
             note: "In HAIP dc_api.jwt, the response parameter should contain an encrypted JWT"
           });
         }
@@ -421,12 +435,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         }
 
         if (!vpToken) {
-          console.log("No VP token found in decrypted response:", decryptedResponse);
+          const received = decryptedResponse === null ? "null" : decryptedResponse === undefined ? "undefined" : typeof decryptedResponse;
+          console.log(`No VP token found in decrypted response. Received: ${received}, expected: object/string with vp_token or response property`);
           await logError(sessionId, "No VP token found in decrypted HAIP dc_api.jwt response", {
+            received,
+            expected: "object/string with vp_token or response property",
             decryptedResponse: decryptedResponse
           });
           return res.status(400).json({ 
-            error: "No VP token found in decrypted HAIP dc_api.jwt response", 
+            error: `No VP token found in decrypted HAIP dc_api.jwt response. Received: ${received}, expected: object/string with vp_token or response property`, 
             decryptedResponse: decryptedResponse
           });
         }
@@ -457,8 +474,9 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         }
 
         if (!mdocData || typeof mdocData !== 'string') {
+          const received = !mdocData ? "null/undefined" : typeof mdocData;
           return res.status(400).json({ 
-            error: "Invalid mdoc data in HAIP dc_api.jwt response",
+            error: `Invalid mdoc data in HAIP dc_api.jwt response. Received: ${received}, expected: non-empty string`,
             receivedType: typeof mdocData,
             vpTokenType: typeof vpToken
           });
@@ -478,9 +496,9 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         const mdocResult = await verifyMdlToken(mdocData, verificationOptions, documentType);
 
         if (!mdocResult.success) {
-          console.error("mDL verification failed:", mdocResult.error);
+          console.error(`mDL verification failed. Received: ${mdocResult.error}, expected: valid mDL token`);
           return res.status(400).json({ 
-            error: `mDL verification failed: ${mdocResult.error}`,
+            error: `mDL verification failed. Received: ${mdocResult.error}, expected: valid mDL token`,
             details: mdocResult.details 
           });
         }
@@ -489,9 +507,11 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
         // Validate that extracted claims match what was requested
         if (vpSession.sdsRequested && !validateMdlClaims(claims, vpSession.sdsRequested)) {
-          console.log("mDL claims do not match what was requested.");
+          const receivedClaims = Object.keys(claims || {});
+          const requestedClaims = vpSession.sdsRequested;
+          console.log(`mDL claims mismatch. Received: [${receivedClaims.join(', ')}], expected: [${JSON.stringify(requestedClaims)}]`);
           return res.status(400).json({
-            error: "mDL claims do not match what was requested.",
+            error: `mDL claims mismatch. Received: [${receivedClaims.join(', ')}], expected: [${JSON.stringify(requestedClaims)}]`,
             requested: vpSession.sdsRequested,
             received: Object.keys(claims)
           });
@@ -546,8 +566,12 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       const jwtResponse = req.body.response;
       
       if (!jwtResponse) {
-        await logError(sessionId, "No 'response' parameter in direct_post.jwt response");
-        return res.status(400).json({ error: "No 'response' parameter in direct_post.jwt response" });
+        const received = req.body.response === undefined ? "response parameter missing" : `response is ${typeof req.body.response}`;
+        await logError(sessionId, "No 'response' parameter in direct_post.jwt response", {
+          received,
+          expected: "response parameter with JWT string"
+        });
+        return res.status(400).json({ error: `No 'response' parameter in direct_post.jwt response. Received: ${received}, expected: response parameter with JWT string` });
       }
       
       await logDebug(sessionId, "JWT response received", {
@@ -589,8 +613,9 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             }
             
             if (!vpToken) {
-              console.log("No VP token in decrypted JWT response");
-              return res.status(400).json({ error: "No VP token in decrypted JWT response" });
+              const received = decodedPayload?.vp_token === undefined ? "vp_token missing in payload" : `vp_token is ${typeof decodedPayload?.vp_token}`;
+              console.log(`No VP token in decrypted JWT response. Received: ${received}, expected: vp_token string in JWT payload`);
+              return res.status(400).json({ error: `No VP token in decrypted JWT response. Received: ${received}, expected: vp_token string in JWT payload` });
             }
             if (typeof vpToken === 'string') {
               primaryVpJwt = vpToken;
@@ -648,14 +673,15 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
               // Verify state matches the session
               if (vpSession.state && decrypted.state !== vpSession.state) {
                 await logError(sessionId, "State mismatch in encrypted response", {
-                  expected: vpSession.state,
-                  received: decrypted.state
+                  received: decrypted.state,
+                  expected: vpSession.state
                 });
-                return res.status(400).json({ error: "State mismatch in encrypted response" });
+                return res.status(400).json({ error: `State mismatch in encrypted response. Received: '${decrypted.state}', expected: '${vpSession.state}'` });
               }
             }
           } else {
-            return res.status(400).json({ error: "Failed to decrypt JWE response or no vp_token found" });
+            const received = decrypted ? `decrypted object without vp_token (keys: ${Object.keys(decrypted).join(', ')})` : "decryption failed";
+            return res.status(400).json({ error: `Failed to decrypt JWE response or no vp_token found. Received: ${received}, expected: decrypted object with vp_token property` });
           }
           
           console.log("Extracted vp_token for processing");
@@ -760,8 +786,9 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           // Extract VP token from the JWT payload
           vpToken = decodedJWT?.vp_token;
           if (!vpToken) {
-            console.log("No VP token in JWT response");
-            return res.status(400).json({ error: "No VP token in JWT response" });
+            const received = decodedJWT?.vp_token === undefined ? "vp_token missing in payload" : `vp_token is ${typeof decodedJWT?.vp_token}`;
+            console.log(`No VP token in JWT response. Received: ${received}, expected: vp_token string in JWT payload`);
+            return res.status(400).json({ error: `No VP token in JWT response. Received: ${received}, expected: vp_token string in JWT payload` });
           }
           if (typeof vpToken === 'string') {
             primaryVpJwt = vpToken;
@@ -846,8 +873,11 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         }
 
         if (!submittedNonce) {
-          console.log("No submitted nonce found in vp_token");
+          const received = "nonce not found in vp_token (checked key-binding JWT, VP token payload, and nested structures)";
+          console.log(`No submitted nonce found in vp_token. Received: ${received}, expected: nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec`);
           await logError(sessionId, "VP 1.0 violation: nonce not found in VP token", {
+            received,
+            expected: "nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec",
             message: "Per OpenID4VP 1.0 spec, nonce MUST be in the key-binding JWT of SD-JWT credentials",
             jwtFromKeybindAvailable: !!jwtFromKeybind,
             jwtFromKeybindType: typeof jwtFromKeybind,
@@ -860,63 +890,65 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           try {
             vpSession.status = "failed";
             vpSession.error = "invalid_request";
-            vpSession.error_description = "submitted nonce not found in vp_token - wallet must include nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec";
+            vpSession.error_description = `submitted nonce not found in vp_token. Received: ${received}, expected: nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after nonce missing error:", storageError);
           }
           return res.status(400).json({ 
-            error: "submitted nonce not found in vp_token - wallet must include nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec" 
+            error: `submitted nonce not found in vp_token. Received: ${received}, expected: nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec` 
           });
         }
         
         if (vpSession.nonce != submittedNonce) {
-          console.log(`error nonces do not match ${submittedNonce} ${vpSession.nonce}`);
+          console.log(`Nonce mismatch. Received: '${submittedNonce}', expected: '${vpSession.nonce}'`);
           // Mark session as failed
           try {
             vpSession.status = "failed";
             vpSession.error = "invalid_nonce";
-            vpSession.error_description = "submitted nonce doesn't match the auth request one";
+            vpSession.error_description = `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after nonce mismatch:", storageError);
           }
-          return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
+          return res.status(400).json({ error: `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'` });
         }
 
         // Verify audience if key-binding JWT provided
         if (jwtFromKeybind && jwtFromKeybind.payload && vpSession.client_id && jwtFromKeybind.payload.aud) {
           if (jwtFromKeybind.payload.aud !== vpSession.client_id) {
             await logError(sessionId, "aud claim does not match verifier client_id", {
-              expected: vpSession.client_id,
-              received: jwtFromKeybind.payload.aud
+              received: jwtFromKeybind.payload.aud,
+              expected: vpSession.client_id
             });
             // Mark session as failed
             try {
               vpSession.status = "failed";
               vpSession.error = "invalid_audience";
-              vpSession.error_description = "aud claim does not match verifier client_id";
+              vpSession.error_description = `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'`;
               await storeVPSession(sessionId, vpSession);
             } catch (storageError) {
               console.error("Failed to update session status after audience mismatch:", storageError);
             }
-            return res.status(400).json({ error: 'aud claim does not match verifier client_id' });
+            return res.status(400).json({ error: `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'` });
           }
         }
 
         // Process claims as before
         if (vpSession.sdsRequested && !hasOnlyAllowedFields(claimsFromExtraction, vpSession.sdsRequested)) {
+          const receivedClaims = JSON.stringify(claimsFromExtraction);
+          const requestedClaims = JSON.stringify(vpSession.sdsRequested);
           // Mark session as failed
           try {
             vpSession.status = "failed";
             vpSession.error = "claims_mismatch";
-            vpSession.error_description = "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(claimsFromExtraction);
+            vpSession.error_description = `Claims mismatch. Received: ${receivedClaims}, expected: ${requestedClaims}`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after claims mismatch:", storageError);
           }
           return res.status(400).json({
-            error: "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(claimsFromExtraction),
+            error: `Claims mismatch. Received: ${receivedClaims}, expected: ${requestedClaims}`,
           });
         }
 
@@ -959,33 +991,37 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         // Enforce state parameter presence and matching
         const submittedState = req.body.state;
         if (!submittedState) {
-          await logError(sessionId, "state parameter missing in direct_post");
+          const received = req.body.state === undefined ? "state parameter missing" : `state is ${typeof req.body.state}`;
+          await logError(sessionId, "state parameter missing in direct_post", {
+            received,
+            expected: "state parameter string"
+          });
           // Mark session as failed
           try {
             vpSession.status = "failed";
             vpSession.error = "invalid_request";
-            vpSession.error_description = "state parameter missing";
+            vpSession.error_description = `state parameter missing. Received: ${received}, expected: state parameter string`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after state missing error:", storageError);
           }
-          return res.status(400).json({ error: 'state parameter missing' });
+          return res.status(400).json({ error: `state parameter missing. Received: ${received}, expected: state parameter string` });
         }
         if (submittedState !== vpSession.state) {
           await logError(sessionId, "state mismatch in direct_post", {
-            expected: vpSession.state,
-            received: submittedState
+            received: submittedState,
+            expected: vpSession.state
           });
           // Mark session as failed
           try {
             vpSession.status = "failed";
             vpSession.error = "invalid_state";
-            vpSession.error_description = "state mismatch";
+            vpSession.error_description = `state mismatch. Received: '${submittedState}', expected: '${vpSession.state}'`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after state mismatch:", storageError);
           }
-          return res.status(400).json({ error: 'state mismatch' });
+          return res.status(400).json({ error: `state mismatch. Received: '${submittedState}', expected: '${vpSession.state}'` });
         }
 
         await logDebug(sessionId, "Extracting claims from direct_post request");
@@ -1258,13 +1294,16 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       }
 
       if (!submittedNonce) {
+        const received = "nonce not found in vp_token (checked key-binding JWT, VP token payload, and nested structures)";
         await logError(sessionId, "No submitted nonce found in vp_token", {
+          received,
+          expected: "nonce in key-binding JWT or VP token payload",
           hasVpToken: !!vpToken,
           hasKeybindJwt: !!jwtFromKeybind,
           vpTokenPreview: vpToken ? vpToken.substring(0, 100) : null
         });
-        console.log("No submitted nonce found in vp_token");
-        return res.status(400).json({ error: "submitted nonce not found in vp_token" });
+        console.log(`No submitted nonce found in vp_token. Received: ${received}, expected: nonce in key-binding JWT or VP token payload`);
+        return res.status(400).json({ error: `submitted nonce not found in vp_token. Received: ${received}, expected: nonce in key-binding JWT or VP token payload` });
       }
         
         await logDebug(sessionId, "Nonce found in VP token", {
@@ -1274,57 +1313,59 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     
 
       if (vpSession.nonce != submittedNonce) {
-        console.log(`error nonces do not match ${submittedNonce} ${vpSession.nonce}`);
+        console.log(`Nonce mismatch. Received: '${submittedNonce}', expected: '${vpSession.nonce}'`);
         await logError(sessionId, "Nonce mismatch", {
-          submittedNonce,
-          expectedNonce: vpSession.nonce
+          received: submittedNonce,
+          expected: vpSession.nonce
         });
         // Mark session as failed
         try {
           vpSession.status = "failed";
           vpSession.error = "invalid_nonce";
-          vpSession.error_description = "submitted nonce doesn't match the auth request one";
+          vpSession.error_description = `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'`;
           await storeVPSession(sessionId, vpSession);
         } catch (storageError) {
           console.error("Failed to update session status after nonce mismatch:", storageError);
         }
-        return res.status(400).json({ error: "submitted nonce doesn't match the auth request one" });
+        return res.status(400).json({ error: `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'` });
       }
       
       // Verify audience if key-binding JWT provided
       if (jwtFromKeybind && jwtFromKeybind.payload && vpSession.client_id && jwtFromKeybind.payload.aud) {
         if (jwtFromKeybind.payload.aud !== vpSession.client_id) {
           await logError(sessionId, "aud claim does not match verifier client_id", {
-            expected: vpSession.client_id,
-            received: jwtFromKeybind.payload.aud
+            received: jwtFromKeybind.payload.aud,
+            expected: vpSession.client_id
           });
           // Mark session as failed
           try {
             vpSession.status = "failed";
             vpSession.error = "invalid_audience";
-            vpSession.error_description = "aud claim does not match verifier client_id";
+            vpSession.error_description = `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after audience mismatch:", storageError);
           }
-          return res.status(400).json({ error: 'aud claim does not match verifier client_id' });
+          return res.status(400).json({ error: `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'` });
         }
       }
 
       await logInfo(sessionId, "Nonce verification successful");
 
       if (vpSession.sdsRequested && !hasOnlyAllowedFields(claimsFromExtraction, vpSession.sdsRequested)) {
+        const receivedClaims = JSON.stringify(claimsFromExtraction);
+        const requestedClaims = JSON.stringify(vpSession.sdsRequested);
         // Mark session as failed
         try {
           vpSession.status = "failed";
           vpSession.error = "claims_mismatch";
-          vpSession.error_description = "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(claimsFromExtraction);
+          vpSession.error_description = `Claims mismatch. Received: ${receivedClaims}, expected: ${requestedClaims}`;
           await storeVPSession(sessionId, vpSession);
         } catch (storageError) {
           console.error("Failed to update session status after claims mismatch:", storageError);
         }
         return res.status(400).json({
-          error: "requested " + JSON.stringify(vpSession.sdsRequested) + "but received " + JSON.stringify(claimsFromExtraction),
+          error: `Claims mismatch. Received: ${receivedClaims}, expected: ${requestedClaims}`,
         });
       }
 
@@ -1533,11 +1574,14 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
   } else if (type === "cff") {
     presentationDefinition = presentation_definition_cff;
   } else {
+    const validTypes = ["pid", "epassport", "educationId", "educationid", "allianceId", "allianceid", "ferryboardingpass", "erua-id", "cff"];
     await logError(uuid, "Invalid type parameter for VP request", {
+      received: type,
+      expected: `one of [${validTypes.join(', ')}]`,
       type,
-      validTypes: ["pid", "epassport", "educationId", "educationid", "allianceId", "allianceid", "ferryboardingpass", "erua-id", "cff"]
+      validTypes
     });
-    return res.status(400).type("text/plain").send("Invalid type parameter");
+    return res.status(400).type("text/plain").send(`Invalid type parameter. Received: '${type}', expected: one of [${validTypes.join(', ')}]`);
   }
 
   await logInfo(uuid, "Presentation definition selected", {
@@ -1598,8 +1642,12 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
   // Log received request
   console.log("Received direct_post VP for session:", sessionId);
   if (!jwtVp) {
-    console.error("No VP token provided.");
-    await logError(sessionId, "No VP token provided in direct_post_jwt request");
+    const received = req.body.vp_token === undefined ? "vp_token missing" : `vp_token is ${typeof req.body.vp_token}`;
+    console.error(`No VP token provided. Received: ${received}, expected: vp_token JWT string`);
+    await logError(sessionId, "No VP token provided in direct_post_jwt request", {
+      received,
+      expected: "vp_token JWT string"
+    });
     return res.sendStatus(400); // Bad Request
   }
   let decodedWithHeader;
@@ -1616,8 +1664,11 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
   const credentialsJwtArray =
     decodedWithHeader?.payload?.vp?.verifiableCredential;
   if (!credentialsJwtArray) {
-    console.error("Invalid JWT structure.");
+    const received = !decodedWithHeader?.payload ? "no payload" : !decodedWithHeader?.payload?.vp ? "no vp claim" : !decodedWithHeader?.payload?.vp?.verifiableCredential ? "no verifiableCredential array" : "unknown";
+    console.error(`Invalid JWT structure. Received: ${received}, expected: JWT with payload.vp.verifiableCredential array`);
     await logError(sessionId, "Invalid JWT structure in direct_post_jwt", {
+      received,
+      expected: "JWT with payload.vp.verifiableCredential array",
       hasPayload: !!decodedWithHeader?.payload,
       hasVp: !!decodedWithHeader?.payload?.vp
     });
@@ -1653,8 +1704,10 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
   });
   
   if (index === -1) {
-    console.error("Session ID not found.");
+    console.error(`Session ID not found. Received: sessionId '${sessionId}' not in sessions array, expected: valid session ID`);
     await logError(sessionId, "Session ID not found in direct_post_jwt", {
+      received: `sessionId '${sessionId}' not in sessions array`,
+      expected: "valid session ID",
       sessionId
     });
     return res.sendStatus(404); // Not Found
