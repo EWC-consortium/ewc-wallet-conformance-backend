@@ -178,31 +178,39 @@ const parseAuthorizationDetails = (authorizationDetails) => {
   }
 };
 
-// Validate credential request parameters
+  // Validate credential request parameters
 const validateCredentialRequest = (requestBody) => {
   const { credential_identifier, credential_configuration_id } = requestBody;
   
   if ((credential_identifier && credential_configuration_id) || 
       (!credential_identifier && !credential_configuration_id)) {
-    throw new Error(ERROR_MESSAGES.INVALID_CREDENTIAL_REQUEST);
+    const received = credential_identifier && credential_configuration_id 
+      ? "both credential_identifier and credential_configuration_id" 
+      : "neither credential_identifier nor credential_configuration_id";
+    throw new Error(`${ERROR_MESSAGES.INVALID_CREDENTIAL_REQUEST}. Received: ${received}, expected: exactly one`);
   }
 
   console.log("validateCredentialRequest requestBody", requestBody);
 
   // V1.0 requires proofs (plural) - reject legacy proof (singular)
   if (requestBody.proof) {
-    console.log("requestBody.proof", requestBody.proof);
+    console.log(`Received 'proof' (singular): ${JSON.stringify(requestBody.proof)}, expected 'proofs' (plural) object`);
     throw new Error(ERROR_MESSAGES.INVALID_PROOF + ": V1.0 requires 'proofs' (plural), not 'proof' (singular)");
   }
 
-  if (!requestBody.proofs || typeof requestBody.proofs !== 'object' || Array.isArray(requestBody.proofs)) {
-    throw new Error(ERROR_MESSAGES.INVALID_PROOF);
+  if (!requestBody.proofs) {
+    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}. Received: proofs is ${typeof requestBody.proofs}, expected: non-null object`);
+  }
+  
+  if (typeof requestBody.proofs !== 'object' || Array.isArray(requestBody.proofs)) {
+    const receivedType = Array.isArray(requestBody.proofs) ? 'array' : typeof requestBody.proofs;
+    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}. Received: proofs is ${receivedType}, expected: non-array object`);
   }
 
   // V1.0 requires exactly one proof type
   const proofTypes = Object.keys(requestBody.proofs);
   if (proofTypes.length !== 1) {
-    throw new Error(ERROR_MESSAGES.INVALID_PROOF + ": V1.0 requires exactly one proof type in proofs object");
+    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}: V1.0 requires exactly one proof type in proofs object. Received: ${proofTypes.length} proof type(s) [${proofTypes.join(', ')}], expected: exactly 1`);
   }
 
   // Get the proof type (jwt, mso_mdoc, etc.)
@@ -211,21 +219,22 @@ const validateCredentialRequest = (requestBody) => {
 
   // Ensure proof value exists
   if (!proofValue || (typeof proofValue === 'string' && proofValue.trim() === '')) {
-    throw new Error(ERROR_MESSAGES.INVALID_PROOF + ": proof value is missing or empty");
+    const received = !proofValue ? 'null/undefined' : 'empty string';
+    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}: proof value is missing or empty. Received: ${received}, expected: non-empty string or array`);
   }
 
   // Handle jwt proof type - can be string or array
   if (proofType === 'jwt') {
     if (Array.isArray(proofValue)) {
       if (proofValue.length === 0) {
-        throw new Error(ERROR_MESSAGES.INVALID_PROOF + ": proofs.jwt array must not be empty");
+        throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}: proofs.jwt array must not be empty. Received: array with ${proofValue.length} elements, expected: array with at least 1 element`);
       }
       // Use first JWT if array
       requestBody.proofJwt = proofValue[0];
     } else if (typeof proofValue === 'string') {
       requestBody.proofJwt = proofValue;
     } else {
-      throw new Error(ERROR_MESSAGES.INVALID_PROOF + ": proofs.jwt must be a string or array");
+      throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}: proofs.jwt must be a string or array. Received: ${typeof proofValue}, expected: string or array`);
     }
   } else {
     // For other proof types, store as-is for now
@@ -257,11 +266,12 @@ const validateProofJWT = (proofJwt, effectiveConfigurationId) => {
 
   const decodedProofHeader = jwt.decode(proofJwt, { complete: true })?.header;
   if (!decodedProofHeader || !decodedProofHeader.alg) {
-    throw new Error(ERROR_MESSAGES.INVALID_PROOF_MALFORMED);
+    const received = !decodedProofHeader ? 'missing header' : `header without alg (header keys: ${Object.keys(decodedProofHeader || {}).join(', ')})`;
+    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_MALFORMED}. Received: ${received}, expected: header with alg property`);
   }
 
   if (!supportedAlgs.includes(decodedProofHeader.alg)) {
-    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_ALGORITHM} '${decodedProofHeader.alg}'. Supported algorithms are: ${supportedAlgs.join(", ")}.`);
+    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_ALGORITHM}. Received: '${decodedProofHeader.alg}', expected: one of [${supportedAlgs.join(", ")}]`);
   }
 
   return decodedProofHeader;
@@ -279,10 +289,11 @@ const resolvePublicKeyForProof = async (decodedProofHeader) => {
       if (jwks?.keys?.length > 0) {
         return jwks.keys[0];
       }
-      throw new Error("Failed to resolve did:key to JWK or JWKS was empty.");
+      const received = jwks?.keys ? `JWKS with ${jwks.keys.length} keys` : 'null/undefined JWKS';
+      throw new Error(`Failed to resolve did:key to JWK. Received: ${received}, expected: JWKS with at least 1 key`);
     } catch (error) {
-      console.error("Error resolving did:key to JWK:", error);
-      throw new Error("Failed to resolve public key from proof JWT kid (did:key).");
+      console.error(`Error resolving did:key to JWK. Received kid: ${decodedProofHeader.kid}, error:`, error);
+      throw new Error(`Failed to resolve public key from proof JWT kid (did:key). Received kid: ${decodedProofHeader.kid}, error: ${error.message}`);
     }
   }
 
@@ -293,8 +304,8 @@ const resolvePublicKeyForProof = async (decodedProofHeader) => {
       const jwkString = Buffer.from(jwkPart, "base64url").toString("utf8");
       return JSON.parse(jwkString);
     } catch (error) {
-      console.error("Error resolving did:jwk to JWK:", error);
-      throw new Error("Failed to resolve public key from proof JWT kid (did:jwk).");
+      console.error(`Error resolving did:jwk to JWK. Received kid: ${decodedProofHeader.kid}, error:`, error);
+      throw new Error(`Failed to resolve public key from proof JWT kid (did:jwk). Received kid: ${decodedProofHeader.kid}, error: ${error.message}`);
     }
   }
 
@@ -302,7 +313,9 @@ const resolvePublicKeyForProof = async (decodedProofHeader) => {
     return await resolveDidWebPublicKey(decodedProofHeader.kid);
   }
 
-  throw new Error(ERROR_MESSAGES.INVALID_PROOF_PUBLIC_KEY);
+  const received = decodedProofHeader.kid ? `kid: ${decodedProofHeader.kid}` : 'no kid in header';
+  const hasJwk = decodedProofHeader.jwk ? 'has jwk' : 'no jwk';
+  throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_PUBLIC_KEY} Received: ${received}, ${hasJwk}. Expected: kid starting with did:key:, did:jwk:, or did:web:, or jwk in header`);
 };
 
 // Resolve DID Web public key
@@ -310,7 +323,7 @@ const resolveDidWebPublicKey = async (didWeb) => {
   try {
     const [did, keyFragment] = didWeb.split("#");
     if (!keyFragment) {
-      throw new Error("kid does not contain a key identifier fragment (e.g., #key-1)");
+      throw new Error(`kid does not contain a key identifier fragment. Received: '${didWeb}' (no #fragment), expected: format like 'did:web:example.com#key-1'`);
     }
 
     let didUrlPart = did.substring("did:web:".length);
@@ -328,12 +341,12 @@ const resolveDidWebPublicKey = async (didWeb) => {
     
     const response = await fetch(didDocUrl);
     if (!response.ok) {
-      throw new Error(`Failed to fetch DID document, status: ${response.status}`);
+      throw new Error(`Failed to fetch DID document. Received: HTTP ${response.status} from ${didDocUrl}, expected: HTTP 200`);
     }
     
     const didDocument = await response.json();
     if (!didDocument) {
-      throw new Error(`Failed to parse DID document or DID document is null for URL: ${didDocUrl}`);
+      throw new Error(`Failed to parse DID document. Received: null/undefined from ${didDocUrl}, expected: valid DID document JSON`);
     }
 
     const verificationMethod = didDocument.verificationMethod?.find(
@@ -341,13 +354,14 @@ const resolveDidWebPublicKey = async (didWeb) => {
     );
 
     if (!verificationMethod?.publicKeyJwk) {
-      throw new Error(`Public key with id '${didWeb}' not found in DID document.`);
+      const availableIds = didDocument.verificationMethod?.map(vm => vm.id).join(', ') || 'none';
+      throw new Error(`Public key not found in DID document. Received: verificationMethod with id '${didWeb}' ${verificationMethod ? 'but no publicKeyJwk' : 'not found'}, expected: verificationMethod with id '${didWeb}' containing publicKeyJwk. Available verificationMethod ids: [${availableIds}]`);
     }
 
     return verificationMethod.publicKeyJwk;
   } catch (error) {
-    console.error("Error resolving did:web:", error);
-    throw new Error(`Failed to resolve public key from proof JWT kid (did:web): ${error.message}`);
+    console.error(`Error resolving did:web. Received kid: ${didWeb}, error:`, error);
+    throw new Error(`Failed to resolve public key from proof JWT kid (did:web). Received kid: ${didWeb}, error: ${error.message}`);
   }
 };
 
@@ -368,7 +382,7 @@ const verifyProofJWT = async (proofJwt, publicKeyForProof, flowType) => {
 
     // Verify claims
     if (!proofPayload.iss && flowType === "code") {
-      throw new Error(ERROR_MESSAGES.INVALID_PROOF_ISS);
+      throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_ISS}. Received: payload without iss claim, expected: payload with iss claim (required for code flow)`);
     }
 
     console.log(`Proof JWT validated. Issuer (Wallet): ${proofPayload.iss}, Nonce verified.`);
@@ -424,7 +438,7 @@ const handlePreAuthorizedCodeFlow = async (preAuthorizedCode, authorizationDetai
   const existingPreAuthSession = await getPreAuthSession(preAuthorizedCode);
   
   if (!existingPreAuthSession) {
-    throw new Error(ERROR_MESSAGES.INVALID_GRANT);
+    throw new Error(`${ERROR_MESSAGES.INVALID_GRANT}. Received: pre-authorized_code '${preAuthorizedCode}' not found or expired, expected: valid, unexpired pre-authorized_code`);
   }
 
   // Check if authorization is still pending external completion
@@ -483,13 +497,13 @@ const handleAuthorizationCodeFlow = async (code, code_verifier, authorizationDet
   const issuanceSessionId = await getSessionKeyAuthCode(code);
   
   if (!issuanceSessionId) {
-    throw new Error(ERROR_MESSAGES.INVALID_GRANT_CODE);
+    throw new Error(`${ERROR_MESSAGES.INVALID_GRANT_CODE}. Received: authorization code '${code}' not found or expired, expected: valid, unexpired authorization code`);
   }
 
   const existingCodeSession = await getCodeFlowSession(issuanceSessionId);
   
   if (!existingCodeSession) {
-    throw new Error(ERROR_MESSAGES.INVALID_GRANT_CODE);
+    throw new Error(`${ERROR_MESSAGES.INVALID_GRANT_CODE}. Received: session '${issuanceSessionId}' not found for authorization code '${code}', expected: valid session`);
   }
 
   // Verify PKCE
@@ -559,7 +573,8 @@ const handleImmediateCredentialIssuance = async (requestBody, sessionObject, eff
   const issuerConfig = loadIssuerConfig();
   const credConfig = issuerConfig.credential_configurations_supported[effectiveConfigurationId];
   if (!credConfig) {
-    throw new Error(`Credential configuration '${effectiveConfigurationId}' not found`);
+    const availableConfigs = Object.keys(issuerConfig.credential_configurations_supported || {}).join(', ') || 'none';
+    throw new Error(`Credential configuration not found. Received: '${effectiveConfigurationId}', expected: one of [${availableConfigs}]`);
   }
   
   // Determine format - default to 'dc+sd-jwt' for backward compatibility
@@ -752,7 +767,7 @@ sharedRouter.post("/credential", async (req, res) => {
       try {
         // Ensure proofJwt is set (should be set by validateCredentialRequest)
         if (!requestBody.proofJwt) {
-          throw new Error(ERROR_MESSAGES.INVALID_PROOF);
+          throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}. Received: proofJwt is ${typeof requestBody.proofJwt}, expected: proofJwt string or array`);
         }
         
         // First, check nonce validity BEFORE any other validation
@@ -762,14 +777,15 @@ sharedRouter.post("/credential", async (req, res) => {
         
         // Check if nonce is missing
         if (!decodedPayloadForNonce || !decodedPayloadForNonce.nonce) {
-          throw new Error(ERROR_MESSAGES.INVALID_PROOF_NONCE);
+          const received = !decodedPayloadForNonce ? 'unable to decode JWT payload' : 'payload without nonce claim';
+          throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_NONCE}. Received: ${received}, expected: JWT payload with nonce claim`);
         }
         
         // Check if nonce is valid/expired
         const nonceExists = await checkNonce(decodedPayloadForNonce.nonce);
         if (!nonceExists) {
           // Nonce exists but is invalid/expired - throw error for PoP failure recovery
-          throw new Error(ERROR_MESSAGES.INVALID_PROOF_NONCE);
+          throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_NONCE}. Received: nonce '${decodedPayloadForNonce.nonce}' (invalid, expired, or already used), expected: valid, unexpired, unused nonce`);
         }
         
         // Store nonce value for deletion after successful signature verification
@@ -782,7 +798,7 @@ sharedRouter.post("/credential", async (req, res) => {
         const headerForVerification = decodedProofHeader || jwt.decode(requestBody.proofJwt, { complete: true })?.header;
         
         if (!headerForVerification) {
-          throw new Error(ERROR_MESSAGES.INVALID_PROOF_MALFORMED);
+          throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_MALFORMED}. Received: unable to decode JWT header, expected: valid JWT with header`);
         }
         
         const publicKeyForProof = await resolvePublicKeyForProof(headerForVerification);
@@ -1154,12 +1170,12 @@ sharedRouter.get("/issueStatus", async (req, res) => {
 
 async function validatePKCE(session, code_verifier, stored_code_challenge) {
   if (!stored_code_challenge) {
-    console.log("PKCE challenge not found in session.");
+    console.log("PKCE validation failed. Received: no stored_code_challenge in session, expected: stored_code_challenge from authorization request");
     return false;
   }
   
   if (!code_verifier) {
-    console.log("Code verifier not provided in token request.");
+    console.log("PKCE validation failed. Received: no code_verifier in token request, expected: code_verifier parameter");
     return false;
   }
 
@@ -1170,8 +1186,8 @@ async function validatePKCE(session, code_verifier, stored_code_challenge) {
   }
 
   console.log("PKCE verification FAILED!!!");
-  console.log(`Expected challenge: ${stored_code_challenge}`);
-  console.log(`Derived from verifier: ${tester}`);
+  console.log(`Received: challenge derived from code_verifier = ${tester}`);
+  console.log(`Expected: stored_code_challenge = ${stored_code_challenge}`);
   return false;
 }
 

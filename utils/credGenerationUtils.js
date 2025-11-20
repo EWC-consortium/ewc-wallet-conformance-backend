@@ -10,9 +10,9 @@ import { pemToJWK, generateNonce, didKeyToJwks } from "../utils/cryptoUtils.js";
 import fs from "fs";
 import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 
-import { encode as cborEncode, decode as cborDecode, Tag} from 'cbor-x';  
-import cbor from 'cbor'; 
-//  import  diagnose from 'cbor';          // npm i cbor  (same package the spec uses)
+// Standardize on 'cbor' library for EUDI Wallet compliance (matches ISO 18013-5 spec)
+// Note: cbor-x is faster but cbor library matches the spec and reference implementations
+import cbor from 'cbor';
 
 
 import {
@@ -440,8 +440,9 @@ export async function handleCredentialGenerationBasedOnFormat(
           elementValue: value
         };
         
-        // Encode the item as CBOR using cbor-x library for digest calculation  
-        const encodedItem = cborEncode(issuerSignedItem);
+        // Encode the item as CBOR using cbor library (matches ISO 18013-5 spec)
+        // This ensures consistency with EUDI Wallet reference implementations
+        const encodedItem = cbor.encode(issuerSignedItem);
         
         // Calculate digest on the encoded item
         const hash = cryptoModule.createHash('sha256');
@@ -450,6 +451,7 @@ export async function handleCredentialGenerationBasedOnFormat(
         
         // Create tag 24 with the ENCODED CBOR bytes using cbor library for proper tag handling
         // This creates the correct 24(<<{...}>>) structure where the tag contains encoded CBOR
+        // Per ISO 18013-5: Tag 24 (CBOR-encoded CBOR) wraps the encoded IssuerSignedItem
         const taggedItem = new cbor.Tagged(24, encodedItem);
         
         nameSpaceItems.push(taggedItem);
@@ -487,8 +489,9 @@ export async function handleCredentialGenerationBasedOnFormat(
         validityInfo: validityInfo
       };
       
-      // Encode the MSO using cbor library and ensure it stays as raw bytes
-      const encodedMSO = cborEncode(mobileSecurityObject);
+      // Encode the MSO using cbor library (standardized for EUDI compliance)
+      // This ensures consistency with ISO 18013-5 and EUDI Wallet reference implementations
+      const encodedMSO = cbor.encode(mobileSecurityObject);
       
       // Debug: Log the MSO to verify it's properly encoded
       console.log("MSO encoded length:", encodedMSO.length, "bytes");
@@ -505,8 +508,8 @@ export async function handleCredentialGenerationBasedOnFormat(
       const protectedHeadersMap = new Map();
       protectedHeadersMap.set(1, -7); // alg: ES256 (COSE algorithm identifier) - integer key 1
       
-      // Encode using cbor-x which should handle Map integer keys properly
-      const encodedProtectedHeaders = cborEncode(protectedHeadersMap);
+      // Encode using cbor library (standardized for EUDI compliance)
+      const encodedProtectedHeaders = cbor.encode(protectedHeadersMap);
       
       // Unprotected headers (CBOR map, not encoded) - use Map with integer keys
       // x5c (label 33) MUST be an array per COSE spec (RFC 8152)
@@ -520,7 +523,7 @@ export async function handleCredentialGenerationBasedOnFormat(
       
       // Verify the encoded protected headers by decoding them
       try {
-        const decodedProtected = cborDecode(encodedProtectedHeaders);
+        const decodedProtected = cbor.decode(encodedProtectedHeaders);
         console.log("Decoded protected headers:", decodedProtected);
         console.log("Decoded protected headers type:", decodedProtected.constructor.name);
         if (decodedProtected instanceof Map) {
@@ -534,7 +537,13 @@ export async function handleCredentialGenerationBasedOnFormat(
       
       // Create COSE_Sign1 structure to sign 
       // Use the raw MSO bytes for signing
-      const toBeSigned = cborEncode([
+      // Per RFC 8152: COSE_Sign1_Tagged = [
+      //   protected: bstr,
+      //   unprotected: map,
+      //   payload: bstr | nil,
+      //   signature: bstr
+      // ]
+      const toBeSigned = cbor.encode([
         "Signature1", // context string for Sign1
         encodedProtectedHeaders, // protected headers as bstr
         Buffer.alloc(0), // external_aad (empty)

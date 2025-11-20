@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "mocha tests/**/*.js",
-    "dev": "SERVER_URL=https://c4cbf100f919.ngrok-free.app  node server.js"
+    "dev": "SERVER_URL=https://a09e83c30fbd.ngrok-free.app  node server.js"
   },
   "author": "",
   "license": "ISC",
@@ -50,10 +50,10 @@
     "redis": "^4.7.0",
     "uuid": "^9.0.1",
     "waltid-sd-jwt": "^1.2311200231.0",
-    "zlib": "^1.0.5"
+    "zlib": "^1.0.5",
+    "cbor": "^10.0.9"
   },
   "devDependencies": {
-    "cbor": "^10.0.9",
     "mocha": "^11.5.0",
     "sinon": "^21.0.0",
     "supertest": "^7.1.1"
