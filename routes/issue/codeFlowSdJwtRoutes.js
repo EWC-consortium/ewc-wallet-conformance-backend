@@ -26,6 +26,12 @@ import {
   clearSessionContext,
 } from "../../services/cacheServiceRedis.js";
 
+// Specification references
+const SPEC_REFS = {
+  VCI_1_0: "https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html",
+  VCI_AUTHORIZATION: "https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-authorization-endpoint",
+};
+
 import {
   // Shared constants
   SERVER_URL,
@@ -158,15 +164,15 @@ function validateAuthorizationRequest(response_type, code_challenge, authorizati
 
   if (authorizationDetails) {
     if (!response_type) {
-      errors.push(`${ERROR_MESSAGES.MISSING_RESPONSE_TYPE}. Received: ${response_type === undefined ? 'undefined' : response_type}, expected: 'code'`);
+      errors.push(`${ERROR_MESSAGES.MISSING_RESPONSE_TYPE}. Received: ${response_type === undefined ? 'undefined' : response_type}, expected: 'code'. See ${SPEC_REFS.VCI_AUTHORIZATION}`);
     }
     if (!code_challenge) {
-      errors.push(`${ERROR_MESSAGES.MISSING_CODE_CHALLENGE}. Received: ${code_challenge === undefined ? 'undefined' : code_challenge}, expected: code_challenge string`);
+      errors.push(`${ERROR_MESSAGES.MISSING_CODE_CHALLENGE}. Received: ${code_challenge === undefined ? 'undefined' : code_challenge}, expected: code_challenge string. See ${SPEC_REFS.VCI_AUTHORIZATION}`);
     }
   }
 
   if (response_type !== "code") {
-    errors.push(`${ERROR_MESSAGES.INVALID_RESPONSE_TYPE}. Received: '${response_type}', expected: 'code'`);
+    errors.push(`${ERROR_MESSAGES.INVALID_RESPONSE_TYPE}. Received: '${response_type}', expected: 'code'. See ${SPEC_REFS.VCI_AUTHORIZATION}`);
   }
 
   return errors;
@@ -608,7 +614,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       
       if (credentialsRequested.length === 0) {
         const received = requestData.scope ? `scope: '${requestData.scope}'` : 'no scope or authorization_details';
-        throw new Error(`${ERROR_MESSAGES.NO_CREDENTIALS_REQUESTED}. Received: ${received}, expected: scope or authorization_details with credential identifiers`);
+        throw new Error(`${ERROR_MESSAGES.NO_CREDENTIALS_REQUESTED}. Received: ${received}, expected: scope or authorization_details with credential identifiers. See ${SPEC_REFS.VCI_AUTHORIZATION}`);
       }
     }
 
@@ -616,7 +622,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     let existingCodeSession = await getCodeFlowSession(requestData.issuerState);
     if (!existingCodeSession) {
       // Note: Can't mark session as failed since session doesn't exist
-      throw new Error(`${ERROR_MESSAGES.ITB_SESSION_EXPIRED}. Received: issuerState '${requestData.issuerState}' not found, expected: valid, unexpired session`);
+      throw new Error(`${ERROR_MESSAGES.ITB_SESSION_EXPIRED}. Received: issuerState '${requestData.issuerState}' not found, expected: valid, unexpired session. See ${SPEC_REFS.VCI_AUTHORIZATION}`);
     }
 
     const updatedRequestData = {

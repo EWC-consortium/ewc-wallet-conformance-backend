@@ -65,6 +65,14 @@ const SERVER_URL = getServerUrl(); // Keep for backward compatibility
 const TOKEN_EXPIRES_IN = 86400;
 const NONCE_EXPIRES_IN = 86400;
 
+// Specification references
+const SPEC_REFS = {
+  VCI_1_0: "https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html",
+  VCI_CREDENTIAL_REQUEST: "https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request",
+  VCI_PROOF: "https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-proof-types",
+  VP_1_0: "https://openid.net/specs/openid-4-verifiable-presentations-1_0.html",
+};
+
 // Error messages
 const ERROR_MESSAGES = {
   INVALID_REQUEST: "The request is missing the 'code' or 'pre-authorized_code' parameter.",
@@ -195,22 +203,22 @@ const validateCredentialRequest = (requestBody) => {
   // V1.0 requires proofs (plural) - reject legacy proof (singular)
   if (requestBody.proof) {
     console.log(`Received 'proof' (singular): ${JSON.stringify(requestBody.proof)}, expected 'proofs' (plural) object`);
-    throw new Error(ERROR_MESSAGES.INVALID_PROOF + ": V1.0 requires 'proofs' (plural), not 'proof' (singular)");
+    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}: V1.0 requires 'proofs' (plural), not 'proof' (singular). See ${SPEC_REFS.VCI_PROOF}`);
   }
 
   if (!requestBody.proofs) {
-    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}. Received: proofs is ${typeof requestBody.proofs}, expected: non-null object`);
+    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}. Received: proofs is ${typeof requestBody.proofs}, expected: non-null object. See ${SPEC_REFS.VCI_CREDENTIAL_REQUEST}`);
   }
   
   if (typeof requestBody.proofs !== 'object' || Array.isArray(requestBody.proofs)) {
     const receivedType = Array.isArray(requestBody.proofs) ? 'array' : typeof requestBody.proofs;
-    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}. Received: proofs is ${receivedType}, expected: non-array object`);
+    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}. Received: proofs is ${receivedType}, expected: non-array object. See ${SPEC_REFS.VCI_CREDENTIAL_REQUEST}`);
   }
 
   // V1.0 requires exactly one proof type
   const proofTypes = Object.keys(requestBody.proofs);
   if (proofTypes.length !== 1) {
-    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}: V1.0 requires exactly one proof type in proofs object. Received: ${proofTypes.length} proof type(s) [${proofTypes.join(', ')}], expected: exactly 1`);
+    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}: V1.0 requires exactly one proof type in proofs object. Received: ${proofTypes.length} proof type(s) [${proofTypes.join(', ')}], expected: exactly 1. See ${SPEC_REFS.VCI_PROOF}`);
   }
 
   // Get the proof type (jwt, mso_mdoc, etc.)
@@ -267,11 +275,11 @@ const validateProofJWT = (proofJwt, effectiveConfigurationId) => {
   const decodedProofHeader = jwt.decode(proofJwt, { complete: true })?.header;
   if (!decodedProofHeader || !decodedProofHeader.alg) {
     const received = !decodedProofHeader ? 'missing header' : `header without alg (header keys: ${Object.keys(decodedProofHeader || {}).join(', ')})`;
-    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_MALFORMED}. Received: ${received}, expected: header with alg property`);
+    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_MALFORMED}. Received: ${received}, expected: header with alg property. See ${SPEC_REFS.VCI_PROOF}`);
   }
 
   if (!supportedAlgs.includes(decodedProofHeader.alg)) {
-    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_ALGORITHM}. Received: '${decodedProofHeader.alg}', expected: one of [${supportedAlgs.join(", ")}]`);
+    throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_ALGORITHM}. Received: '${decodedProofHeader.alg}', expected: one of [${supportedAlgs.join(", ")}]. See ${SPEC_REFS.VCI_PROOF}`);
   }
 
   return decodedProofHeader;
@@ -382,7 +390,7 @@ const verifyProofJWT = async (proofJwt, publicKeyForProof, flowType) => {
 
     // Verify claims
     if (!proofPayload.iss && flowType === "code") {
-      throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_ISS}. Received: payload without iss claim, expected: payload with iss claim (required for code flow)`);
+      throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_ISS}. Received: payload without iss claim, expected: payload with iss claim (required for code flow). See ${SPEC_REFS.VCI_PROOF}`);
     }
 
     console.log(`Proof JWT validated. Issuer (Wallet): ${proofPayload.iss}, Nonce verified.`);
@@ -778,14 +786,14 @@ sharedRouter.post("/credential", async (req, res) => {
         // Check if nonce is missing
         if (!decodedPayloadForNonce || !decodedPayloadForNonce.nonce) {
           const received = !decodedPayloadForNonce ? 'unable to decode JWT payload' : 'payload without nonce claim';
-          throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_NONCE}. Received: ${received}, expected: JWT payload with nonce claim`);
+          throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_NONCE}. Received: ${received}, expected: JWT payload with nonce claim. See ${SPEC_REFS.VCI_PROOF}`);
         }
         
         // Check if nonce is valid/expired
         const nonceExists = await checkNonce(decodedPayloadForNonce.nonce);
         if (!nonceExists) {
           // Nonce exists but is invalid/expired - throw error for PoP failure recovery
-          throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_NONCE}. Received: nonce '${decodedPayloadForNonce.nonce}' (invalid, expired, or already used), expected: valid, unexpired, unused nonce`);
+          throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_NONCE}. Received: nonce '${decodedPayloadForNonce.nonce}' (invalid, expired, or already used), expected: valid, unexpired, unused nonce. See ${SPEC_REFS.VCI_PROOF}`);
         }
         
         // Store nonce value for deletion after successful signature verification

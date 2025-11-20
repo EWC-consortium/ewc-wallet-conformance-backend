@@ -1,3 +1,10 @@
+// Specification references
+const SPEC_REFS = {
+  VP_1_0: "https://openid.net/specs/openid-4-verifiable-presentations-1_0.html",
+  VP_CREDENTIAL_RESPONSE: "https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-credential-response",
+  VP_PRESENTATION_SUBMISSION: "https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-presentation-submission",
+};
+
 import jp from "jsonpath";
 import jwt from "jsonwebtoken";
 import { decodeSdJwt, getClaims } from "@sd-jwt/decode";
@@ -30,7 +37,7 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
   const vpToken = req.body["vp_token"];
   if (!vpToken) {
     const received = req.body["vp_token"] === undefined ? "vp_token missing" : `vp_token is ${typeof req.body["vp_token"]}`;
-    throw new Error(`No vp_token found in the request body. Received: ${received}, expected: vp_token string or object`);
+    throw new Error(`No vp_token found in the request body. Received: ${received}, expected: vp_token string or object. See ${SPEC_REFS.VP_CREDENTIAL_RESPONSE}`);
   }
 
   const presentationSubmission = req.body["presentation_submission"];
@@ -49,12 +56,12 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
       descriptorMap = JSON.parse(presentationSubmission).descriptor_map;
     } catch (err) {
       const received = typeof presentationSubmission === 'string' ? `string (parse error: ${err.message})` : typeof presentationSubmission;
-      throw new Error(`Invalid JSON format for presentation_submission. Received: ${received}, expected: valid JSON string`);
+      throw new Error(`Invalid JSON format for presentation_submission. Received: ${received}, expected: valid JSON string. See ${SPEC_REFS.VP_PRESENTATION_SUBMISSION}`);
     }
 
     if (!Array.isArray(descriptorMap)) {
       const received = Array.isArray(descriptorMap) ? 'array' : typeof descriptorMap;
-      throw new Error(`descriptor_map is not an array. Received: ${received}, expected: array`);
+      throw new Error(`descriptor_map is not an array. Received: ${received}, expected: array. See ${SPEC_REFS.VP_PRESENTATION_SUBMISSION}`);
     }
 
     const isValidDescriptorEntry = compareSubmissionToDefinition(
@@ -63,7 +70,7 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
     );
     if (!isValidDescriptorEntry) {
       const received = "descriptor_map does not match presentation_definition";
-      throw new Error(`invalid descriptor entry. Received: ${received}, expected: descriptor_map matching presentation_definition input_descriptors`);
+      throw new Error(`invalid descriptor entry. Received: ${received}, expected: descriptor_map matching presentation_definition input_descriptors. See ${SPEC_REFS.VP_PRESENTATION_SUBMISSION}`);
     }
     
     

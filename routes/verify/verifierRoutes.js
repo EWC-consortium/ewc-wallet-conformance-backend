@@ -47,6 +47,14 @@ const getSessionTranscriptBytes = (
   mdocGeneratedNonce,
 ) => encodeCbor(['OIDC4VPHandover', oid4vpData.client_id, oid4vpData.response_uri, mdocGeneratedNonce, oid4vpData.nonce]);
 
+// Specification references
+const SPEC_REFS = {
+  VP_1_0: "https://openid.net/specs/openid-4-verifiable-presentations-1_0.html",
+  VP_CREDENTIAL_RESPONSE: "https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-credential-response",
+  VP_NONCE: "https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-nonce",
+  VP_STATE: "https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-state",
+};
+
 const verifierRouter = express.Router();
 
 // Middleware to set session context for console interception
@@ -874,10 +882,11 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
         if (!submittedNonce) {
           const received = "nonce not found in vp_token (checked key-binding JWT, VP token payload, and nested structures)";
-          console.log(`No submitted nonce found in vp_token. Received: ${received}, expected: nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec`);
+          console.log(`No submitted nonce found in vp_token. Received: ${received}, expected: nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec. See ${SPEC_REFS.VP_NONCE}`);
           await logError(sessionId, "VP 1.0 violation: nonce not found in VP token", {
             received,
             expected: "nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec",
+            specRef: SPEC_REFS.VP_NONCE,
             message: "Per OpenID4VP 1.0 spec, nonce MUST be in the key-binding JWT of SD-JWT credentials",
             jwtFromKeybindAvailable: !!jwtFromKeybind,
             jwtFromKeybindType: typeof jwtFromKeybind,
@@ -890,28 +899,28 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           try {
             vpSession.status = "failed";
             vpSession.error = "invalid_request";
-            vpSession.error_description = `submitted nonce not found in vp_token. Received: ${received}, expected: nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec`;
+            vpSession.error_description = `submitted nonce not found in vp_token. Received: ${received}, expected: nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec. See ${SPEC_REFS.VP_NONCE}`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after nonce missing error:", storageError);
           }
           return res.status(400).json({ 
-            error: `submitted nonce not found in vp_token. Received: ${received}, expected: nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec` 
+            error: `submitted nonce not found in vp_token. Received: ${received}, expected: nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec. See ${SPEC_REFS.VP_NONCE}` 
           });
         }
         
         if (vpSession.nonce != submittedNonce) {
-          console.log(`Nonce mismatch. Received: '${submittedNonce}', expected: '${vpSession.nonce}'`);
+          console.log(`Nonce mismatch. Received: '${submittedNonce}', expected: '${vpSession.nonce}'. See ${SPEC_REFS.VP_NONCE}`);
           // Mark session as failed
           try {
             vpSession.status = "failed";
             vpSession.error = "invalid_nonce";
-            vpSession.error_description = `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'`;
+            vpSession.error_description = `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'. See ${SPEC_REFS.VP_NONCE}`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after nonce mismatch:", storageError);
           }
-          return res.status(400).json({ error: `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'` });
+          return res.status(400).json({ error: `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'. See ${SPEC_REFS.VP_NONCE}` });
         }
 
         // Verify audience if key-binding JWT provided
@@ -919,18 +928,19 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           if (jwtFromKeybind.payload.aud !== vpSession.client_id) {
             await logError(sessionId, "aud claim does not match verifier client_id", {
               received: jwtFromKeybind.payload.aud,
-              expected: vpSession.client_id
+              expected: vpSession.client_id,
+              specRef: SPEC_REFS.VP_CREDENTIAL_RESPONSE
             });
             // Mark session as failed
             try {
               vpSession.status = "failed";
               vpSession.error = "invalid_audience";
-              vpSession.error_description = `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'`;
+              vpSession.error_description = `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'. See ${SPEC_REFS.VP_CREDENTIAL_RESPONSE}`;
               await storeVPSession(sessionId, vpSession);
             } catch (storageError) {
               console.error("Failed to update session status after audience mismatch:", storageError);
             }
-            return res.status(400).json({ error: `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'` });
+            return res.status(400).json({ error: `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'. See ${SPEC_REFS.VP_CREDENTIAL_RESPONSE}` });
           }
         }
 
@@ -994,34 +1004,36 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           const received = req.body.state === undefined ? "state parameter missing" : `state is ${typeof req.body.state}`;
           await logError(sessionId, "state parameter missing in direct_post", {
             received,
-            expected: "state parameter string"
+            expected: "state parameter string",
+            specRef: SPEC_REFS.VP_STATE
           });
           // Mark session as failed
           try {
             vpSession.status = "failed";
             vpSession.error = "invalid_request";
-            vpSession.error_description = `state parameter missing. Received: ${received}, expected: state parameter string`;
+            vpSession.error_description = `state parameter missing. Received: ${received}, expected: state parameter string. See ${SPEC_REFS.VP_STATE}`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after state missing error:", storageError);
           }
-          return res.status(400).json({ error: `state parameter missing. Received: ${received}, expected: state parameter string` });
+          return res.status(400).json({ error: `state parameter missing. Received: ${received}, expected: state parameter string. See ${SPEC_REFS.VP_STATE}` });
         }
         if (submittedState !== vpSession.state) {
           await logError(sessionId, "state mismatch in direct_post", {
             received: submittedState,
-            expected: vpSession.state
+            expected: vpSession.state,
+            specRef: SPEC_REFS.VP_STATE
           });
           // Mark session as failed
           try {
             vpSession.status = "failed";
             vpSession.error = "invalid_state";
-            vpSession.error_description = `state mismatch. Received: '${submittedState}', expected: '${vpSession.state}'`;
+            vpSession.error_description = `state mismatch. Received: '${submittedState}', expected: '${vpSession.state}'. See ${SPEC_REFS.VP_STATE}`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after state mismatch:", storageError);
           }
-          return res.status(400).json({ error: `state mismatch. Received: '${submittedState}', expected: '${vpSession.state}'` });
+          return res.status(400).json({ error: `state mismatch. Received: '${submittedState}', expected: '${vpSession.state}'. See ${SPEC_REFS.VP_STATE}` });
         }
 
         await logDebug(sessionId, "Extracting claims from direct_post request");
@@ -1298,12 +1310,13 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         await logError(sessionId, "No submitted nonce found in vp_token", {
           received,
           expected: "nonce in key-binding JWT or VP token payload",
+          specRef: SPEC_REFS.VP_NONCE,
           hasVpToken: !!vpToken,
           hasKeybindJwt: !!jwtFromKeybind,
           vpTokenPreview: vpToken ? vpToken.substring(0, 100) : null
         });
-        console.log(`No submitted nonce found in vp_token. Received: ${received}, expected: nonce in key-binding JWT or VP token payload`);
-        return res.status(400).json({ error: `submitted nonce not found in vp_token. Received: ${received}, expected: nonce in key-binding JWT or VP token payload` });
+        console.log(`No submitted nonce found in vp_token. Received: ${received}, expected: nonce in key-binding JWT or VP token payload. See ${SPEC_REFS.VP_NONCE}`);
+        return res.status(400).json({ error: `submitted nonce not found in vp_token. Received: ${received}, expected: nonce in key-binding JWT or VP token payload. See ${SPEC_REFS.VP_NONCE}` });
       }
         
         await logDebug(sessionId, "Nonce found in VP token", {
@@ -1313,21 +1326,22 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     
 
       if (vpSession.nonce != submittedNonce) {
-        console.log(`Nonce mismatch. Received: '${submittedNonce}', expected: '${vpSession.nonce}'`);
+        console.log(`Nonce mismatch. Received: '${submittedNonce}', expected: '${vpSession.nonce}'. See ${SPEC_REFS.VP_NONCE}`);
         await logError(sessionId, "Nonce mismatch", {
           received: submittedNonce,
-          expected: vpSession.nonce
+          expected: vpSession.nonce,
+          specRef: SPEC_REFS.VP_NONCE
         });
         // Mark session as failed
         try {
           vpSession.status = "failed";
           vpSession.error = "invalid_nonce";
-          vpSession.error_description = `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'`;
+          vpSession.error_description = `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'. See ${SPEC_REFS.VP_NONCE}`;
           await storeVPSession(sessionId, vpSession);
         } catch (storageError) {
           console.error("Failed to update session status after nonce mismatch:", storageError);
         }
-        return res.status(400).json({ error: `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'` });
+        return res.status(400).json({ error: `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'. See ${SPEC_REFS.VP_NONCE}` });
       }
       
       // Verify audience if key-binding JWT provided
@@ -1335,18 +1349,19 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         if (jwtFromKeybind.payload.aud !== vpSession.client_id) {
           await logError(sessionId, "aud claim does not match verifier client_id", {
             received: jwtFromKeybind.payload.aud,
-            expected: vpSession.client_id
+            expected: vpSession.client_id,
+            specRef: SPEC_REFS.VP_CREDENTIAL_RESPONSE
           });
           // Mark session as failed
           try {
             vpSession.status = "failed";
             vpSession.error = "invalid_audience";
-            vpSession.error_description = `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'`;
+            vpSession.error_description = `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'. See ${SPEC_REFS.VP_CREDENTIAL_RESPONSE}`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
             console.error("Failed to update session status after audience mismatch:", storageError);
           }
-          return res.status(400).json({ error: `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'` });
+          return res.status(400).json({ error: `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'. See ${SPEC_REFS.VP_CREDENTIAL_RESPONSE}` });
         }
       }
 
