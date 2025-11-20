@@ -34,6 +34,11 @@ import {
   deleteNonce,
   checkAndSetPollTime,
   clearPollTime,
+  logError,
+  logInfo,
+  logWarn,
+  setSessionContext,
+  clearSessionContext,
 } from "../../services/cacheServiceRedis.js";
 
 import * as jose from "jose";
@@ -84,6 +89,15 @@ const ERROR_MESSAGES = {
   NONCE_GENERATION_FAILED: "Nonce generation failed",
   AUTHORIZATION_PENDING: "Authorization pending",
   SLOW_DOWN: "Slow down"
+};
+
+// Helper function to extract sessionId from sessionKey
+// sessionKey can be in format "code-flow-sessions:uuid" or just "uuid"
+const extractSessionId = (sessionKey) => {
+  if (!sessionKey) return null;
+  // If sessionKey contains a colon, extract the part after it
+  const parts = sessionKey.split(':');
+  return parts.length > 1 ? parts[parts.length - 1] : sessionKey;
 };
 
 // Helper to load issuer configuration
@@ -541,11 +555,26 @@ const handleImmediateCredentialIssuance = async (requestBody, sessionObject, eff
   const requestedCredentialType = [effectiveConfigurationId];
   requestBody.vct = requestedCredentialType[0];
 
+  // Determine format from credential configuration (VCI v1.0 requirement)
+  const issuerConfig = loadIssuerConfig();
+  const credConfig = issuerConfig.credential_configurations_supported[effectiveConfigurationId];
+  if (!credConfig) {
+    throw new Error(`Credential configuration '${effectiveConfigurationId}' not found`);
+  }
+  
+  // Determine format - default to 'dc+sd-jwt' for backward compatibility
+  let format = credConfig.format || 'dc+sd-jwt';
+  
+  // Map VCI v1.0 format identifiers to internal format identifiers
+  if (format === 'mso_mdoc') {
+    format = 'mDL'; // Use 'mDL' for internal processing
+  }
+
   const credential = await handleCredentialGenerationBasedOnFormat(
     requestBody,
     sessionObject,
     getServerUrl(),
-    'dc+sd-jwt'
+    format
   );
 
   return {
@@ -578,6 +607,8 @@ const handleDeferredCredentialIssuance = async (requestBody, sessionObject) => {
 // *****************************************************************
 
 sharedRouter.post("/token_endpoint", async (req, res) => {
+  let sessionId = null;
+  
   try {
     const { grant_type, code, 'pre-authorized_code': preAuthorizedCode, code_verifier, authorization_details } = req.body;
 
@@ -586,6 +617,27 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
       return res.status(400).json({
         error: "invalid_request",
         error_description: ERROR_MESSAGES.INVALID_REQUEST,
+      });
+    }
+
+    // Extract sessionId for logging
+    // For pre-authorized code flow, the preAuthorizedCode IS the sessionId
+    if (preAuthorizedCode) {
+      sessionId = preAuthorizedCode;
+    } else if (code) {
+      // For authorization code flow, we need to look up the sessionId from the code
+      sessionId = await getSessionKeyAuthCode(code);
+    }
+    
+    // Set session context for console interception to capture all logs
+    if (sessionId) {
+      setSessionContext(sessionId);
+      // Clear context when response finishes
+      res.on('finish', () => {
+        clearSessionContext();
+      });
+      res.on('close', () => {
+        clearSessionContext();
       });
     }
 
@@ -657,11 +709,39 @@ sharedRouter.post("/credential", async (req, res) => {
     flowType = sessionData.flowType;
     sessionKey = sessionData.sessionKey;
     
+    const sessionId = extractSessionId(sessionKey);
+    
+    // Set session context for console interception to capture all logs
+    if (sessionId) {
+      setSessionContext(sessionId);
+      // Clear context when response finishes
+      res.on('finish', () => {
+        clearSessionContext();
+      });
+      res.on('close', () => {
+        clearSessionContext();
+      });
+    }
+    
     if (!sessionObject) {
+      if (sessionId) {
+        await logError(sessionId, "Session not found for credential request", {
+          error: ERROR_MESSAGES.SESSION_LOST
+        }).catch(() => {});
+      }
       return res.status(500).json({
         error: "server_error",
         error_description: ERROR_MESSAGES.SESSION_LOST,
       });
+    }
+
+    // Log credential request received
+    if (sessionId) {
+      await logInfo(sessionId, "Credential request received", {
+        credential_configuration_id: requestBody.credential_configuration_id,
+        credential_identifier: requestBody.credential_identifier,
+        hasProof: !!requestBody.proof || !!requestBody.proofs
+      }).catch(() => {});
     }
 
     // Validate credential request
@@ -710,8 +790,22 @@ sharedRouter.post("/credential", async (req, res) => {
         
         // Delete the nonce after successful signature verification
         await deleteNonce(nonceValue);
+        
+        // Log successful proof validation
+        if (sessionId) {
+          await logInfo(sessionId, "Proof validation successful", {
+            effectiveConfigurationId
+          }).catch(() => {});
+        }
       } catch (error) {
         console.error("Proof validation error:", error);
+        if (sessionId) {
+          await logError(sessionId, "Proof validation error", {
+            error: error.message,
+            stack: error.stack,
+            proofValidationError: true
+          }).catch(err => console.error("Failed to log proof validation error:", err));
+        }
         
         if (error.message.includes(ERROR_MESSAGES.INVALID_PROOF)) {
           return res.status(400).json({
@@ -735,13 +829,29 @@ sharedRouter.post("/credential", async (req, res) => {
     // Handle credential issuance
     if (sessionObject.isDeferred) {
       const response = await handleDeferredCredentialIssuance(requestBody, sessionObject);
+      if (sessionId) {
+        await logInfo(sessionId, "Deferred credential issuance initiated", {
+          transaction_id: response.transaction_id
+        }).catch(() => {});
+      }
       return res.status(202).json(response);
     } else {
       try {
         const response = await handleImmediateCredentialIssuance(requestBody, sessionObject, effectiveConfigurationId);
+        if (sessionId) {
+          await logInfo(sessionId, "Credential issued successfully", {
+            effectiveConfigurationId
+          }).catch(() => {});
+        }
         return res.json(response);
       } catch (credError) {
         console.error("Credential generation error:", credError);
+        if (sessionId) {
+          await logError(sessionId, "Credential generation error", {
+            error: credError.message,
+            stack: credError.stack
+          }).catch(err => console.error("Failed to log credential generation error:", err));
+        }
         
         // Mark session as failed when credential generation fails
         if (sessionObject && sessionKey) {
@@ -757,6 +867,11 @@ sharedRouter.post("/credential", async (req, res) => {
             }
           } catch (storageError) {
             console.error("Failed to update session status after credential generation failure:", storageError);
+            if (sessionId) {
+              await logError(sessionId, "Failed to update session status after credential generation failure", {
+                error: storageError.message
+              }).catch(() => {});
+            }
           }
         }
         
@@ -769,6 +884,14 @@ sharedRouter.post("/credential", async (req, res) => {
     }
   } catch (error) {
     console.error("Credential endpoint error:", error);
+    const sessionId = extractSessionId(sessionKey);
+    if (sessionId) {
+      await logError(sessionId, "Credential endpoint error", {
+        error: error.message,
+        stack: error.stack,
+        errorCode: error.errorCode
+      }).catch(err => console.error("Failed to log credential endpoint error:", err));
+    }
 
     const proofRelatedErrors = [
       ERROR_MESSAGES.INVALID_PROOF,
@@ -809,6 +932,11 @@ sharedRouter.post("/credential", async (req, res) => {
           errorResponse.c_nonce_expires_in = NONCE_EXPIRES_IN;
         } catch (nonceError) {
           console.error("Failed to issue refreshed c_nonce after proof failure:", nonceError);
+          if (sessionId) {
+            await logError(sessionId, "Failed to issue refreshed c_nonce after proof failure", {
+              error: nonceError.message
+            }).catch(() => {});
+          }
         }
       } else {
         // Mark session as failed for other proof validation errors (non-nonce errors)
@@ -825,6 +953,11 @@ sharedRouter.post("/credential", async (req, res) => {
             }
           } catch (storageError) {
             console.error("Failed to update session status after proof validation failure:", storageError);
+            if (sessionId) {
+              await logError(sessionId, "Failed to update session status after proof validation failure", {
+                error: storageError.message
+              }).catch(() => {});
+            }
           }
         }
       }
@@ -847,6 +980,11 @@ sharedRouter.post("/credential", async (req, res) => {
           }
         } catch (storageError) {
           console.error("Failed to update session status after validation failure:", storageError);
+          if (sessionId) {
+            await logError(sessionId, "Failed to update session status after validation failure", {
+              error: storageError.message
+            }).catch(() => {});
+          }
         }
       }
 
@@ -870,6 +1008,11 @@ sharedRouter.post("/credential", async (req, res) => {
         }
       } catch (storageError) {
         console.error("Failed to update session status after credential error:", storageError);
+        if (sessionId) {
+          await logError(sessionId, "Failed to update session status after credential error", {
+            error: storageError.message
+          }).catch(() => {});
+        }
       }
     }
 
@@ -896,6 +1039,19 @@ sharedRouter.post("/credential_deferred", async (req, res) => {
     }
 
     const sessionId = await getDeferredSessionTransactionId(transaction_id);
+    
+    // Set session context for console interception to capture all logs
+    if (sessionId) {
+      setSessionContext(sessionId);
+      // Clear context when response finishes
+      res.on('finish', () => {
+        clearSessionContext();
+      });
+      res.on('close', () => {
+        clearSessionContext();
+      });
+    }
+    
     const sessionObject = await getCodeFlowSession(sessionId);
     
     if (!sessionObject) {

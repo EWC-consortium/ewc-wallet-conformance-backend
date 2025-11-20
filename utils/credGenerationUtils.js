@@ -509,8 +509,9 @@ export async function handleCredentialGenerationBasedOnFormat(
       const encodedProtectedHeaders = cborEncode(protectedHeadersMap);
       
       // Unprotected headers (CBOR map, not encoded) - use Map with integer keys
+      // x5c (label 33) MUST be an array per COSE spec (RFC 8152)
       const unprotectedHeadersMap = new Map();
-      unprotectedHeadersMap.set(33, Buffer.from(pemToBase64Der(issuerCertificateForSign), 'base64')); // x5c: certificate chain - integer key 33
+      unprotectedHeadersMap.set(33, [Buffer.from(pemToBase64Der(issuerCertificateForSign), 'base64')]); // x5c: certificate chain array - integer key 33
       
       console.log("COSE Headers Debug:");
       console.log("Protected headers Map keys:", Array.from(protectedHeadersMap.keys()), "values:", Array.from(protectedHeadersMap.values()));

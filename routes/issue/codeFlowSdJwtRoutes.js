@@ -22,6 +22,8 @@ import {
 import {
   getCodeFlowSession,
   storeCodeFlowSession,
+  setSessionContext,
+  clearSessionContext,
 } from "../../services/cacheServiceRedis.js";
 
 import {
@@ -550,6 +552,19 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       user_hint: req.query.user_hint,
       request_uri: req.query.request_uri,
     };
+
+    // Set session context for console interception to capture all logs
+    // issuerState is the sessionId for code flow
+    if (requestData.issuerState) {
+      setSessionContext(requestData.issuerState);
+      // Clear context when response finishes
+      res.on('finish', () => {
+        clearSessionContext();
+      });
+      res.on('close', () => {
+        clearSessionContext();
+      });
+    }
 
     // Handle PAR request if present
     const parRequest = handlePARRequest(requestData.request_uri);
