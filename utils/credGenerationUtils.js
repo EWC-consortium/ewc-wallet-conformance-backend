@@ -32,7 +32,8 @@ import {
 
 import {
   MDoc,
-  Document
+  Document,
+  IssuerSignedDocument
 } from "@auth0/mdl";
 
 import cryptoModule from "crypto";
@@ -382,8 +383,42 @@ export async function handleCredentialGenerationBasedOnFormat(
     console.log("Credential issued: ", credential);
     return credential;
   } else if (format === "mDL" || format === "mdl") {
-    console.log("Attempting to generate mDL credential using manual CBOR construction...");
+    console.log("Generating mDL credential using @auth0/mdl library...");
     try {
+      return await generateMdlCredentialWithAuth0Library(
+        requestBody,
+        sessionObject,
+        serverURL,
+        vct,
+        credPayload,
+        cnf,
+        issuerConfigValues
+      );
+    } catch (error) {
+      console.error("Error generating mDL with @auth0/mdl:", error);
+      throw new Error(`Failed to generate mDL: ${error.message}`);
+    }
+  } else {
+    throw new Error(`Unsupported format: ${format}`);
+  }
+}
+
+/**
+ * DEPRECATED: Manual CBOR construction method - kept for reference but not used
+ * This method manually constructs the mDL credential using CBOR encoding
+ * @deprecated Use generateMdlCredentialWithAuth0Library instead
+ */
+async function generateMdlCredentialManually(
+  requestBody,
+  sessionObject,
+  serverURL,
+  vct,
+  credPayload,
+  cnf,
+  issuerConfigValues
+) {
+  console.log("Attempting to generate mDL credential using manual CBOR construction...");
+  try {
      
       const credentialConfiguration =
         issuerConfigValues.credential_configurations_supported[vct];
@@ -432,6 +467,11 @@ export async function handleCredentialGenerationBasedOnFormat(
       
       Object.entries(mDLClaimsMapped).forEach(([key, value], index) => {
         // Create the IssuerSignedItem structure manually
+        // Per ISO/IEC 18013-5:2021 Section 9.1.2.2, IssuerSignedItem contains:
+        // - digestID: Integer identifier
+        // - random: Random bytes for security
+        // - elementIdentifier: String identifier
+        // - elementValue: The actual claim value
         const randomBytes = cryptoModule.randomBytes(16);
         const issuerSignedItem = {
           digestID: index,
@@ -442,21 +482,25 @@ export async function handleCredentialGenerationBasedOnFormat(
         
         // Encode the item as CBOR using cbor library (matches ISO 18013-5 spec)
         // This ensures consistency with EUDI Wallet reference implementations
+        // Reference: https://www.iso.org/standard/69084.html (ISO/IEC 18013-5:2021)
         const encodedItem = cbor.encode(issuerSignedItem);
         
         // Calculate digest on the encoded item
+        // Per ISO/IEC 18013-5:2021, SHA-256 digest is calculated on the encoded CBOR bytes
         const hash = cryptoModule.createHash('sha256');
         hash.update(encodedItem);
-        valueDigests[namespace][index] = hash.digest();
+        const digest = hash.digest(); // Store digest result - hash object is finalized after this call
+        valueDigests[namespace][index] = digest;
         
         // Create tag 24 with the ENCODED CBOR bytes using cbor library for proper tag handling
         // This creates the correct 24(<<{...}>>) structure where the tag contains encoded CBOR
-        // Per ISO 18013-5: Tag 24 (CBOR-encoded CBOR) wraps the encoded IssuerSignedItem
+        // Per ISO/IEC 18013-5:2021 Section 9.1.2.2, IssuerSignedItem MUST be wrapped in Tag 24
+        // Tag 24 = CBOR-encoded CBOR as defined in RFC 7049
         const taggedItem = new cbor.Tagged(24, encodedItem);
         
         nameSpaceItems.push(taggedItem);
         
-        console.log(`Added claim: ${key} = ${value} (digestID: ${index}), encoded length: ${encodedItem.length} bytes`);
+        console.log(`Added claim: ${key} = ${value} (digestID: ${index}), encoded length: ${encodedItem.length} bytes, digest: ${digest.toString('hex').substring(0, 16)}...`);
       });
       
       // Create the issuerSigned structure manually
@@ -478,19 +522,23 @@ export async function handleCredentialGenerationBasedOnFormat(
         validUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
       };
       
+      // MSO structure per ISO/IEC 18013-5:2021 Section 9.1.2.4
       const mobileSecurityObject = {
-        version: "1.0",
-        digestAlgorithm: "SHA-256",
-        valueDigests: valueDigests,
+        version: "1.0", // MSO version
+        digestAlgorithm: "SHA-256", // Digest algorithm for valueDigests
+        valueDigests: valueDigests, // Map: namespace → digestID → digest bytes
         deviceKeyInfo: {
-          deviceKey: devicePublicKeyJwk
+          deviceKey: devicePublicKeyJwk // JWK of device public key for holder binding
         },
-        docType: docType,
-        validityInfo: validityInfo
+        docType: docType, // Document type identifier
+        validityInfo: validityInfo // Validity period information (ISO 8601 timestamps)
       };
+      
+      console.log(`MSO created for docType: ${docType}, namespace: ${namespace}, ${Object.keys(mDLClaimsMapped).length} claims`);
       
       // Encode the MSO using cbor library (standardized for EUDI compliance)
       // This ensures consistency with ISO 18013-5 and EUDI Wallet reference implementations
+      // Reference: https://www.iso.org/standard/69084.html (ISO/IEC 18013-5:2021)
       const encodedMSO = cbor.encode(mobileSecurityObject);
       
       // Debug: Log the MSO to verify it's properly encoded
@@ -537,27 +585,38 @@ export async function handleCredentialGenerationBasedOnFormat(
       
       // Create COSE_Sign1 structure to sign 
       // Use the raw MSO bytes for signing
-      // Per RFC 8152: COSE_Sign1_Tagged = [
-      //   protected: bstr,
-      //   unprotected: map,
-      //   payload: bstr | nil,
-      //   signature: bstr
+      // Per RFC 8152 Section 4.4: ToBeSigned = [
+      //   "Signature1",  // context string
+      //   protected_bstr,
+      //   external_aad,
+      //   payload_bstr
       // ]
+      // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-4.4
       const toBeSigned = cbor.encode([
-        "Signature1", // context string for Sign1
+        "Signature1", // context string for Sign1 (RFC 8152 Section 4.4)
         encodedProtectedHeaders, // protected headers as bstr
-        Buffer.alloc(0), // external_aad (empty)
+        Buffer.alloc(0), // external_aad (empty for Sign1)
         encodedMSO // payload (MSO as encoded bytes for signing)
       ]);
       
+      console.log(`Creating signature over MSO (${encodedMSO.length} bytes) using ES256`);
+      
       // Create actual signature using the private key
+      // Per ISO/IEC 18013-5:2021, ES256 (ECDSA P-256 with SHA-256) is used
       const sign = cryptoModule.createSign('SHA256');
       sign.update(toBeSigned);
       const derSignature = sign.sign(issuerPrivateKeyForSign);
       
       // Convert DER signature to IEEE P1363 format (raw r,s values) for COSE
-      // ES256 signature should be 64 bytes (32 bytes r + 32 bytes s)
+      // Per RFC 8152 Section 8.1, ES256 signatures are 64 bytes (32 bytes r + 32 bytes s)
+      // IEEE P1363 format is required for COSE, not DER format
       const signature = derToP1363(derSignature);
+      
+      if (signature.length !== 64) {
+        console.warn(`⚠️ Warning: Signature length is ${signature.length} bytes, expected 64 bytes for ES256`);
+      } else {
+        console.log("✅ Signature created successfully (64 bytes, IEEE P1363 format)");
+      }
       
       // Critical fix for MSO byte string issue:
       // Create the COSE Sign1 structure where the MSO is the payload as a byte string
@@ -565,34 +624,52 @@ export async function handleCredentialGenerationBasedOnFormat(
       
       // Ensure the MSO payload is treated correctly as encoded CBOR bytes
       // In COSE Sign1: [protected_bstr, unprotected_map, payload_bstr, signature_bstr]
-      
-      // Convert Map to plain object for cbor library compatibility
-      const unprotectedHeadersObject = {};
-      for (const [key, value] of unprotectedHeadersMap) {
-        unprotectedHeadersObject[key] = value;
-      }
+      // CRITICAL: Unprotected headers MUST remain as a Map with integer keys (not plain object)
+      // Converting to plain object changes integer keys (33) to string keys ('33'), which breaks COSE compliance
+      // The cbor library correctly handles Map encoding with integer keys
       
       const coseSign1 = [
         encodedProtectedHeaders, // protected headers as encoded bstr  
-        unprotectedHeadersObject, // unprotected headers as plain object (for cbor library compatibility)
+        unprotectedHeadersMap, // unprotected headers as Map (preserves integer keys for COSE compliance)
         encodedMSO, // payload as bstr - THIS MUST BE THE ENCODED MSO BYTES
         signature // signature as bstr
       ];
       
       console.log("COSE Sign1 structure types:", [
         "encodedProtectedHeaders:", typeof encodedProtectedHeaders, encodedProtectedHeaders.constructor.name,
-        "unprotectedHeadersObject:", typeof unprotectedHeadersObject, unprotectedHeadersObject.constructor.name,
+        "unprotectedHeadersMap:", typeof unprotectedHeadersMap, unprotectedHeadersMap.constructor.name, "keys:", Array.from(unprotectedHeadersMap.keys()),
         "encodedMSO:", typeof encodedMSO, encodedMSO.constructor.name, 
         "signature:", typeof signature, signature.constructor.name
       ]);
       
-      // The issuerAuth IS the COSE Sign1 structure
-      const issuerAuth = coseSign1;
+      // CRITICAL: Per ISO/IEC 18013-5:2021 and RFC 8152, issuerAuth MUST be a COSE_Sign1_Tagged structure
+      // This means the COSE Sign1 array MUST be wrapped in CBOR Tag 18
+      // Tag 18 = COSE_Sign1_Tagged as defined in RFC 8152 Section 4.2
+      // Reference: https://www.iso.org/standard/69084.html (ISO/IEC 18013-5:2021)
+      // Reference: https://datatracker.ietf.org/doc/html/rfc8152#section-4.2 (RFC 8152)
+      const coseSign1Tagged = new cbor.Tagged(18, coseSign1);
+      
+      console.log("COSE Sign1 wrapped in Tag 18 (COSE_Sign1_Tagged) for ISO/IEC 18013-5:2021 compliance");
+      
+      // The issuerAuth IS the COSE Sign1 structure wrapped in Tag 18
+      const issuerAuth = coseSign1Tagged;
       
       issuerSignedData.issuerAuth = issuerAuth;
       
       // Encode the complete IssuerSigned structure using cbor library for proper Tag handling
       const finalIssuerSigned = cbor.encode(issuerSignedData);
+      
+      // Verify Tag 18 is properly encoded
+      try {
+        const decodedTest = cbor.decode(finalIssuerSigned);
+        if (decodedTest.issuerAuth instanceof cbor.Tagged && decodedTest.issuerAuth.tag === 18) {
+          console.log("✅ Verified: issuerAuth is properly wrapped in Tag 18 (COSE_Sign1_Tagged)");
+        } else {
+          console.warn("⚠️ Warning: issuerAuth Tag 18 verification failed. Expected Tag 18, got:", decodedTest.issuerAuth?.tag || typeof decodedTest.issuerAuth);
+        }
+      } catch (e) {
+        console.error("Failed to verify Tag 18 wrapping:", e.message);
+      }
       
       
       
@@ -604,8 +681,188 @@ export async function handleCredentialGenerationBasedOnFormat(
       console.error("Error in manual mDL construction:", error);
       throw new Error(`Failed to generate mDL manually: ${error.message}`);
     }
+}
+
+/**
+ * Generate mDL credential using @auth0/mdl library
+ * This is the preferred method for ISO/IEC 18013-5:2021 compliant mDL issuance
+ * Reference: https://github.com/auth0-lab/mdl#issuing-a-credential
+ */
+async function generateMdlCredentialWithAuth0Library(
+  requestBody,
+  sessionObject,
+  serverURL,
+  vct,
+  credPayload,
+  cnf,
+  issuerConfigValues
+) {
+  console.log(`[mdl-issue] Starting mDL credential generation using @auth0/mdl library for VCT: ${vct}`);
+  
+  // Step 1: Get credential configuration
+  const credentialConfiguration =
+    issuerConfigValues.credential_configurations_supported[vct];
+  if (!credentialConfiguration) {
+    const availableConfigs = Object.keys(issuerConfigValues.credential_configurations_supported || {}).join(', ') || 'none';
+    console.error(`[mdl-issue] Configuration not found. Received VCT: '${vct}', Expected: one of [${availableConfigs}]`);
+    throw new Error(`Configuration not found for VCT: ${vct}. Received: '${vct}', Expected: one of [${availableConfigs}]`);
+  }
+  console.log(`[mdl-issue] Found credential configuration for VCT: ${vct}`);
+
+  const docType = credentialConfiguration.doctype;
+  if (!docType) {
+    console.error(`[mdl-issue] doctype not defined. Received: undefined, Expected: a doctype string in credential configuration for VCT: ${vct}`);
+    throw new Error(`'doctype' not defined for VCT: ${vct}. Received: undefined, Expected: a doctype string`);
+  }
+  const namespace = docType;
+  console.log(`[mdl-issue] Using docType: ${docType}, namespace: ${namespace}`);
+
+  // Step 2: Extract claims
+  const claims = credPayload;
+  const msoMdocClaims = claims.claims[namespace];
+  
+  if (!msoMdocClaims) {
+    const availableNamespaces = Object.keys(claims.claims || {}).join(', ') || 'none';
+    console.error(`[mdl-issue] Claims not found under namespace. Received namespace: '${namespace}', Available namespaces: [${availableNamespaces}]`);
+    throw new Error(`Claims not found under namespace '${namespace}' for VCT: ${vct}. Received namespace: '${namespace}', Expected: one of [${availableNamespaces}]`);
+  }
+  console.log(`[mdl-issue] Found claims under namespace '${namespace}': ${Object.keys(msoMdocClaims).length} claim(s)`);
+
+  // Step 3: Determine signature type
+  const currentEffectiveSignatureType =
+    (sessionObject.isHaip && process.env.ISSUER_SIGNATURE_TYPE === "x509") || sessionObject.signatureType === "x509"
+    ? "x509"
+    : "jwk";
+  console.log(`[mdl-issue] Signature type determined: ${currentEffectiveSignatureType} (isHaip: ${sessionObject.isHaip}, ISSUER_SIGNATURE_TYPE: ${process.env.ISSUER_SIGNATURE_TYPE}, sessionObject.signatureType: ${sessionObject.signatureType})`);
+
+  // Step 4: Map claims to mDL format
+  const mDLClaimsMapped = mapClaimsToMsoMdoc(msoMdocClaims, vct);
+  console.log(`[mdl-issue] Mapped ${Object.keys(mDLClaimsMapped).length} claims to mDL format:`, Object.keys(mDLClaimsMapped));
+  
+  // Step 5: Get device public key and issuer keys
+  const devicePublicKeyJwk = cnf.jwk;
+  if (!devicePublicKeyJwk) {
+    console.error(`[mdl-issue] Device public key JWK not found. Received: ${JSON.stringify(cnf)}, Expected: cnf.jwk to contain a JWK object`);
+    throw new Error(`Device public key JWK not found. Received: ${JSON.stringify(cnf)}, Expected: cnf.jwk to contain a JWK object`);
+  }
+  console.log(`[mdl-issue] Device public key JWK found: kty=${devicePublicKeyJwk.kty}, crv=${devicePublicKeyJwk.crv || 'N/A'}`);
+  
+  let issuerPrivateKeyForSign, issuerCertificateForSign;
+  
+  if (currentEffectiveSignatureType === "x509") {
+    console.log("[mdl-issue] Using X.509 certificate for mDL signing");
+    issuerPrivateKeyForSign = privateKeyPemX509;
+    issuerCertificateForSign = certificatePemX509;
+    
+    if (!issuerPrivateKeyForSign) {
+      console.error(`[mdl-issue] Issuer private key (X.509) not found. Received: ${typeof issuerPrivateKeyForSign}, Expected: a PEM string`);
+      throw new Error(`Issuer private key (X.509) not found. Received: ${typeof issuerPrivateKeyForSign}, Expected: a PEM string`);
+    }
+    if (!issuerCertificateForSign) {
+      console.error(`[mdl-issue] Issuer certificate (X.509) not found. Received: ${typeof issuerCertificateForSign}, Expected: a PEM string`);
+      throw new Error(`Issuer certificate (X.509) not found. Received: ${typeof issuerCertificateForSign}, Expected: a PEM string`);
+    }
+    console.log(`[mdl-issue] Issuer X.509 certificate loaded (length: ${issuerCertificateForSign.length} chars)`);
   } else {
-    throw new Error(`Unsupported format: ${format}`);
+    console.log("[mdl-issue] Using JWK for mDL signing (fallback to X.509 keys)");
+    issuerPrivateKeyForSign = privateKeyPemX509;
+    issuerCertificateForSign = certificatePemX509;
+  }
+
+  // Step 6: Create Document using @auth0/mdl library
+  // Based on https://github.com/auth0-lab/mdl documentation
+  console.log(`[mdl-issue] Creating Document with docType: ${docType}`);
+  
+  const validFrom = new Date();
+  const validUntil = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  console.log(`[mdl-issue] Validity period: ${validFrom.toISOString()} to ${validUntil.toISOString()}`);
+  
+  try {
+    console.log(`[mdl-issue] Adding ${Object.keys(mDLClaimsMapped).length} claims to namespace: ${namespace}`);
+    
+    // Create and sign document using method chaining as shown in the library docs
+    // The sign() method expects { issuerPrivateKey, issuerCertificate } in PEM format
+    // and returns the signed document (chainable, async)
+    const document = await new Document(docType)
+      .addIssuerNameSpace(namespace, mDLClaimsMapped);
+    
+    console.log(`[mdl-issue] ✅ Added issuer namespace with ${Object.keys(mDLClaimsMapped).length} claims`);
+    
+    document.useDigestAlgorithm('SHA-256');
+    console.log(`[mdl-issue] ✅ Set digest algorithm to SHA-256`);
+    
+    document.addValidityInfo({
+      signed: validFrom, // Date object, not ISO string
+      validFrom: validFrom,
+      validUntil: validUntil
+    });
+    console.log(`[mdl-issue] ✅ Added validity info`);
+    
+    document.addDeviceKeyInfo({ deviceKey: devicePublicKeyJwk });
+    console.log(`[mdl-issue] ✅ Added device key info`);
+    
+    // Log what we're passing to sign() for debugging
+    console.log(`[mdl-issue] Preparing to sign document...`);
+    console.log(`[mdl-issue] issuerPrivateKey (PEM) type: ${typeof issuerPrivateKeyForSign}, length: ${issuerPrivateKeyForSign?.length || 'N/A'}`);
+    console.log(`[mdl-issue] issuerCertificate (PEM) type: ${typeof issuerCertificateForSign}, length: ${issuerCertificateForSign?.length || 'N/A'}`);
+    
+    // CRITICAL: @auth0/mdl library expects issuerPrivateKey as JWK object, not PEM string
+    // The library only accepts PEM for issuerCertificate, but issuerPrivateKey must be JWK
+    // Reference: https://github.com/auth0-lab/mdl/blob/main/src/mdoc/model/Document.ts
+    console.log(`[mdl-issue] Converting issuer private key from PEM to JWK format...`);
+    const { importPKCS8, exportJWK } = await import('jose');
+    const issuerPrivateKeyObj = await importPKCS8(issuerPrivateKeyForSign, 'ES256');
+    const issuerPrivateKeyJwk = await exportJWK(issuerPrivateKeyObj);
+    
+    // Add key operations and usage flags as per jose library best practices
+    issuerPrivateKeyJwk.key_ops = ['sign'];
+    issuerPrivateKeyJwk.use = 'sig';
+    issuerPrivateKeyJwk.ext = true;
+    
+    console.log(`[mdl-issue] ✅ Converted issuer private key to JWK format: kty=${issuerPrivateKeyJwk.kty}, crv=${issuerPrivateKeyJwk.crv || 'N/A'}`);
+    console.log(`[mdl-issue] JWK has kid: ${!!issuerPrivateKeyJwk.kid}`);
+    
+    const signOptions = {
+      issuerPrivateKey: issuerPrivateKeyJwk, // JWK object (required by library)
+      issuerCertificate: issuerCertificateForSign, // PEM format string (library handles this)
+      alg: 'ES256' // Algorithm for signing
+    };
+    console.log(`[mdl-issue] Sign options prepared: issuerPrivateKey (JWK), issuerCertificate (PEM), alg: ES256`);
+    console.log(`[mdl-issue] Signing document with issuer certificate (alg: ES256)...`);
+    
+    // The sign() method returns a new IssuerSignedDocument instance
+    // We must use this signed instance for the MDoc
+    const signedDocument = await document.sign(signOptions);
+    
+    console.log("[mdl-issue] ✅ Document signed successfully");
+    
+    // CRITICAL: OID4VCI v1.0 requires the 'credential' to be the Base64URL-encoded 'IssuerSigned' structure.
+    // The @auth0/mdl MDoc.encode() returns a 'DeviceResponse' structure (version, documents, status), 
+    // which is for Presentation, not Issuance.
+    // The signedDocument object has an 'issuerSigned' property which matches the requirement.
+    console.log(`[mdl-issue] Extracting IssuerSigned structure for OID4VCI compliance...`);
+    const issuerSigned = signedDocument.issuerSigned;
+    
+    if (!issuerSigned || !issuerSigned.issuerAuth || !issuerSigned.nameSpaces) {
+        throw new Error("Signed document does not contain valid IssuerSigned structure");
+    }
+    
+    // Encode the IssuerSigned structure to CBOR
+    // We use the 'cbor' library (not cbor-x) to ensure consistent encoding with Tag 18
+    console.log(`[mdl-issue] Encoding IssuerSigned to CBOR...`);
+    const encoded = cbor.encode(issuerSigned);
+    console.log(`[mdl-issue] ✅ IssuerSigned encoded to CBOR (${encoded.length} bytes)`);
+    
+    const encodedMobileDocument = Buffer.from(encoded).toString("base64url");
+    console.log(`[mdl-issue] ✅ mDL Credential generated successfully using @auth0/mdl library`);
+    console.log(`[mdl-issue] Base64URL length: ${encodedMobileDocument.length} characters`);
+    console.log(`[mdl-issue] Base64URL preview (first 100 chars): ${encodedMobileDocument.substring(0, 100)}...`);
+    
+    return encodedMobileDocument;
+  } catch (error) {
+    console.error(`[mdl-issue] ❌ Error during mDL credential generation:`, error.message);
+    console.error(`[mdl-issue] Error stack:`, error.stack);
+    throw new Error(`Failed to generate mDL with @auth0/mdl library: ${error.message}. Received error: ${error.message}, Expected: successful credential generation`);
   }
 }
 

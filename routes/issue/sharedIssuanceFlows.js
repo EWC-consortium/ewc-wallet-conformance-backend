@@ -599,6 +599,7 @@ const handleImmediateCredentialIssuance = async (requestBody, sessionObject, eff
     getServerUrl(),
     format
   );
+  console.log("Credential issued: ", credential);
 
   return {
     credentials: [{ credential }]
