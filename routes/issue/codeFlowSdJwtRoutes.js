@@ -112,8 +112,9 @@ function parseAuthorizationDetails(authorizationDetails) {
   try {
     return JSON.parse(decodeURIComponent(authorizationDetails));
   } catch (error) {
-    console.log("error parsing authorization details", authorizationDetails);
-    throw new Error(ERROR_MESSAGES.PARSE_AUTHORIZATION_DETAILS_ERROR);
+    const received = typeof authorizationDetails === 'string' ? `string (${authorizationDetails.substring(0, 100)}...)` : typeof authorizationDetails;
+    console.log(`Error parsing authorization details. Received: ${received}, expected: valid JSON string, error: ${error.message}`);
+    throw new Error(`${ERROR_MESSAGES.PARSE_AUTHORIZATION_DETAILS_ERROR}. Received: ${received}, expected: valid JSON string`);
   }
 }
 
@@ -157,15 +158,15 @@ function validateAuthorizationRequest(response_type, code_challenge, authorizati
 
   if (authorizationDetails) {
     if (!response_type) {
-      errors.push(ERROR_MESSAGES.MISSING_RESPONSE_TYPE);
+      errors.push(`${ERROR_MESSAGES.MISSING_RESPONSE_TYPE}. Received: ${response_type === undefined ? 'undefined' : response_type}, expected: 'code'`);
     }
     if (!code_challenge) {
-      errors.push(ERROR_MESSAGES.MISSING_CODE_CHALLENGE);
+      errors.push(`${ERROR_MESSAGES.MISSING_CODE_CHALLENGE}. Received: ${code_challenge === undefined ? 'undefined' : code_challenge}, expected: code_challenge string`);
     }
   }
 
   if (response_type !== "code") {
-    errors.push(ERROR_MESSAGES.INVALID_RESPONSE_TYPE);
+    errors.push(`${ERROR_MESSAGES.INVALID_RESPONSE_TYPE}. Received: '${response_type}', expected: 'code'`);
   }
 
   return errors;
@@ -176,7 +177,7 @@ function handlePARRequest(request_uri) {
 
   const parRequest = getPushedAuthorizationRequests()?.get(request_uri);
   if (!parRequest) {
-    console.log(ERROR_MESSAGES.PAR_REQUEST_NOT_FOUND + request_uri);
+    console.log(`${ERROR_MESSAGES.PAR_REQUEST_NOT_FOUND}. Received: request_uri '${request_uri}' not found in cache, expected: valid request_uri from PAR endpoint`);
     return null;
   }
 
@@ -221,7 +222,8 @@ function handleDynamicAuthorizationRedirect(existingCodeSession, requestData) {
     return handlePaymentScheme(existingCodeSession, requestData);
   }
 
-  throw new Error(`Unsupported client_id_scheme: ${client_id_scheme}`);
+  const supportedSchemes = ["redirect_uri", "x509_san_dns", "did:web", "did:jwk", "payment"];
+  throw new Error(`Unsupported client_id_scheme. Received: '${client_id_scheme}', expected: one of [${supportedSchemes.join(', ')}]`);
 }
 
 function handleRedirectUriScheme(existingCodeSession, requestData) {
@@ -605,7 +607,8 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       isPIDIssuanceFlow = result.isPIDIssuanceFlow;
       
       if (credentialsRequested.length === 0) {
-        throw new Error(ERROR_MESSAGES.NO_CREDENTIALS_REQUESTED);
+        const received = requestData.scope ? `scope: '${requestData.scope}'` : 'no scope or authorization_details';
+        throw new Error(`${ERROR_MESSAGES.NO_CREDENTIALS_REQUESTED}. Received: ${received}, expected: scope or authorization_details with credential identifiers`);
       }
     }
 
@@ -613,7 +616,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
     let existingCodeSession = await getCodeFlowSession(requestData.issuerState);
     if (!existingCodeSession) {
       // Note: Can't mark session as failed since session doesn't exist
-      throw new Error(ERROR_MESSAGES.ITB_SESSION_EXPIRED);
+      throw new Error(`${ERROR_MESSAGES.ITB_SESSION_EXPIRED}. Received: issuerState '${requestData.issuerState}' not found, expected: valid, unexpired session`);
     }
 
     const updatedRequestData = {
@@ -748,7 +751,8 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
     console.log("direct_post_vci state" + issuerState);
 
     if (!jwt) {
-      console.log(ERROR_MESSAGES.NO_JWT_PRESENTED);
+      const received = req.body.vp_token === undefined ? "vp_token missing" : `vp_token is ${typeof req.body.vp_token}`;
+      console.log(`${ERROR_MESSAGES.NO_JWT_PRESENTED}. Received: ${received}, expected: vp_token JWT string`);
       
       // Try to mark session as failed if we have issuerState
       try {
@@ -761,7 +765,7 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
             existingCodeSession.results = { status: "failed" };
           }
           existingCodeSession.error = "invalid_request";
-          existingCodeSession.error_description = ERROR_MESSAGES.NO_JWT_PRESENTED;
+          existingCodeSession.error_description = `${ERROR_MESSAGES.NO_JWT_PRESENTED}. Received: ${received}, expected: vp_token JWT string`;
           await storeCodeFlowSession(issuerState, existingCodeSession);
         }
       } catch (sessionError) {
@@ -779,7 +783,7 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
 
     const existingCodeSession = await getCodeFlowSession(issuerState);
     if (!existingCodeSession) {
-      console.log(ERROR_MESSAGES.ISSUANCE_SESSION_NOT_FOUND + " " + issuerState);
+      console.log(`${ERROR_MESSAGES.ISSUANCE_SESSION_NOT_FOUND}. Received: issuerState '${issuerState}' not found, expected: valid session`);
       // Note: Can't mark session as failed since session doesn't exist
       return res.sendStatus(500);
     }

@@ -29,7 +29,8 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
 
   const vpToken = req.body["vp_token"];
   if (!vpToken) {
-    throw new Error("No vp_token found in the request body.");
+    const received = req.body["vp_token"] === undefined ? "vp_token missing" : `vp_token is ${typeof req.body["vp_token"]}`;
+    throw new Error(`No vp_token found in the request body. Received: ${received}, expected: vp_token string or object`);
   }
 
   const presentationSubmission = req.body["presentation_submission"];
@@ -47,11 +48,13 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
     try {
       descriptorMap = JSON.parse(presentationSubmission).descriptor_map;
     } catch (err) {
-      throw new Error("Invalid JSON format for presentation_submission.");
+      const received = typeof presentationSubmission === 'string' ? `string (parse error: ${err.message})` : typeof presentationSubmission;
+      throw new Error(`Invalid JSON format for presentation_submission. Received: ${received}, expected: valid JSON string`);
     }
 
     if (!Array.isArray(descriptorMap)) {
-      throw new Error("descriptor_map is not an array.");
+      const received = Array.isArray(descriptorMap) ? 'array' : typeof descriptorMap;
+      throw new Error(`descriptor_map is not an array. Received: ${received}, expected: array`);
     }
 
     const isValidDescriptorEntry = compareSubmissionToDefinition(
@@ -59,7 +62,8 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
       requestedInputDescriptors
     );
     if (!isValidDescriptorEntry) {
-      throw new Error("invalid descriptor entry.");
+      const received = "descriptor_map does not match presentation_definition";
+      throw new Error(`invalid descriptor entry. Received: ${received}, expected: descriptor_map matching presentation_definition input_descriptors`);
     }
     
     
@@ -140,11 +144,12 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
               // keybindJwt is typically not part of a plain jwt_vc_json unless a custom mechanism is used.
               // If there's a cnf claim with jwk, it could be related but not directly a kbJwt.
             } else {
+              const received = decodedJwt ? "decoded JWT without payload" : "failed to decode JWT";
               console.error(
-                "Failed to decode jwt_vc_json or payload missing:",
+                `Failed to decode jwt_vc_json or payload missing. Received: ${received}, expected: valid JWT with payload`,
                 credString
               );
-              throw new Error("Failed to decode jwt_vc_json.");
+              throw new Error(`Failed to decode jwt_vc_json. Received: ${received}, expected: valid JWT with payload`);
             }
           } else {
             console.warn(
@@ -257,7 +262,8 @@ export async function extractClaimsFromRequest(req, digest, isPaymentVP, session
           tokensToProcess.push(vpToken); // Not JSON, treat as raw token.
         }
       } else {
-        throw new Error("Unsupported vp_token format for non-PEX flow.");
+        const received = typeof vpToken === 'object' && vpToken !== null ? (Array.isArray(vpToken) ? 'array' : 'object') : typeof vpToken;
+        throw new Error(`Unsupported vp_token format for non-PEX flow. Received: ${received}, expected: object with credential arrays or string`);
       }
 
       for (const token of tokensToProcess) {
@@ -406,7 +412,7 @@ export async function validateWUA(
   const securityContext = decodedWUA.jwt.payload.attested_security_context;
   if (securityContext !== "https://eudiwalletconsortium.org/") {
     console.log(
-      "attested security context was not https://eudiwalletconsortium.org/"
+      `attested security context mismatch. Received: '${securityContext}', expected: 'https://eudiwalletconsortium.org/'`
     );
     return false;
   }
@@ -418,7 +424,7 @@ export async function validateWUA(
   const issuerURL = `${parsed.origin}/.well-known/jwt-vc-issuer${parsed.pathname}`;
   const response = await fetch(issuerURL);
   if (!response.ok) {
-    console.log("could not fetch " + issuerURL);
+    console.log(`could not fetch issuer URL. Received: HTTP ${response.status} from ${issuerURL}, expected: HTTP 200`);
     return false;
   }
 
@@ -428,7 +434,7 @@ export async function validateWUA(
   if (data.jwks_uri) {
     const responseJwks = await fetch(data.jwks_uri);
     if (!responseJwks.ok) {
-      console.log("could not fetch " + data.jwks_uri);
+      console.log(`could not fetch JWKS URI. Received: HTTP ${responseJwks.status} from ${data.jwks_uri}, expected: HTTP 200`);
       return false;
     }
     const dataJwks = await responseJwks.json();
@@ -459,7 +465,7 @@ export async function validateWUA(
   };
   const statusJwtResponse = await fetch(statusListURI, options);
   if (!statusJwtResponse.ok) {
-    console.log("could not fetch " + statusListURI);
+    console.log(`could not fetch status list URI. Received: HTTP ${statusJwtResponse.status} from ${statusListURI}, expected: HTTP 200`);
     return false;
   }
   const statusJwt = await statusJwtResponse.text();
@@ -472,12 +478,13 @@ export async function validateWUA(
     typeof statusListClaim.bits !== "number" ||
     !statusListClaim.lst
   ) {
-    console.log("Missing or invalid status_list claim");
+    const received = !statusListClaim ? "status_list claim missing" : typeof statusListClaim.bits !== "number" ? `bits is ${typeof statusListClaim.bits}` : "lst missing";
+    console.log(`Missing or invalid status_list claim. Received: ${received}, expected: status_list object with bits (number) and lst (string)`);
     return false;
   }
   // Check that the "bits" value is one of the allowed sizes (1,2,4,8)
   if (![1, 2, 4, 8].includes(statusListClaim.bits)) {
-    console.log("Invalid bits value in status_list");
+    console.log(`Invalid bits value in status_list. Received: ${statusListClaim.bits}, expected: one of [1, 2, 4, 8]`);
     return false;
   }
 
@@ -486,7 +493,7 @@ export async function validateWUA(
   try {
     decompressed = zlib.inflateSync(compressed);
   } catch (err) {
-    console.log('Failed to decompress status list: ' + err.message);
+    console.log(`Failed to decompress status list. Received: compression error (${err.message}), expected: valid DEFLATE/ZLIB compressed data`);
     return false;
   }
   // now that we have the actuall byte array (the decompressed buffer) 
@@ -544,7 +551,8 @@ export async function processDescriptorEntry(
         // decode the vpToken jwt (the outer presentation/container)
         let decodedVpToken = await decodeJwtVC(vpToken);
         if (!decodedVpToken || !decodedVpToken.payload) {
-            console.error("Failed to decode vpToken or payload missing for nested VP/VC processing.");
+            const received = !decodedVpToken ? "failed to decode JWT" : "decoded JWT without payload";
+            console.error(`Failed to decode vpToken or payload missing for nested VP/VC processing. Received: ${received}, expected: valid JWT with payload`);
             return null;
         }
         //return an array of matching query elements from the payload (should be the JWT string(s))
@@ -567,7 +575,8 @@ function compareSubmissionToDefinition(submission, definitionsArray) {
   console.log("definitionsArray", definitionsArray);
 
   if (!Array.isArray(submission.descriptor_map)) {
-    console.warn("descriptor_map is missing or not an array");
+    const received = submission.descriptor_map === undefined ? "missing" : typeof submission.descriptor_map;
+    console.warn(`descriptor_map validation failed. Received: ${received}, expected: array`);
     return false;
   }
 
@@ -582,8 +591,9 @@ function compareSubmissionToDefinition(submission, definitionsArray) {
         descFormat = "dc+sd-jwt";
       }
       if (!definition.format || !definition.format[descFormat] ) {
+        const received = !definition.format ? "no format property" : `format does not include '${descFormat}'`;
         console.warn(
-          `Definition does not have a root format for "${descFormat}"`
+          `Definition format mismatch. Received: ${received}, expected: format object with '${descFormat}' key`
         );
         return false;
       }
@@ -591,8 +601,7 @@ function compareSubmissionToDefinition(submission, definitionsArray) {
       // 4) Find matching input_descriptor
       if (definition.id !== desc.id) {
         console.warn(
-          "No matching input_descriptor found for descriptor_map id:",
-          desc.id
+          `No matching input_descriptor found. Received: descriptor_map id '${desc.id}', expected: input_descriptor id '${definition.id}'`
         );
         return false;
       }
@@ -604,7 +613,7 @@ function compareSubmissionToDefinition(submission, definitionsArray) {
         definition.format[descFormat] === undefined || definition.format["vc+sd-jwt"] === null
       ) {
         console.warn(
-          `descriptor_map.format "${descFormat}" not found in input_descriptors.format`
+          `descriptor_map format mismatch. Received: format '${descFormat}' not found in input_descriptors, expected: format matching input_descriptor.format`
         );
         return false;
       }
@@ -616,7 +625,7 @@ function compareSubmissionToDefinition(submission, definitionsArray) {
         // This might be an application-specific check. For example:
         if (nestedFormat !== descFormat) {
           console.warn(
-            `Nested format mismatch: path_nested.format="${nestedFormat}" vs descriptor_map.format="${descFormat}"`
+            `Nested format mismatch. Received: path_nested.format='${nestedFormat}', expected: '${descFormat}' (matching descriptor_map.format)`
           );
           // return false;  // Decide if you want to fail or just warn
         }
@@ -752,7 +761,7 @@ function bufferToBits(buffer) {
 export function checkTokenStatus(decompressedBuffer, tokenIndex) {
   const bits = bufferToBits(decompressedBuffer);
   if (tokenIndex < 0 || tokenIndex >= bits.length) {
-    throw new Error('Token index out of range');
+    throw new Error(`Token index out of range. Received: index ${tokenIndex}, expected: index between 0 and ${bits.length - 1}`);
   }
   // In this example, 0 = valid, 1 = revoked.
   return bits[tokenIndex] === 0 //? "valid" : "revoked";
