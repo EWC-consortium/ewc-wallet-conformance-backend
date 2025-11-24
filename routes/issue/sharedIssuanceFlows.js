@@ -1091,8 +1091,9 @@ sharedRouter.post("/credential_deferred", async (req, res) => {
       getServerUrl()
     );
 
+    // OID4VCI v1.0 Section 9.2: Deferred Credential Response has the same structure
+    // as immediate credential response - format is specified in metadata, not in response
     return res.status(200).json({
-      format: "dc+sd-jwt",
       credential,
     });
   } catch (error) {
