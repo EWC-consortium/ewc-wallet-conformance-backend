@@ -75,6 +75,7 @@ app.post("/issue", async (req, res) => {
       configurationId,
       preAuthorizedCode: preAuthGrant["pre-authorized_code"],
       txCodeConfig: preAuthGrant.tx_code, // Pass original config
+      authorizationServer: preAuthGrant.authorization_server, // Optional grant-level AS identifier
       keyPath: req.body.keyPath,
       pollTimeoutMs: req.body.pollTimeoutMs,
       pollIntervalMs: req.body.pollIntervalMs,
@@ -207,6 +208,7 @@ app.post("/session", async (req, res) => {
             configurationId,
             preAuthorizedCode: preAuthGrant["pre-authorized_code"],
             txCodeConfig: preAuthGrant.tx_code, // Pass original config
+            authorizationServer: preAuthGrant.authorization_server, // Optional grant-level AS identifier
             keyPath: req.body.keyPath,
             pollTimeoutMs: req.body.pollTimeoutMs,
             pollIntervalMs: req.body.pollIntervalMs,
@@ -235,6 +237,7 @@ app.post("/session", async (req, res) => {
             issuerMeta,
             configurationId,
             issuerState: authGrant.issuer_state,
+            authorizationServer: authGrant.authorization_server, // Optional grant-level AS identifier
             keyPath: req.body.keyPath,
             pollTimeoutMs: req.body.pollTimeoutMs,
             pollIntervalMs: req.body.pollIntervalMs,
@@ -329,6 +332,7 @@ app.post("/issue-codeflow", async (req, res) => {
       issuerMeta,
       configurationId,
       issuerState: authGrant.issuer_state,
+      authorizationServer: authGrant.authorization_server, // Optional grant-level AS identifier
       keyPath: req.body.keyPath,
       pollTimeoutMs: req.body.pollTimeoutMs,
       pollIntervalMs: req.body.pollIntervalMs,
@@ -550,7 +554,7 @@ function safeParseJson(str) {
   try { return JSON.parse(str); } catch { return null; }
 }
 
-async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, preAuthorizedCode, txCodeConfig, keyPath, pollTimeoutMs, pollIntervalMs, userPin }, logSessionId) {
+async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, preAuthorizedCode, txCodeConfig, authorizationServer, keyPath, pollTimeoutMs, pollIntervalMs, userPin }, logSessionId) {
   const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   try { slog("[preauth] start", { configurationId, hasTxCodeCfg: !!txCodeConfig }); } catch {}
   // Draft-15: If tx_code is indicated in offer and not provided by user, do NOT fabricate. Require user input.
@@ -564,17 +568,74 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   }
   let tokenEndpoint = issuerMeta.token_endpoint || null;
   // If token_endpoint is not in issuer metadata, try authorization server metadata per RFC 8414
-  if (!tokenEndpoint && (issuerMeta.authorization_server || (Array.isArray(issuerMeta.authorization_servers) && issuerMeta.authorization_servers.length))) {
-    const asBase = issuerMeta.authorization_server || issuerMeta.authorization_servers[0];
+  if (!tokenEndpoint) {
+    // Check for authorization_servers array in issuer metadata
+    // Per OIDC4VCI v1.0: "If this parameter is omitted, the entity providing the Credential Issuer 
+    // is also acting as the Authorization Server, i.e., the Credential Issuer's identifier is used 
+    // to obtain the Authorization Server metadata."
+    const authorizationServers = Array.isArray(issuerMeta.authorization_servers) ? issuerMeta.authorization_servers : 
+                                  (issuerMeta.authorization_server ? [issuerMeta.authorization_server] : []);
+    
+    let asBase = null;
+    
+    if (authorizationServers.length > 0) {
+      // authorization_servers is present - use it
+      // Use grant-level authorization_server if provided (must match one in authorization_servers array)
+      if (authorizationServer) {
+        if (!authorizationServers.includes(authorizationServer)) {
+          console.error("[preauth] grant authorization_server does not match any entry in authorization_servers array");
+          try { slog("[preauth] grant authorization_server mismatch", { grantAS: authorizationServer, availableAS: authorizationServers }); } catch {}
+          throw new Error("invalid_authorization_server: grant authorization_server must match one of the values in authorization_servers array");
+        }
+        asBase = authorizationServer;
+        console.log("[preauth] using grant-level authorization_server:", asBase); 
+        try { slog("[preauth] using grant-level authorization_server", { asBase }); } catch {}
+      } else {
+        // Use first authorization server from issuer metadata
+        asBase = authorizationServers[0];
+        console.log("[preauth] using first authorization_server from issuer metadata:", asBase); 
+        try { slog("[preauth] using first authorization_server", { asBase }); } catch {}
+      }
+    } else {
+      // authorization_servers is omitted - use credential_issuer identifier as Authorization Server
+      // Per spec: "the Credential Issuer's identifier is used to obtain the Authorization Server metadata"
+      asBase = issuerMeta.credential_issuer || apiBase;
+      console.log("[preauth] authorization_servers omitted, using credential_issuer as Authorization Server:", asBase);
+      try { slog("[preauth] using credential_issuer as AS", { asBase }); } catch {}
+      
+      // Grant-level authorization_server MUST NOT be used when authorization_servers is omitted
+      if (authorizationServer) {
+        console.error("[preauth] grant authorization_server MUST NOT be used when authorization_servers is omitted");
+        try { slog("[preauth] grant authorization_server invalid when authorization_servers omitted"); } catch {}
+        throw new Error("invalid_authorization_server: grant authorization_server MUST NOT be used when authorization_servers parameter is omitted");
+      }
+    }
+    
     try {
       const asMeta = await discoverAuthorizationServerMetadata(asBase, logSessionId);
       tokenEndpoint = asMeta.token_endpoint;
-      console.log("[preauth] tokenEndpoint discovered via AS:", tokenEndpoint); try { slog("[preauth] tokenEndpoint discovered via AS", { tokenEndpoint }); } catch {}
+      if (!tokenEndpoint) {
+        console.error("[preauth] authorization server metadata does not contain token_endpoint");
+        try { slog("[preauth] AS metadata missing token_endpoint", { asBase }); } catch {}
+        throw new Error("token_endpoint_required: authorization server metadata must include 'token_endpoint'");
+      }
+      console.log("[preauth] tokenEndpoint discovered via AS:", tokenEndpoint); 
+      try { slog("[preauth] tokenEndpoint discovered via AS", { tokenEndpoint }); } catch {}
     } catch (e) {
-      console.warn("[preauth] AS metadata discovery failed:", e?.message || e); try { slog("[preauth] AS metadata discovery failed", { error: e?.message || String(e) }); } catch {}
+      console.error("[preauth] AS metadata discovery failed:", e?.message || e); 
+      try { slog("[preauth] AS metadata discovery failed", { error: e?.message || String(e) }); } catch {}
+      throw e; // Re-throw to fail fast instead of falling back
     }
   }
-  tokenEndpoint = tokenEndpoint || `${apiBase}/token_endpoint`;
+  
+  // tokenEndpoint should be set at this point (either from issuer metadata or AS metadata discovery)
+  // If not, AS metadata discovery should have thrown an error
+  if (!tokenEndpoint) {
+    console.error("[preauth] token_endpoint could not be determined");
+    try { slog("[preauth] token_endpoint determination failed"); } catch {}
+    throw new Error("token_endpoint_required: unable to determine token_endpoint from issuer or authorization server metadata");
+  }
+  
   console.log("[preauth] apiBase=", apiBase, "configurationId=", configurationId); try { slog("[preauth] apiBase", { apiBase, configurationId }); } catch {}
   console.log("[preauth] tokenEndpoint=", tokenEndpoint); try { slog("[preauth] tokenEndpoint", { tokenEndpoint }); } catch {}
   console.log("[preauth] requesting token..."); try { slog("[preauth] requesting token"); } catch {}
@@ -592,16 +653,34 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
     authorization_details: JSON.stringify(tokenAuthzDetails),
   };
   const tokenRes = await httpPostForm(tokenEndpoint, tokenPayload, logSessionId);
-  console.log("[preauth] tokenRes.status=", tokenRes.status); try { slog("[preauth] tokenRes.status", { status: tokenRes.status }); } catch {}
+  console.log("[preauth] tokenRes.status=", tokenRes.status); 
+  try { slog("[preauth] tokenRes.status", { status: tokenRes.status }); } catch {}
+  console.log("[preauth] tokenRes.headers:", Object.fromEntries(tokenRes.headers.entries())); 
+  try { slog("[preauth] tokenRes.headers", { headers: Object.fromEntries(tokenRes.headers.entries()) }); } catch {}
+  
+  const tokenResponseText = await tokenRes.text().catch(() => "");
+  console.log("[preauth] tokenRes.body length:", tokenResponseText.length); 
+  try { slog("[preauth] tokenRes.body", { length: tokenResponseText.length }); } catch {}
+  
   if (!tokenRes.ok) {
-    const text = await tokenRes.text().catch(() => "");
-    console.error("[preauth] token error", tokenRes.status, text?.slice(0, 500));
+    console.error("[preauth] token error", tokenRes.status, tokenResponseText?.slice(0, 500));
     let err = {};
-    try { err = JSON.parse(text); } catch {}
-    try { slog("[preauth] token error", { status: tokenRes.status, err }); } catch {}
+    try { err = JSON.parse(tokenResponseText); } catch {}
+    console.error("[preauth] token error parsed:", JSON.stringify(err, null, 2)); 
+    try { slog("[preauth] token error", { status: tokenRes.status, err, body: tokenResponseText?.slice(0, 500) }); } catch {}
     throw new Error(`token_error ${tokenRes.status}: ${JSON.stringify(err)}`);
   }
-  const tokenBody = await tokenRes.json();
+  
+  let tokenBody;
+  try {
+    tokenBody = JSON.parse(tokenResponseText);
+    console.log("[preauth] token response parsed successfully"); 
+    try { slog("[preauth] token response parsed", { hasAccessToken: !!tokenBody.access_token, hasCNonce: !!tokenBody.c_nonce }); } catch {}
+  } catch (e) {
+    console.error("[preauth] failed to parse token response as JSON:", e?.message); 
+    try { slog("[preauth] token response parse failed", { error: e?.message, body: tokenResponseText?.slice(0, 500) }); } catch {}
+    throw new Error(`token_error: invalid JSON response - ${e?.message}`);
+  }
   const accessToken = tokenBody.access_token;
   let c_nonce = tokenBody.c_nonce;
   let c_nonce_expires_in = tokenBody.c_nonce_expires_in;
@@ -659,28 +738,57 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
     headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
     body: JSON.stringify(credReq),
   });
-  console.log("[preauth] credentialRes.status=", credRes.status); try { slog("[preauth] credentialRes.status", { status: credRes.status }); } catch {}
+  console.log("[preauth] credentialRes.status=", credRes.status); 
+  try { slog("[preauth] credentialRes.status", { status: credRes.status }); } catch {}
+  console.log("[preauth] credentialRes.headers:", Object.fromEntries(credRes.headers.entries())); 
+  try { slog("[preauth] credentialRes.headers", { headers: Object.fromEntries(credRes.headers.entries()) }); } catch {}
+
+  const responseText = await credRes.text().catch(() => "");
+  console.log("[preauth] credentialRes.body length:", responseText.length); 
+  try { slog("[preauth] credentialRes.body", { length: responseText.length }); } catch {}
 
   if (!credRes.ok) {
-    const text = await credRes.text().catch(() => "");
-    console.error("[preauth] credential error", credRes.status); try { slog("[preauth] credential error start", { status: credRes.status }); } catch {}
+    console.error("[preauth] credential error", credRes.status); 
+    try { slog("[preauth] credential error start", { status: credRes.status }); } catch {}
     console.error("[preauth] credential error response headers:", Object.fromEntries(credRes.headers.entries()));
-    console.error("[preauth] credential error response body:", text);
+    console.error("[preauth] credential error response body:", responseText);
     
     let err = {};
     try { 
-      err = JSON.parse(text); 
-      console.error("[preauth] credential error parsed JSON:", JSON.stringify(err, null, 2)); try { slog("[preauth] credential error parsed", { err }); } catch {}
+      err = JSON.parse(responseText); 
+      console.error("[preauth] credential error parsed JSON:", JSON.stringify(err, null, 2)); 
+      try { slog("[preauth] credential error parsed", { err }); } catch {}
     } catch (parseErr) {
-      console.error("[preauth] credential error response is not JSON, raw text:", text); try { slog("[preauth] credential error not JSON", { text: text?.slice(0, 200) }); } catch {}
+      console.error("[preauth] credential error response is not JSON, raw text:", responseText); 
+      try { slog("[preauth] credential error not JSON", { text: responseText?.slice(0, 500) }); } catch {}
+      err = { error: "invalid_response", error_description: responseText?.slice(0, 500) };
     }
     
     try { slog("[preauth] credential error", { status: credRes.status, err }); } catch {}
     throw new Error(`credential_error ${credRes.status}: ${JSON.stringify(err)}`);
   }
 
+  // Log successful response body (may be large, so log preview)
+  try {
+    const responsePreview = responseText.length > 1000 ? responseText.substring(0, 1000) + "..." : responseText;
+    console.log("[preauth] credential response preview:", responsePreview); 
+    try { slog("[preauth] credential response preview", { length: responseText.length, preview: responsePreview }); } catch {}
+  } catch (e) {
+    console.warn("[preauth] failed to log credential response:", e?.message); 
+    try { slog("[preauth] failed to log response", { error: e?.message }); } catch {}
+  }
+
   if (credRes.status === 202) {
-    const { transaction_id } = await credRes.json();
+    let credBody;
+    try {
+      credBody = JSON.parse(responseText);
+    } catch (e) {
+      console.error("[preauth] failed to parse deferred response as JSON:", e?.message); 
+      try { slog("[preauth] deferred response parse failed", { error: e?.message, body: responseText?.slice(0, 500) }); } catch {}
+      throw new Error(`credential_error ${credRes.status}: invalid JSON response`);
+    }
+    const { transaction_id } = credBody;
+    console.log("[preauth] deferred issuance, transaction_id:", transaction_id); 
     try { slog("[preauth] deferred issuance", { transaction_id }); } catch {}
     const start = Date.now();
     const timeout = pollTimeoutMs ?? 30000;
@@ -689,46 +797,121 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
     while (Date.now() - start < timeout) {
       await sleep(interval);
       const defRes = await httpPostJson(deferredEndpoint, { transaction_id }, logSessionId);
-      console.log("[preauth] deferred poll ->", defRes.status); try { slog("[preauth] deferred poll", { status: defRes.status }); } catch {}
+      console.log("[preauth] deferred poll ->", defRes.status); 
+      try { slog("[preauth] deferred poll", { status: defRes.status }); } catch {}
       if (defRes.ok) {
-        const body = await defRes.json();
+        const defBodyText = await defRes.text().catch(() => "");
+        console.log("[preauth] deferred response body length:", defBodyText.length); 
+        try { slog("[preauth] deferred response", { length: defBodyText.length }); } catch {}
+        let defBody;
+        try {
+          defBody = JSON.parse(defBodyText);
+        } catch (e) {
+          console.error("[preauth] failed to parse deferred credential as JSON:", e?.message); 
+          try { slog("[preauth] deferred credential parse failed", { error: e?.message, body: defBodyText?.slice(0, 500) }); } catch {}
+          throw new Error(`credential_error: invalid JSON in deferred credential response`);
+        }
         try { slog("[preauth] deferred ready"); } catch {}
-        await validateAndStoreCredential({ configurationId, credential: body, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce, c_nonce_expires_in } }, logSessionId);
-        return body;
+        await validateAndStoreCredential({ configurationId, credential: defBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce, c_nonce_expires_in }, authorizationServerMeta: issuerMeta._authorizationServerMeta }, logSessionId);
+        return defBody;
+      } else {
+        const defErrorText = await defRes.text().catch(() => "");
+        console.warn("[preauth] deferred poll error:", defRes.status, defErrorText?.slice(0, 500)); 
+        try { slog("[preauth] deferred poll error", { status: defRes.status, error: defErrorText?.slice(0, 500) }); } catch {}
       }
     }
     try { slog("[preauth] deferred timeout"); } catch {}
     throw new Error("timeout: Deferred issuance timed out");
   }
 
-  if (!credRes.ok) {
-    const err = await credRes.json().catch(() => ({}));
-    try { slog("[preauth] credential final error", { status: credRes.status, err }); } catch {}
-    throw new Error(`credential_error ${credRes.status}: ${JSON.stringify(err)}`);
+  let credBody;
+  try {
+    credBody = JSON.parse(responseText);
+  } catch (e) {
+    console.error("[preauth] failed to parse credential response as JSON:", e?.message); 
+    try { slog("[preauth] credential response parse failed", { error: e?.message, body: responseText?.slice(0, 500) }); } catch {}
+    throw new Error(`credential_error: invalid JSON response - ${e?.message}`);
   }
-  const credBody = await credRes.json();
-  try { slog("[preauth] credential received"); } catch {}
-  await validateAndStoreCredential({ configurationId, credential: credBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce, c_nonce_expires_in } }, logSessionId);
+  console.log("[preauth] credential received, starting validation"); 
+  try { slog("[preauth] credential received", { hasCredential: !!credBody }); } catch {}
+  
+  try {
+    await validateAndStoreCredential({ configurationId, credential: credBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce, c_nonce_expires_in }, authorizationServerMeta: issuerMeta._authorizationServerMeta }, logSessionId);
+  } catch (validationError) {
+    console.error("[preauth] credential validation failed:", validationError?.message || validationError); 
+    try { slog("[preauth] credential validation failed", { error: validationError?.message || String(validationError), stack: validationError?.stack }); } catch {}
+    throw validationError;
+  }
   return credBody;
 }
 
-async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configurationId, issuerState, keyPath, pollTimeoutMs, pollIntervalMs }, logSessionId) {
+async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configurationId, issuerState, authorizationServer, keyPath, pollTimeoutMs, pollIntervalMs }, logSessionId) {
   const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   try { slog("[codeflow] start", { configurationId }); } catch {}
   // Discover authorization server metadata to enable PAR when available
   let authorizeEndpoint = issuerMeta.authorization_endpoint || null;
   let tokenEndpointFromAS = null;
   let parEndpoint = null;
-  if (issuerMeta.authorization_server) {
-    try {
-      const asMeta = await discoverAuthorizationServerMetadata(issuerMeta.authorization_server, logSessionId);
-      authorizeEndpoint = authorizeEndpoint || asMeta.authorization_endpoint;
-      tokenEndpointFromAS = asMeta.token_endpoint || tokenEndpointFromAS;
-      parEndpoint = asMeta.pushed_authorization_request_endpoint || null;
-      try { console.log("[codeflow] AS meta: authorize=", asMeta.authorization_endpoint, "token=", asMeta.token_endpoint, "par=", parEndpoint); slog("[codeflow] AS meta", { authorize: asMeta.authorization_endpoint, token: asMeta.token_endpoint, par: parEndpoint }); } catch {}
-    } catch (e) {
-      console.warn("[codeflow] AS metadata discovery failed:", e?.message || e); try { slog("[codeflow] AS metadata discovery failed", { error: e?.message || String(e) }); } catch {}
+  
+  // Check for authorization_servers array in issuer metadata
+  // Per OIDC4VCI v1.0: "If this parameter is omitted, the entity providing the Credential Issuer 
+  // is also acting as the Authorization Server, i.e., the Credential Issuer's identifier is used 
+  // to obtain the Authorization Server metadata."
+  const authorizationServers = Array.isArray(issuerMeta.authorization_servers) ? issuerMeta.authorization_servers : 
+                                (issuerMeta.authorization_server ? [issuerMeta.authorization_server] : []);
+  
+  let asBase = null;
+  
+  if (authorizationServers.length > 0) {
+    // authorization_servers is present - use it
+    // Use grant-level authorization_server if provided (must match one in authorization_servers array)
+    if (authorizationServer) {
+      if (!authorizationServers.includes(authorizationServer)) {
+        console.error("[codeflow] grant authorization_server does not match any entry in authorization_servers array");
+        try { slog("[codeflow] grant authorization_server mismatch", { grantAS: authorizationServer, availableAS: authorizationServers }); } catch {}
+        throw new Error("invalid_authorization_server: grant authorization_server must match one of the values in authorization_servers array");
+      }
+      asBase = authorizationServer;
+      console.log("[codeflow] using grant-level authorization_server:", asBase); 
+      try { slog("[codeflow] using grant-level authorization_server", { asBase }); } catch {}
+    } else {
+      // Use first authorization server from issuer metadata
+      asBase = authorizationServers[0];
+      console.log("[codeflow] using first authorization_server from issuer metadata:", asBase); 
+      try { slog("[codeflow] using first authorization_server", { asBase }); } catch {}
     }
+  } else {
+    // authorization_servers is omitted - use credential_issuer identifier as Authorization Server
+    // Per spec: "the Credential Issuer's identifier is used to obtain the Authorization Server metadata"
+    asBase = issuerMeta.credential_issuer || apiBase;
+    console.log("[codeflow] authorization_servers omitted, using credential_issuer as Authorization Server:", asBase);
+    try { slog("[codeflow] using credential_issuer as AS", { asBase }); } catch {}
+    
+    // Grant-level authorization_server MUST NOT be used when authorization_servers is omitted
+    if (authorizationServer) {
+      console.error("[codeflow] grant authorization_server MUST NOT be used when authorization_servers is omitted");
+      try { slog("[codeflow] grant authorization_server invalid when authorization_servers omitted"); } catch {}
+      throw new Error("invalid_authorization_server: grant authorization_server MUST NOT be used when authorization_servers parameter is omitted");
+    }
+  }
+  
+  try {
+    const asMeta = await discoverAuthorizationServerMetadata(asBase, logSessionId);
+    authorizeEndpoint = authorizeEndpoint || asMeta.authorization_endpoint;
+    tokenEndpointFromAS = asMeta.token_endpoint || null;
+    parEndpoint = asMeta.pushed_authorization_request_endpoint || null;
+    if (!tokenEndpointFromAS) {
+      console.error("[codeflow] authorization server metadata does not contain token_endpoint");
+      try { slog("[codeflow] AS metadata missing token_endpoint", { asBase }); } catch {}
+      throw new Error("token_endpoint_required: authorization server metadata must include 'token_endpoint'");
+    }
+    try { console.log("[codeflow] AS meta: authorize=", asMeta.authorization_endpoint, "token=", asMeta.token_endpoint, "par=", parEndpoint); slog("[codeflow] AS meta", { authorize: asMeta.authorization_endpoint, token: asMeta.token_endpoint, par: parEndpoint }); } catch {}
+    // Store AS metadata for credential signature verification
+    issuerMeta._authorizationServerMeta = asMeta;
+  } catch (e) {
+    console.error("[codeflow] AS metadata discovery failed:", e?.message || e); 
+    try { slog("[codeflow] AS metadata discovery failed", { error: e?.message || String(e) }); } catch {}
+    throw e; // Re-throw to fail fast instead of silently continuing
   }
   const authorizeUrl = new URL((authorizeEndpoint || apiBase + "/authorize"));
   const { codeVerifier, codeChallenge, codeChallengeMethod } = createPkcePair();
@@ -812,7 +995,15 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   const code = redirect.searchParams.get("code");
   if (!code) throw new Error("invalid_response: Authorization code missing");
 
-  let tokenEndpoint = issuerMeta.token_endpoint || tokenEndpointFromAS || `${apiBase}/token_endpoint`;
+  let tokenEndpoint = issuerMeta.token_endpoint || tokenEndpointFromAS || null;
+  
+  if (!tokenEndpoint) {
+    // This should not happen if AS metadata discovery succeeded, but handle it anyway
+    console.error("[codeflow] token_endpoint could not be determined from authorization server metadata");
+    try { slog("[codeflow] token_endpoint determination failed", { hasAuthorizationServers: authorizationServers.length > 0 }); } catch {}
+    throw new Error("token_endpoint_required: unable to determine token_endpoint from authorization server metadata");
+  }
+  
   console.log("[codeflow] apiBase=", apiBase, "configurationId=", configurationId); try { slog("[codeflow] apiBase", { apiBase, configurationId }); } catch {}
   console.log("[codeflow] tokenEndpoint=", tokenEndpoint); try { slog("[codeflow] tokenEndpoint", { tokenEndpoint }); } catch {}
   console.log("[codeflow] requesting token..."); try { slog("[codeflow] requesting token"); } catch {}
@@ -891,10 +1082,26 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
     headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
     body: JSON.stringify(credReq),
   });
-  console.log("[codeflow] credentialRes.status=", credRes.status); try { slog("[codeflow] credentialRes.status", { status: credRes.status }); } catch {}
+  console.log("[codeflow] credentialRes.status=", credRes.status); 
+  try { slog("[codeflow] credentialRes.status", { status: credRes.status }); } catch {}
+  console.log("[codeflow] credentialRes.headers:", Object.fromEntries(credRes.headers.entries())); 
+  try { slog("[codeflow] credentialRes.headers", { headers: Object.fromEntries(credRes.headers.entries()) }); } catch {}
+
+  const responseText = await credRes.text().catch(() => "");
+  console.log("[codeflow] credentialRes.body length:", responseText.length); 
+  try { slog("[codeflow] credentialRes.body", { length: responseText.length }); } catch {}
 
   if (credRes.status === 202) {
-    const { transaction_id } = await credRes.json();
+    let credBody;
+    try {
+      credBody = JSON.parse(responseText);
+    } catch (e) {
+      console.error("[codeflow] failed to parse deferred response as JSON:", e?.message); 
+      try { slog("[codeflow] deferred response parse failed", { error: e?.message, body: responseText?.slice(0, 500) }); } catch {}
+      throw new Error(`credential_error ${credRes.status}: invalid JSON response`);
+    }
+    const { transaction_id } = credBody;
+    console.log("[codeflow] deferred issuance, transaction_id:", transaction_id); 
     try { slog("[codeflow] deferred issuance", { transaction_id }); } catch {}
     const start = Date.now();
     const timeout = pollTimeoutMs ?? 30000;
@@ -902,12 +1109,27 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
     const deferredEndpoint = issuerMeta.credential_deferred_endpoint || `${apiBase}/credential_deferred`;
     while (Date.now() - start < timeout) {
       await sleep(interval);
-      const defRes = await httpPostJson(deferredEndpoint, { transaction_id }, logSessionId); try { slog("[codeflow] deferred poll", { status: defRes.status }); } catch {}
+      const defRes = await httpPostJson(deferredEndpoint, { transaction_id }, logSessionId); 
+      try { slog("[codeflow] deferred poll", { status: defRes.status }); } catch {}
       if (defRes.ok) {
-        const body = await defRes.json();
+        const defBodyText = await defRes.text().catch(() => "");
+        console.log("[codeflow] deferred response body length:", defBodyText.length); 
+        try { slog("[codeflow] deferred response", { length: defBodyText.length }); } catch {}
+        let defBody;
+        try {
+          defBody = JSON.parse(defBodyText);
+        } catch (e) {
+          console.error("[codeflow] failed to parse deferred credential as JSON:", e?.message); 
+          try { slog("[codeflow] deferred credential parse failed", { error: e?.message, body: defBodyText?.slice(0, 500) }); } catch {}
+          throw new Error(`credential_error: invalid JSON in deferred credential response`);
+        }
         try { slog("[codeflow] deferred ready"); } catch {}
-        await validateAndStoreCredential({ configurationId, credential: body, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce, c_nonce_expires_in } }, logSessionId);
-        return body;
+        await validateAndStoreCredential({ configurationId, credential: defBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce, c_nonce_expires_in }, authorizationServerMeta: issuerMeta._authorizationServerMeta }, logSessionId);
+        return defBody;
+      } else {
+        const defErrorText = await defRes.text().catch(() => "");
+        console.warn("[codeflow] deferred poll error:", defRes.status, defErrorText?.slice(0, 500)); 
+        try { slog("[codeflow] deferred poll error", { status: defRes.status, error: defErrorText?.slice(0, 500) }); } catch {}
       }
     }
     try { slog("[codeflow] deferred timeout"); } catch {}
@@ -915,63 +1137,115 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   }
 
   if (!credRes.ok) {
-    const err = await credRes.json().catch(() => ({}));
+    let err = {};
+    try { 
+      err = JSON.parse(responseText); 
+    } catch (parseErr) {
+      console.error("[codeflow] credential error response is not JSON, raw text:", responseText?.slice(0, 500)); 
+      try { slog("[codeflow] credential error not JSON", { text: responseText?.slice(0, 500) }); } catch {}
+      err = { error: "invalid_response", error_description: responseText?.slice(0, 500) };
+    }
+    console.error("[codeflow] credential error parsed:", JSON.stringify(err, null, 2)); 
     try { slog("[codeflow] credential error", { status: credRes.status, err }); } catch {}
     throw new Error(`credential_error ${credRes.status}: ${JSON.stringify(err)}`);
   }
-  const credBody = await credRes.json();
-  try { slog("[codeflow] credential received"); } catch {}
-  await validateAndStoreCredential({ configurationId, credential: credBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce, c_nonce_expires_in } }, logSessionId);
+  
+  let credBody;
+  try {
+    credBody = JSON.parse(responseText);
+  } catch (e) {
+    console.error("[codeflow] failed to parse credential response as JSON:", e?.message); 
+    try { slog("[codeflow] credential response parse failed", { error: e?.message, body: responseText?.slice(0, 500) }); } catch {}
+    throw new Error(`credential_error: invalid JSON response - ${e?.message}`);
+  }
+  console.log("[codeflow] credential received, starting validation"); 
+  try { slog("[codeflow] credential received", { hasCredential: !!credBody }); } catch {}
+  
+  try {
+    await validateAndStoreCredential({ configurationId, credential: credBody, issuerMeta, apiBase, keyBinding: { privateJwk, publicJwk, didJwk }, metadata: { configurationId, c_nonce, c_nonce_expires_in }, authorizationServerMeta: issuerMeta._authorizationServerMeta }, logSessionId);
+  } catch (validationError) {
+    console.error("[codeflow] credential validation failed:", validationError?.message || validationError); 
+    try { slog("[codeflow] credential validation failed", { error: validationError?.message || String(validationError), stack: validationError?.stack }); } catch {}
+    throw validationError;
+  }
   return credBody;
 }
 
-async function validateAndStoreCredential({ configurationId, credential, issuerMeta, apiBase, keyBinding, metadata }, logSessionId) {
+async function validateAndStoreCredential({ configurationId, credential, issuerMeta, apiBase, keyBinding, metadata, authorizationServerMeta }, logSessionId) {
   const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   
   // Debug: Log credential envelope structure
   console.log("[validate] credential envelope type:", typeof credential, Array.isArray(credential) ? "(array)" : "");
+  try { slog("[validate] envelope type", { type: typeof credential, isArray: Array.isArray(credential) }); } catch {}
   if (credential && typeof credential === 'object') {
     console.log("[validate] credential envelope keys:", Object.keys(credential));
+    try { slog("[validate] envelope keys", { keys: Object.keys(credential) }); } catch {}
   }
   
   // Extract the token string if envelope is used
   const token = extractCredentialToken(credential);
   console.log("[validate] extracted token type:", typeof token, "length:", typeof token === 'string' ? token.length : 'N/A');
-  if (!token) throw new Error("credential_format_error: could not locate credential token");
+  try { slog("[validate] extracted token", { tokenType: typeof token, length: typeof token === 'string' ? token.length : 'N/A' }); } catch {}
+  if (!token) {
+    console.error("[validate] could not locate credential token in envelope");
+    try { slog("[validate] token extraction failed", { envelopeKeys: credential && typeof credential === 'object' ? Object.keys(credential) : [] }); } catch {}
+    throw new Error("credential_format_error: could not locate credential token");
+  }
 
-  console.log("[validate] configurationId=", configurationId, "issuer=", issuerMeta?.credential_issuer, "has.c_nonce=", !!metadata?.c_nonce); try { slog("[validate] start", { configurationId, issuer: issuerMeta?.credential_issuer, hasCNonce: !!metadata?.c_nonce }); } catch {}
-  console.log("[validate] token preview:", typeof token === 'string' ? token.substring(0, 60) + "..." : typeof token); try { slog("[validate] token preview", { tokenType: typeof token, hasToken: !!token }); } catch {}
+  console.log("[validate] configurationId=", configurationId, "issuer=", issuerMeta?.credential_issuer, "has.c_nonce=", !!metadata?.c_nonce); 
+  try { slog("[validate] start", { configurationId, issuer: issuerMeta?.credential_issuer, hasCNonce: !!metadata?.c_nonce }); } catch {}
+  console.log("[validate] token preview:", typeof token === 'string' ? token.substring(0, 60) + "..." : typeof token); 
+  try { slog("[validate] token preview", { tokenType: typeof token, preview: typeof token === 'string' ? token.substring(0, 100) : typeof token }); } catch {}
   try {
     const dbgFull = process.env.WALLET_DEBUG_CREDENTIAL === 'full';
     const envelopeStr = typeof credential === 'string' ? credential : JSON.stringify(credential);
     const shown = dbgFull ? envelopeStr : envelopeStr.substring(0, 2000);
     console.log("[validate] credential envelope:"+ envelopeStr)
-    // console.log("[validate] credential envelope (" + (dbgFull ? "full" : "truncated") + ", len=" + envelopeStr.length + "):", shown); try { slog("[validate] envelope", { length: envelopeStr.length, mode: dbgFull ? "full" : "truncated" }); } catch {}
-  } catch {}
+    try { slog("[validate] envelope", { length: envelopeStr.length, mode: dbgFull ? "full" : "truncated" }); } catch {}
+  } catch (e) {
+    console.warn("[validate] failed to log credential envelope:", e?.message);
+    try { slog("[validate] envelope log failed", { error: e?.message }); } catch {}
+  }
 
   // Try SD-JWT first (presence of '~'), else treat as JWT VC; if neither, try mdoc
-  if (typeof token === 'string' && token.includes('~')) {
-    try { slog("[validate] validating SD-JWT"); } catch {}
-    await validateSdJwt({ sdJwt: token, issuerMeta, configurationId, expectedCNonce: metadata?.c_nonce }, logSessionId);
-  } else if (typeof token === 'string' && token.split('.').length >= 3) {
-    try { slog("[validate] validating JWT VC"); } catch {}
-    await validateJwtVc({ jwtVc: token, issuerMeta, apiBase, configurationId, publicJwk: keyBinding?.publicJwk });
-  } else if (typeof token === 'string') {
-    // Potential mdoc base64url
-    try { slog("[validate] validating mdoc"); } catch {}
-    const mdocResult = await verifyReceivedMdlToken(token, { validateStructure: true, includeMetadata: false });
-    if (!mdocResult.success) {
-      try { slog("[validate] mdoc validation failed", { error: mdocResult.error }); } catch {}
-      throw new Error(`mdoc_validation_failed: ${mdocResult.error}`);
+  try {
+    if (typeof token === 'string' && token.includes('~')) {
+      console.log("[validate] detected SD-JWT format (contains '~')"); 
+      try { slog("[validate] validating SD-JWT"); } catch {}
+      await validateSdJwt({ sdJwt: token, issuerMeta, configurationId, expectedCNonce: metadata?.c_nonce, authorizationServerMeta: authorizationServerMeta || issuerMeta._authorizationServerMeta }, logSessionId);
+    } else if (typeof token === 'string' && token.split('.').length >= 3) {
+      console.log("[validate] detected JWT VC format (3+ parts)"); 
+      try { slog("[validate] validating JWT VC"); } catch {}
+      await validateJwtVc({ jwtVc: token, issuerMeta, apiBase, configurationId, publicJwk: keyBinding?.publicJwk }, logSessionId);
+    } else if (typeof token === 'string') {
+      // Potential mdoc base64url
+      console.log("[validate] detected potential mdoc format"); 
+      try { slog("[validate] validating mdoc"); } catch {}
+      const mdocResult = await verifyReceivedMdlToken(token, { validateStructure: true, includeMetadata: false });
+      if (!mdocResult.success) {
+        console.error("[validate] mdoc validation failed:", mdocResult.error); 
+        try { slog("[validate] mdoc validation failed", { error: mdocResult.error }); } catch {}
+        throw new Error(`mdoc_validation_failed: ${mdocResult.error}`);
+      }
+      // Placeholder for cryptographic verification using trust anchors
+      if (process.env.WALLET_MDL_STRICT === 'true') {
+        try { slog("[validate] mdoc crypto verification not implemented"); } catch {}
+        throw new Error("mdoc_crypto_verification_not_implemented: provide trust anchors and crypto verifier");
+      }
+    } else {
+      console.error("[validate] unknown credential format, token type:", typeof token); 
+      try { slog("[validate] unknown format", { tokenType: typeof token }); } catch {}
+      throw new Error(`credential_format_error: unknown credential format, token type: ${typeof token}`);
     }
-    // Placeholder for cryptographic verification using trust anchors
-    if (process.env.WALLET_MDL_STRICT === 'true') {
-      try { slog("[validate] mdoc crypto verification not implemented"); } catch {}
-      throw new Error("mdoc_crypto_verification_not_implemented: provide trust anchors and crypto verifier");
-    }
+  } catch (validationError) {
+    console.error("[validate] credential validation error:", validationError?.message || validationError); 
+    console.error("[validate] validation error stack:", validationError?.stack); 
+    try { slog("[validate] validation error", { error: validationError?.message || String(validationError), stack: validationError?.stack }); } catch {}
+    throw validationError;
   }
 
   // If validation passed, store
+  console.log("[validate] credential validation passed, storing"); 
   try { slog("[store] credential", { configurationId }); } catch {}
   await storeWalletCredentialByType(configurationId, { credential, keyBinding, metadata });
 }
@@ -1029,7 +1303,7 @@ function extractCredentialToken(credentialEnvelope) {
   return candidates[0] || fallback;
 }
 
-async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonce }, logSessionId) {
+async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonce, authorizationServerMeta }, logSessionId) {
   const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   console.log("[sd-jwt] start validation; configurationId=", configurationId); try { slog("[sd-jwt] start validation", { configurationId }); } catch {}
   // Decode and reconstruct claims (verifies disclosures/digests)
@@ -1070,57 +1344,156 @@ async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonc
   }
 
   // Verify issuer signature of SD-JWT JWS
-  const jwksUrl = issuerMeta?.jwks_uri || (issuerMeta?.credential_issuer ? `${issuerMeta.credential_issuer.replace(/\/$/, '')}/.well-known/jwt-vc-issuer` : null);
+  // Per OIDC4VCI v1.0: Use jwks_uri from credential issuer metadata, or from authorization server metadata,
+  // or fall back to /.well-known/jwt-vc-issuer endpoint (which may contain jwks_uri or jwks)
+  let jwksUrl = issuerMeta?.jwks_uri || null;
+  if (!jwksUrl && authorizationServerMeta?.jwks_uri) {
+    jwksUrl = authorizationServerMeta.jwks_uri;
+    console.log("[sd-jwt] using jwks_uri from authorization server metadata:", jwksUrl);
+    try { slog("[sd-jwt] using AS jwks_uri", { jwksUrl }); } catch {}
+  }
+  let jwtVcIssuerMeta = null;
+  if (!jwksUrl && issuerMeta?.credential_issuer) {
+    // Fallback to JWT VC Issuer metadata endpoint (from JWT VC Issuer metadata spec)
+    const jwtVcIssuerUrl = `${issuerMeta.credential_issuer.replace(/\/$/, '')}/.well-known/jwt-vc-issuer`;
+    console.log("[sd-jwt] fetching JWT VC Issuer metadata from:", jwtVcIssuerUrl);
+    try { slog("[sd-jwt] fetching jwt-vc-issuer metadata", { url: jwtVcIssuerUrl }); } catch {}
+    try {
+      const jwtVcRes = await fetch(jwtVcIssuerUrl);
+      if (jwtVcRes.ok) {
+        jwtVcIssuerMeta = await jwtVcRes.json();
+        jwksUrl = jwtVcIssuerMeta?.jwks_uri || null;
+        if (jwksUrl) {
+          console.log("[sd-jwt] found jwks_uri in JWT VC Issuer metadata:", jwksUrl);
+          try { slog("[sd-jwt] jwt-vc-issuer jwks_uri", { jwksUrl }); } catch {}
+        } else if (jwtVcIssuerMeta?.jwks) {
+          // JWT VC Issuer metadata may contain jwks directly
+          console.log("[sd-jwt] JWT VC Issuer metadata contains jwks directly");
+          try { slog("[sd-jwt] jwt-vc-issuer has jwks", { hasJwks: !!jwtVcIssuerMeta.jwks }); } catch {}
+        }
+      } else {
+        console.warn("[sd-jwt] JWT VC Issuer metadata fetch failed:", jwtVcRes.status);
+        try { slog("[sd-jwt] jwt-vc-issuer fetch failed", { status: jwtVcRes.status }); } catch {}
+      }
+    } catch (e) {
+      console.warn("[sd-jwt] JWT VC Issuer metadata fetch error:", e?.message || e);
+      try { slog("[sd-jwt] jwt-vc-issuer fetch error", { error: e?.message || String(e) }); } catch {}
+    }
+  }
+  let jwksFetchStatus = null;
+  let jwksKeysCount = 0;
+  let jwksVerificationError = null;
+  
   if (!signatureVerified && jwksUrl) {
     console.log("[sd-jwt] fetching JWKS from:", jwksUrl); try { slog("[sd-jwt] fetching JWKS", { jwksUrl }); } catch {}
     const res = await fetch(jwksUrl);
+    jwksFetchStatus = res.status;
     console.log("[sd-jwt] JWKS fetch status:", res.status); try { slog("[sd-jwt] JWKS fetch status", { status: res.status }); } catch {}
     if (res.ok) {
       const body = await res.json();
       const jwks = body.keys ? body : body.jwks ? body.jwks : null;
-      console.log("[sd-jwt] JWKS keys count:", jwks?.keys?.length || (Array.isArray(jwks) ? jwks.length : 0)); try { slog("[sd-jwt] JWKS keys count", { count: jwks?.keys?.length || (Array.isArray(jwks) ? jwks.length : 0) }); } catch {}
+      jwksKeysCount = jwks?.keys?.length || (Array.isArray(jwks) ? jwks.length : 0);
+      console.log("[sd-jwt] JWKS keys count:", jwksKeysCount); 
+      try { slog("[sd-jwt] JWKS keys count", { count: jwksKeysCount }); } catch {}
       if (jwks) {
         // hdr and jws are already computed above
-        console.log("[sd-jwt] JWS header.alg=", hdr.alg, "kid=", hdr.kid); try { slog("[sd-jwt] JWS header", { alg: hdr.alg, kid: hdr.kid }); } catch {}
+        console.log("[sd-jwt] JWS header.alg=", hdr.alg, "kid=", hdr.kid); 
+        try { slog("[sd-jwt] JWS header", { alg: hdr.alg, kid: hdr.kid }); } catch {}
         const JWKS = createLocalJWKSet(jwks);
         try {
           await jwtVerify(jws, JWKS, { clockTolerance: 300 });
           console.log("[sd-jwt] JWS signature verified"); try { slog("[sd-jwt] JWS signature verified"); } catch {}
           signatureVerified = true;
         } catch (e) {
-          console.error("[sd-jwt] JWS signature verification failed with JWKS resolver:", e?.message || e); try { slog("[sd-jwt] JWKS resolver failed", { error: e?.message || String(e) }); } catch {}
+          jwksVerificationError = e?.message || String(e);
+          console.error("[sd-jwt] JWS signature verification failed with JWKS resolver:", e?.message || e);
+          console.error("[sd-jwt] verification error details:", e);
+          try { slog("[sd-jwt] JWKS resolver failed", { error: e?.message || String(e), errorName: e?.name, errorCode: e?.code }); } catch {}
           // Fallback: iterate keys if no kid or resolver failed
           const keysArr = Array.isArray(jwks.keys) ? jwks.keys : jwks.keys ? jwks.keys : jwks;
           if (Array.isArray(keysArr) && keysArr.length > 0) {
             let verified = false;
+            const keyErrors = [];
             for (const [idx, jwk] of keysArr.entries()) {
-              if (jwk.use && jwk.use !== 'sig') continue;
-              if (jwk.kty && jwk.kty !== 'EC') continue;
+              if (jwk.use && jwk.use !== 'sig') {
+                console.log(`[sd-jwt] Skipping key[${idx}] - use=${jwk.use} (not 'sig')`); 
+                continue;
+              }
+              if (jwk.kty && jwk.kty !== 'EC') {
+                console.log(`[sd-jwt] Skipping key[${idx}] - kty=${jwk.kty} (not 'EC')`); 
+                continue;
+              }
               try {
-                console.log(`[sd-jwt] Trying key[${idx}] kid=${jwk.kid || 'none'} crv=${jwk.crv}`); try { slog(`[sd-jwt] trying key ${idx}`, { kid: jwk.kid, crv: jwk.crv }); } catch {}
+                console.log(`[sd-jwt] Trying key[${idx}] kid=${jwk.kid || 'none'} crv=${jwk.crv} kty=${jwk.kty}`); 
+                try { slog(`[sd-jwt] trying key ${idx}`, { kid: jwk.kid, crv: jwk.crv, kty: jwk.kty }); } catch {}
                 const key = await importJWK(jwk, hdr.alg || 'ES256');
                 await jwtVerify(jws, key, { clockTolerance: 300 });
                 console.log(`[sd-jwt] Verified with key[${idx}]`); try { slog(`[sd-jwt] verified with key ${idx}`); } catch {}
                 verified = true;
                 break;
               } catch (err) {
-                console.warn(`[sd-jwt] key[${idx}] failed:`, err?.message || err); try { slog(`[sd-jwt] key ${idx} failed`, { error: err?.message || String(err) }); } catch {}
+                const errMsg = err?.message || String(err);
+                keyErrors.push(`key[${idx}](${jwk.kid || 'no-kid'}): ${errMsg}`);
+                console.warn(`[sd-jwt] key[${idx}] failed:`, errMsg); 
+                try { slog(`[sd-jwt] key ${idx} failed`, { error: errMsg, kid: jwk.kid }); } catch {}
               }
             }
-            if (!verified) throw new Error('signature verification failed');
+            if (!verified) {
+              console.error("[sd-jwt] all JWKS keys failed verification");
+              console.error("[sd-jwt] tried", keysArr.length, "keys");
+              console.error("[sd-jwt] key errors:", keyErrors.join('; '));
+              try { slog("[sd-jwt] all keys failed", { keyCount: keysArr.length, keyErrors }); } catch {}
+              jwksVerificationError = `all ${keysArr.length} JWKS keys failed verification: ${keyErrors.join('; ')}`;
+              throw new Error(`signature verification failed: all JWKS keys failed verification`);
+            }
             signatureVerified = true;
           } else {
-            throw new Error('signature verification failed');
+            console.error("[sd-jwt] no valid keys found in JWKS");
+            try { slog("[sd-jwt] no valid keys", { jwksStructure: typeof jwks }); } catch {}
+            jwksVerificationError = 'no valid keys found in JWKS';
+            throw new Error('signature verification failed: no valid keys found in JWKS');
           }
         }
+      } else {
+        jwksVerificationError = 'JWKS response does not contain keys';
+        console.error("[sd-jwt] JWKS response does not contain keys");
+        try { slog("[sd-jwt] JWKS no keys", { bodyKeys: Object.keys(body) }); } catch {}
       }
     } else {
-      console.warn("[sd-jwt] JWKS fetch failed; skipping JWS verification"); try { slog("[sd-jwt] JWKS fetch failed"); } catch {}
+      const errorText = await res.text().catch(() => "");
+      jwksVerificationError = `JWKS fetch failed with status ${res.status}${errorText ? `: ${errorText.slice(0, 200)}` : ''}`;
+      console.warn("[sd-jwt] JWKS fetch failed; status:", res.status, "body:", errorText?.slice(0, 200)); 
+      try { slog("[sd-jwt] JWKS fetch failed", { status: res.status, error: errorText?.slice(0, 200) }); } catch {}
     }
   }
 
   if (!signatureVerified) {
-    throw new Error('signature verification failed');
+    const reasons = [];
+    if (!hdr.kid && !decoded.jwt.payload?.iss?.startsWith('did:')) reasons.push('no DID identifier found');
+    if (!Array.isArray(hdr.x5c) || hdr.x5c.length === 0) reasons.push('no x5c certificate found');
+    if (!jwksUrl) {
+      reasons.push('no JWKS URI available');
+    } else if (jwksFetchStatus !== null) {
+      if (jwksFetchStatus !== 200) {
+        reasons.push(`JWKS fetch failed (HTTP ${jwksFetchStatus})`);
+      } else if (jwksVerificationError) {
+        reasons.push(`JWKS verification failed: ${jwksVerificationError}`);
+      } else if (jwksKeysCount === 0) {
+        reasons.push('JWKS contains no keys');
+      } else {
+        reasons.push(`JWKS verification failed (${jwksKeysCount} keys available)`);
+      }
+    }
+    const reasonStr = reasons.length > 0 ? ` - reasons: ${reasons.join(', ')}` : '';
+    console.error("[sd-jwt] signature verification failed", reasonStr);
+    console.error("[sd-jwt] header:", JSON.stringify(hdr, null, 2));
+    console.error("[sd-jwt] issuer from payload:", decoded.jwt.payload?.iss);
+    console.error("[sd-jwt] JWKS URL attempted:", jwksUrl || 'none');
+    console.error("[sd-jwt] JWKS fetch status:", jwksFetchStatus || 'not attempted');
+    console.error("[sd-jwt] JWKS keys count:", jwksKeysCount || 'unknown');
+    console.error("[sd-jwt] signature verification methods attempted: DID=", (hdr.kid && hdr.kid.startsWith('did:')) || (decoded.jwt.payload?.iss && String(decoded.jwt.payload.iss).startsWith('did:')), "x5c=", Array.isArray(hdr.x5c) && hdr.x5c.length > 0, "JWKS=", !!jwksUrl);
+    try { slog("[sd-jwt] signature verification failed", { reasons, header: hdr, issuer: decoded.jwt.payload?.iss, jwksUrl, jwksFetchStatus, jwksKeysCount, jwksVerificationError, triedDid: (hdr.kid && hdr.kid.startsWith('did:')) || (decoded.jwt.payload?.iss && String(decoded.jwt.payload.iss).startsWith('did:')), triedX5c: Array.isArray(hdr.x5c) && hdr.x5c.length > 0, triedJwks: !!jwksUrl }); } catch {}
+    throw new Error(`signature verification failed${reasonStr}`);
   }
 
   // Validate kb-jwt binding and c_nonce
@@ -1147,21 +1520,31 @@ async function validateSdJwt({ sdJwt, issuerMeta, configurationId, expectedCNonc
   });
 }
 
-async function validateJwtVc({ jwtVc, issuerMeta, apiBase, configurationId, publicJwk }) {
+async function validateJwtVc({ jwtVc, issuerMeta, apiBase, configurationId, publicJwk }, logSessionId) {
+  const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   console.log("[jwt-vc] start validation; configurationId=", configurationId);
+  try { slog("[jwt-vc] start validation", { configurationId }); } catch {}
+  let hdr = {};
+  let payloadFromDid, payloadFromX5c;
   try {
-    const hdr = decodeProtectedHeader(jwtVc);
+    hdr = decodeProtectedHeader(jwtVc);
     console.log("[jwt-vc] header.alg=", hdr.alg, "kid=", hdr.kid);
+    try { slog("[jwt-vc] header", { alg: hdr.alg, kid: hdr.kid }); } catch {}
     // DID-based verification first if kid/iss is DID
     if ((hdr.kid && hdr.kid.startsWith('did:')) || (issuerMeta?.credential_issuer?.startsWith('did:') || false)) {
       try {
         const didIssuer = (hdr.kid && hdr.kid.split('#')[0]) || issuerMeta?.credential_issuer;
         console.log("[jwt-vc] attempting DID-based verification using", didIssuer);
+        try { slog("[jwt-vc] attempting DID verification", { didIssuer }); } catch {}
         const verified = await verifyJwsWithDid(jwtVc, hdr, didIssuer);
-        var payloadFromDid = verified?.payload;
-        if (payloadFromDid) console.log("[jwt-vc] signature verified via DID");
+        payloadFromDid = verified?.payload;
+        if (payloadFromDid) {
+          console.log("[jwt-vc] signature verified via DID");
+          try { slog("[jwt-vc] DID signature verified"); } catch {}
+        }
       } catch (e) {
         console.warn("[jwt-vc] DID-based verification failed:", e?.message || e);
+        try { slog("[jwt-vc] DID verification failed", { error: e?.message || String(e) }); } catch {}
       }
     }
     if (Array.isArray(hdr.x5c) && hdr.x5c.length > 0) {
@@ -1170,61 +1553,86 @@ async function validateJwtVc({ jwtVc, issuerMeta, apiBase, configurationId, publ
         const certKey = await importX509(pem, hdr.alg || 'ES256');
         const verified = await jwtVerify(jwtVc, certKey, { clockTolerance: 300 });
         console.log("[jwt-vc] signature verified via x5c certificate");
+        try { slog("[jwt-vc] x5c signature verified"); } catch {}
         // Use payload from verified path
-        var payloadFromX5c = verified.payload;
+        payloadFromX5c = verified.payload;
       } catch (e) {
         console.warn("[jwt-vc] x5c certificate verification failed:", e?.message || e);
+        try { slog("[jwt-vc] x5c verification failed", { error: e?.message || String(e) }); } catch {}
       }
-
     }
-  } catch {}
+  } catch (e) {
+    console.error("[jwt-vc] failed to decode header:", e?.message || e);
+    try { slog("[jwt-vc] header decode failed", { error: e?.message || String(e) }); } catch {}
+  }
   // Validate JWT VC signature using issuer JWKS
   const jwksUrl = issuerMeta?.jwks_uri || `${apiBase}/jwks`;
   let payload = typeof payloadFromDid !== 'undefined' ? payloadFromDid : (typeof payloadFromX5c !== 'undefined' ? payloadFromX5c : undefined);
   if (jwksUrl) {
     console.log("[jwt-vc] fetching JWKS from:", jwksUrl);
+    try { slog("[jwt-vc] fetching JWKS", { jwksUrl }); } catch {}
     const res = await fetch(jwksUrl);
     console.log("[jwt-vc] JWKS fetch status:", res.status);
+    try { slog("[jwt-vc] JWKS fetch status", { status: res.status }); } catch {}
     if (res.ok) {
       const jwks = await res.json();
       const keysCount = jwks?.keys?.length || 0;
       console.log("[jwt-vc] JWKS keys count:", keysCount);
+      try { slog("[jwt-vc] JWKS keys count", { count: keysCount }); } catch {}
       if (!payload) {
         const JWKS = createLocalJWKSet(jwks.keys ? jwks : { keys: jwks.keys || [] });
         try {
           const verified = await jwtVerify(jwtVc, JWKS, { clockTolerance: 300 });
           payload = verified.payload;
           console.log("[jwt-vc] signature verified");
+          try { slog("[jwt-vc] JWS signature verified"); } catch {}
         } catch (e) {
           console.error("[jwt-vc] signature verification failed with JWKS resolver:", e?.message || e);
+          console.error("[jwt-vc] verification error details:", e);
+          try { slog("[jwt-vc] JWKS resolver failed", { error: e?.message || String(e), errorName: e?.name, errorCode: e?.code }); } catch {}
           // Fallback: iterate keys
-          const hdr2 = (()=>{ try { return decodeProtectedHeader(jwtVc); } catch { return {}; } })();
+          const hdr2 = hdr || (()=>{ try { return decodeProtectedHeader(jwtVc); } catch { return {}; } })();
           const keysArr = Array.isArray(jwks.keys) ? jwks.keys : jwks.keys ? jwks.keys : jwks;
           if (Array.isArray(keysArr) && keysArr.length > 0) {
             for (const [idx, jwk] of keysArr.entries()) {
               if (jwk.use && jwk.use !== 'sig') continue;
               try {
                 console.log(`[jwt-vc] Trying key[${idx}] kid=${jwk.kid || 'none'} alg=${hdr2.alg}`);
+                try { slog(`[jwt-vc] trying key ${idx}`, { kid: jwk.kid, alg: hdr2.alg }); } catch {}
                 const key = await importJWK(jwk, hdr2.alg || 'ES256');
                 const verified = await jwtVerify(jwtVc, key, { clockTolerance: 300 });
                 payload = verified.payload;
                 console.log(`[jwt-vc] Verified with key[${idx}]`);
+                try { slog(`[jwt-vc] verified with key ${idx}`); } catch {}
                 break;
               } catch (err) {
                 console.warn(`[jwt-vc] key[${idx}] failed:`, err?.message || err);
+                try { slog(`[jwt-vc] key ${idx} failed`, { error: err?.message || String(err) }); } catch {}
               }
             }
-            if (!payload) throw new Error('signature verification failed');
+            if (!payload) {
+              console.error("[jwt-vc] all JWKS keys failed verification");
+              console.error("[jwt-vc] tried", keysArr.length, "keys");
+              try { slog("[jwt-vc] all keys failed", { keyCount: keysArr.length }); } catch {}
+              throw new Error('signature verification failed: all JWKS keys failed verification');
+            }
           } else {
-            throw new Error('signature verification failed');
+            console.error("[jwt-vc] no valid keys found in JWKS");
+            try { slog("[jwt-vc] no valid keys", { jwksStructure: typeof jwks }); } catch {}
+            throw new Error('signature verification failed: no valid keys found in JWKS');
           }
         }
       }
     } else {
       console.warn("[jwt-vc] JWKS fetch failed; will decode without verify");
+      try { slog("[jwt-vc] JWKS fetch failed", { status: res.status }); } catch {}
     }
   }
-  if (!payload) payload = decodeJwt(jwtVc);
+  if (!payload) {
+    console.warn("[jwt-vc] no verified payload, decoding without verification");
+    try { slog("[jwt-vc] decoding without verification"); } catch {}
+    payload = decodeJwt(jwtVc);
+  }
 
   // iss must match credential_issuer
   if (issuerMeta?.credential_issuer && payload?.iss && payload.iss !== issuerMeta.credential_issuer) {
@@ -1341,6 +1749,10 @@ async function verifyJwsWithDid(jws, header, didOrIss) {
   }
   throw lastErr || new Error('DID verification failed');
 }
+
+
+
+
 
 
 
