@@ -839,19 +839,43 @@ async function generateMdlCredentialWithAuth0Library(
     // OIDC4VCI v1.0 A.2.4 Credential Response:
     // "The value of the credential claim in the Credential Response MUST be a string that is the 
     // base64url-encoded representation of the CBOR-encoded IssuerSigned structure"
-    // Note: This differs from ISO 18013-5 which defines the top-level as 'Document'.
-    // OIDC4VCI transports IssuerSigned, not the full Document.
-    console.log(`[mdl-issue] Extracting IssuerSigned structure for OIDC4VCI compliance...`);
-    const issuerSigned = signedDocument.issuerSigned;
+    // 
+    // CRITICAL: We must use the library's prepare() method to get the proper CBOR-encodable structure.
+    // The prepare() method converts:
+    //   - issuerAuth (IssuerAuth class) -> COSE_Sign1 array via getContentForEncoding()
+    //   - nameSpaces -> proper Map structure with CBOR-tagged items
+    // Direct cbor.encode() on issuerSigned fails because it serializes the IssuerAuth class
+    // as a JS object with property names instead of a COSE_Sign1 Tag 18 array.
+    console.log(`[mdl-issue] Preparing IssuerSigned structure for CBOR encoding...`);
     
+    const issuerSigned = signedDocument.issuerSigned;
     if (!issuerSigned || !issuerSigned.issuerAuth || !issuerSigned.nameSpaces) {
         throw new Error("Signed document does not contain valid IssuerSigned structure");
     }
     
-    // Encode the IssuerSigned structure to CBOR
-    // We use the 'cbor' library (not cbor-x) to ensure consistent encoding with Tag 18
-    console.log(`[mdl-issue] Encoding IssuerSigned to CBOR...`);
-    const encoded = cbor.encode(issuerSigned);
+    // Use the library's prepare() method which returns a Map with properly structured data:
+    // - 'docType' -> string
+    // - 'issuerSigned' -> { nameSpaces: Map, issuerAuth: [protectedHeaders, unprotectedHeaders, payload, signature] }
+    const preparedDoc = signedDocument.prepare();
+    console.log(`[mdl-issue] ✅ Document prepared for encoding`);
+    
+    // Extract just the issuerSigned portion from the prepared document
+    // The prepare() method returns: Map { 'docType' -> ..., 'issuerSigned' -> ... }
+    const preparedIssuerSigned = preparedDoc.get('issuerSigned');
+    if (!preparedIssuerSigned) {
+        throw new Error("Prepared document does not contain issuerSigned structure");
+    }
+    
+    console.log(`[mdl-issue] IssuerSigned structure extracted from prepared document`);
+    console.log(`[mdl-issue] issuerAuth is array: ${Array.isArray(preparedIssuerSigned.issuerAuth)}`);
+    console.log(`[mdl-issue] nameSpaces is Map: ${preparedIssuerSigned.nameSpaces instanceof Map}`);
+    
+    // Encode the properly prepared IssuerSigned structure using the library's cborEncode
+    // which uses cbor-x with the correct options for ISO 18013-5 compliance
+    // Note: cborEncode is exported from @auth0/mdl/lib/cbor, not the main module
+    const { cborEncode } = await import('@auth0/mdl/lib/cbor/index.js');
+    console.log(`[mdl-issue] Encoding IssuerSigned to CBOR using @auth0/mdl cborEncode...`);
+    const encoded = cborEncode(preparedIssuerSigned);
     console.log(`[mdl-issue] ✅ IssuerSigned encoded to CBOR (${encoded.length} bytes)`);
     
     const encodedMobileDocument = Buffer.from(encoded).toString("base64url");
