@@ -836,11 +836,12 @@ async function generateMdlCredentialWithAuth0Library(
     
     console.log("[mdl-issue] ✅ Document signed successfully");
     
-    // CRITICAL: OID4VCI v1.0 requires the 'credential' to be the Base64URL-encoded 'IssuerSigned' structure.
-    // The @auth0/mdl MDoc.encode() returns a 'DeviceResponse' structure (version, documents, status), 
-    // which is for Presentation, not Issuance.
-    // The signedDocument object has an 'issuerSigned' property which matches the requirement.
-    console.log(`[mdl-issue] Extracting IssuerSigned structure for OID4VCI compliance...`);
+    // OIDC4VCI v1.0 A.2.4 Credential Response:
+    // "The value of the credential claim in the Credential Response MUST be a string that is the 
+    // base64url-encoded representation of the CBOR-encoded IssuerSigned structure"
+    // Note: This differs from ISO 18013-5 which defines the top-level as 'Document'.
+    // OIDC4VCI transports IssuerSigned, not the full Document.
+    console.log(`[mdl-issue] Extracting IssuerSigned structure for OIDC4VCI compliance...`);
     const issuerSigned = signedDocument.issuerSigned;
     
     if (!issuerSigned || !issuerSigned.issuerAuth || !issuerSigned.nameSpaces) {
