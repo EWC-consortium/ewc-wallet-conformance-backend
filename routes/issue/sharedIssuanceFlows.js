@@ -721,19 +721,24 @@ sharedRouter.post("/credential", async (req, res) => {
   let sessionObject;
   let sessionKey;
   let flowType;
+  let sessionId = null;
   
   try {
+    const requestBody = req.body;
     const authHeader = req.headers["authorization"];
     const token = authHeader && authHeader.split(" ")[1];
-    const requestBody = req.body;
 
-    // Get session first so we can mark it as failed if validation fails
+    // Validate credential request BEFORE we do any session lookup so that
+    // malformed requests can return the appropriate 4xx without requiring
+    // a stored session (useful for unit tests and spec compliance checks).
+    const effectiveConfigurationId = validateCredentialRequest(requestBody);
+
+    // Get session after request validation
     const sessionData = await getSessionFromToken(token);
     sessionObject = sessionData.sessionObject;
     flowType = sessionData.flowType;
     sessionKey = sessionData.sessionKey;
-    
-    const sessionId = extractSessionId(sessionKey);
+    sessionId = extractSessionId(sessionKey);
     
     // Set session context for console interception to capture all logs
     if (sessionId) {
@@ -767,9 +772,6 @@ sharedRouter.post("/credential", async (req, res) => {
         hasProof: !!requestBody.proof || !!requestBody.proofs
       }).catch(() => {});
     }
-
-    // Validate credential request
-    const effectiveConfigurationId = validateCredentialRequest(requestBody);
 
     // Validate proof if configuration ID is available
     if (effectiveConfigurationId) {

@@ -453,9 +453,9 @@ describe('OIDC4VCI V1.0 - Metadata Discovery Compliance', () => {
         .expect(200);
 
       if (response.body.credential_configurations_supported) {
-        const configurations = Object.values(response.body.credential_configurations_supported);
+        const configurations = Object.entries(response.body.credential_configurations_supported);
         
-        configurations.forEach((credential, index) => {
+        configurations.forEach(([configId, credential], index) => {
           // V1.0 recommends specifying binding methods
           if (credential.cryptographic_binding_methods_supported) {
             expect(credential.cryptographic_binding_methods_supported).to.be.an('array');
@@ -471,22 +471,28 @@ describe('OIDC4VCI V1.0 - Metadata Discovery Compliance', () => {
         .expect(200);
 
       if (response.body.credential_configurations_supported) {
-        const configurations = Object.values(response.body.credential_configurations_supported);
+        const configurations = Object.entries(response.body.credential_configurations_supported);
         
-        configurations.forEach((credential, index) => {
+        configurations.forEach(([configId, credential], index) => {
           // V1.0 recommends specifying signing algorithms
           if (credential.credential_signing_alg_values_supported) {
             expect(credential.credential_signing_alg_values_supported).to.be.an('array');
             expect(credential.credential_signing_alg_values_supported.length).to.be.greaterThan(0);
             
-            // Should be valid JWT/JWS algorithms
+            const allowedStringAlgs = [
+              'RS256', 'RS384', 'RS512',
+              'ES256', 'ES384', 'ES512',
+              'PS256', 'PS384', 'PS512',
+              'EdDSA'
+            ];
+            const allowedMdocAlgs = [-7, -9, -35, -36]; // COSE numeric identifiers
+
             credential.credential_signing_alg_values_supported.forEach(alg => {
-              expect(alg).to.be.oneOf([
-                'RS256', 'RS384', 'RS512',
-                'ES256', 'ES384', 'ES512',
-                'PS256', 'PS384', 'PS512',
-                'EdDSA'
-              ]);
+              if (credential.format === 'mso_mdoc') {
+                expect(alg, `Expected numeric COSE alg for ${configId}`).to.be.oneOf(allowedMdocAlgs);
+              } else {
+                expect(alg).to.be.oneOf(allowedStringAlgs);
+              }
             });
           }
         });
@@ -2377,14 +2383,20 @@ describe('OIDC4VCI V1.0 - Format-Specific Requirements', () => {
           expect(algs).to.be.an('array');
           expect(algs.length).to.be.greaterThan(0);
           
-          // Common algorithms: ES256, ES384, ES512, EdDSA, RS256
+          const allowedStringAlgs = [
+            'RS256', 'RS384', 'RS512',
+            'ES256', 'ES384', 'ES512',
+            'PS256', 'PS384', 'PS512',
+            'EdDSA'
+          ];
+          const allowedMdocAlgs = [-7, -9, -35, -36];
+
           algs.forEach(alg => {
-            expect(alg).to.be.oneOf([
-              'RS256', 'RS384', 'RS512',
-              'ES256', 'ES384', 'ES512',
-              'PS256', 'PS384', 'PS512',
-              'EdDSA'
-            ]);
+            if (config.format === 'mso_mdoc') {
+              expect(alg, `Expected numeric COSE alg for ${configId}`).to.be.oneOf(allowedMdocAlgs);
+            } else {
+              expect(alg).to.be.oneOf(allowedStringAlgs);
+            }
           });
         }
       });
