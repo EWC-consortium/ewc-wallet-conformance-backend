@@ -1,6 +1,9 @@
 import redis from "redis";
 
 //
+const VCI_CODE_FLOW_TIMEOUT = process.env.VCI_CODE_FLOW_TIMEOUT || 180;
+const VCI_PRE_AUTH_TIMEOUT = process.env.VCI_PRE_AUTH_TIMEOUT || 180;
+const VP_TIMEOUT = process.env.VP_TIMEOUT || 180;
 const redis_url = process.env.REDIS ? process.env.REDIS : "localhost:6379";
 // Create a Redis client
 export const client = redis.createClient({
@@ -62,7 +65,7 @@ export async function storePreAuthSession(sessionKey, sessionValue) {
     }
     
     const key = `pre-auth-sessions:${sessionKey}`;
-    const ttlInSeconds = 180; // 3 minutes
+    const ttlInSeconds = VCI_PRE_AUTH_TIMEOUT; // env, default: 3 minutes
     await client.setEx(key, ttlInSeconds, JSON.stringify(sessionValue)); // Set with expiration
   } catch (err) {
     console.error("Error storing session:", err);
@@ -115,7 +118,7 @@ export async function getSessionKeyFromAccessToken(accessToken) {
 export async function storeCodeFlowSession(sessionKey, sessionValue) {
   try {
     const key = `code-flow-sessions:${sessionKey}`;
-    const ttlInSeconds = 180; // 3 minutes
+    const ttlInSeconds = VCI_CODE_FLOW_TIMEOUT; // env, default: 3 minutes
     await client.setEx(key, ttlInSeconds, JSON.stringify(sessionValue)); // Set with expiration
     console.log(`Session stored under key: ${key}`);
   } catch (err) {
@@ -215,7 +218,7 @@ export async function getDeferredSessionTransactionId(transaction_id) {
 export async function storeVPSession(sessionKey, sessionValue) {
   try {
     const key = `vp-sessions:${sessionKey}`;
-    const ttlInSeconds = 180; // 3 minutes
+    const ttlInSeconds = VP_TIMEOUT; // env, default: 3 minutes
     await client.setEx(key, ttlInSeconds, JSON.stringify(sessionValue)); // Set with expiration
     console.log(`VP Session stored under key: ${key}`);
   } catch (err) {
