@@ -219,11 +219,28 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     await logInfo(sessionId, "VP session retrieved successfully", {
       hasNonce: !!vpSession.nonce,
       hasPresentationDefinition: !!vpSession.presentation_definition,
+      hasDcqlQuery: !!vpSession.dcql_query,
       responseMode: vpSession.response_mode,
       status: vpSession.status
     });
 
-    const isMdoc = vpSession.presentation_definition && vpSession.presentation_definition.format && vpSession.presentation_definition.format.mso_mdoc;
+    // Check if this is an MDL presentation in multiple ways:
+    // 1. From presentation definition format (PEX - explicit format declaration)
+    // 2. From DCQL query format (DCQL - credentials format field)
+    // 3. From the actual VP token structure (fallback detection)
+    const vpToken = req.body["vp_token"];
+    const isMdocFromDef = vpSession.presentation_definition?.format?.mso_mdoc;
+    const isMdocFromDcql = vpSession.dcql_query?.credentials?.some(cred => cred.format === "mso_mdoc");
+    const isMdoc = isMdocFromDef || isMdocFromDcql 
+
+    await logDebug(sessionId, "MDL detection", {
+      isMdocFromDef,
+      isMdocFromDcql,
+      isMdoc,
+      hasVpToken: !!vpToken,
+      vpTokenType: typeof vpToken,
+      dcqlCredentialsCount: vpSession.dcql_query?.credentials?.length || 0
+    });
 
     if (isMdoc) {
       console.log("mDL verification using custom cbor-x decoder...");
@@ -231,7 +248,7 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         isMdoc: true
       });
       try {
-        const vpToken = req.body["vp_token"];
+        let vpToken = req.body["vp_token"];
         if (!vpToken) {
           const received = req.body["vp_token"] === undefined ? "vp_token missing" : `vp_token is ${typeof req.body["vp_token"]}`;
           await logError(sessionId, "No vp_token found in mDL request body", {
@@ -250,8 +267,35 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           return res.status(400).json({ error: `No vp_token found in the request body. Received: ${received}, expected: vp_token string` });
         }
         
+        // Handle JSON string format (e.g., '{"cred1":["token"]}')
+        if (typeof vpToken === 'string' && vpToken.trim().startsWith('{')) {
+          try {
+            const parsed = JSON.parse(vpToken);
+            // Extract token from object structure like {"cred1": ["token"]}
+            if (typeof parsed === 'object' && parsed !== null) {
+              const values = Object.values(parsed);
+              for (const value of values) {
+                if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'string') {
+                  vpToken = value[0];
+                  break;
+                } else if (typeof value === 'string') {
+                  vpToken = value;
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            // Not JSON, treat as raw token string
+            await logDebug(sessionId, "VP token is not JSON, treating as raw token", {
+              error: e.message
+            });
+          }
+        }
+        
         await logDebug(sessionId, "VP token found in mDL request", {
-          vpTokenLength: vpToken?.length
+          vpTokenType: typeof vpToken,
+          vpTokenLength: typeof vpToken === 'string' ? vpToken.length : 'N/A',
+          vpTokenPreview: typeof vpToken === 'string' ? vpToken.substring(0, 100) : JSON.stringify(vpToken).substring(0, 100)
         });
 
         // Use our custom verification logic
@@ -1107,6 +1151,7 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       }
       const vpToken = req.body["vp_token"];
 
+       
       // Verify nonce
       // According to OpenID4VP spec, nonce can be in multiple locations:
       // 1. Key-binding JWT (for SD-JWT presentations)
@@ -1397,19 +1442,23 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       return res.status(200).json({ status: "ok" });
     }
   } catch (error) {
+    // Get sessionId from request params (sessionId variable might not be in scope if error occurred early)
+    const errorSessionId = req?.params?.id || 'unknown';
     console.error("Error processing request:", error.message);
-    await logError(sessionId, "Error processing direct_post request", {
+    await logError(errorSessionId, "Error processing direct_post request", {
       error: error.message,
       stack: error.stack
     });
     // Try to mark session as failed if we have sessionId
     try {
-      const vpSession = await getVPSession(sessionId);
-      if (vpSession) {
-        vpSession.status = "failed";
-        vpSession.error = "server_error";
-        vpSession.error_description = error.message;
-        await storeVPSession(sessionId, vpSession);
+      if (errorSessionId && errorSessionId !== 'unknown') {
+        const vpSession = await getVPSession(errorSessionId);
+        if (vpSession) {
+          vpSession.status = "failed";
+          vpSession.error = "server_error";
+          vpSession.error_description = error.message;
+          await storeVPSession(errorSessionId, vpSession);
+        }
       }
     } catch (storageError) {
       console.error("Failed to update session status after direct_post error:", storageError);

@@ -20,13 +20,85 @@ export async function verifyMdlToken(vpTokenBase64, options = {}, documentType =
   } = options;
   
   try {
-    // Step 1: Decode base64url to buffer
-    const buffer = base64url.toBuffer(vpTokenBase64);
+    // Step 1: Preprocess the token - handle URL encoding, trimming, and object extraction
+    let tokenString = vpTokenBase64;
+    const originalType = typeof tokenString;
     
-    // Step 2: Decode CBOR structure
-    const deviceResponse = decode(buffer);
+    // If it's an object, try to extract the token (for structured formats)
+    if (typeof tokenString === 'object' && tokenString !== null) {
+      // Check if it's wrapped in a structure like {"cmwallet": ["token"]}
+      const values = Object.values(tokenString);
+      for (const value of values) {
+        if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'string') {
+          tokenString = value[0];
+          break;
+        } else if (typeof value === 'string') {
+          tokenString = value;
+          break;
+        }
+      }
+    }
     
-    // Step 3: Validate basic structure if requested
+    // Ensure it's a string
+    if (typeof tokenString !== 'string') {
+      throw new Error(`Expected vp_token to be a string after extraction, got ${typeof tokenString} (original type: ${originalType})`);
+    }
+    
+    // Trim whitespace and newlines
+    tokenString = tokenString.trim();
+    
+    // Handle JSON-wrapped strings (e.g., '"token"' instead of 'token')
+    if (tokenString.startsWith('"') && tokenString.endsWith('"')) {
+      try {
+        tokenString = JSON.parse(tokenString);
+      } catch (e) {
+        // Not valid JSON, continue with trimmed string
+      }
+    }
+    
+    // Remove any remaining whitespace (after potential JSON parsing)
+    tokenString = tokenString.trim().replace(/\s+/g, '');
+    
+    // Handle URL encoding - decode if needed
+    try {
+      // Try to decode URL-encoded characters (but not the base64url characters themselves)
+      // Only decode if it contains % encoding
+      if (tokenString.includes('%')) {
+        tokenString = decodeURIComponent(tokenString);
+      }
+    } catch (e) {
+      // If URL decoding fails, it might already be decoded or not URL-encoded
+      // Continue with the original string
+      console.warn("URL decoding failed (this is usually fine):", e.message);
+    }
+    
+    // Validate base64url characters (should only contain A-Z, a-z, 0-9, -, _)
+    // Note: base64url doesn't use padding typically, but we'll allow it
+    if (!/^[A-Za-z0-9\-_]+=*$/.test(tokenString)) {
+      throw new Error(`Invalid base64url characters detected. Token length: ${tokenString.length}, first 50 chars: ${tokenString.substring(0, 50)}`);
+    }
+    
+    // Step 2: Decode base64url to buffer
+    let buffer;
+    try {
+      buffer = base64url.toBuffer(tokenString);
+    } catch (e) {
+      throw new Error(`Failed to decode base64url: ${e.message}. Token length: ${tokenString.length}, preview: ${tokenString.substring(0, 100)}`);
+    }
+    
+    if (!buffer || buffer.length === 0) {
+      throw new Error(`Decoded buffer is empty. Token length: ${tokenString.length}`);
+    }
+    
+    // Step 3: Decode CBOR structure
+    let deviceResponse;
+    try {
+      deviceResponse = decode(buffer);
+    } catch (e) {
+      throw new Error(`Failed to decode CBOR: ${e.message}. Buffer length: ${buffer.length} bytes. This suggests the token might not be a valid mDL CBOR structure.`);
+    }
+    
+    // Step 4: Validate basic structure if requested
     if (validateStructure) {
       if (!deviceResponse.version || !deviceResponse.documents || !Array.isArray(deviceResponse.documents)) {
         throw new Error("Invalid mDL structure: missing version or documents");
@@ -37,14 +109,14 @@ export async function verifyMdlToken(vpTokenBase64, options = {}, documentType =
       }
     }
     
-    // Step 4: Process the first document (typically the mDL)
+    // Step 5: Process the first document (typically the mDL)
     const document = deviceResponse.documents[0];
     
     if (validateStructure && !document.docType) {
       throw new Error("Document missing docType");
     }
     
-    // Step 5: Extract claims from issuerSigned nameSpaces
+    // Step 6: Extract claims from issuerSigned nameSpaces
     const allClaims = {};
     if (document.issuerSigned?.nameSpaces) {
       // Try multiple possible namespace identifiers
@@ -91,7 +163,7 @@ export async function verifyMdlToken(vpTokenBase64, options = {}, documentType =
       }
     }
     
-    // Step 6: Apply field filtering if requested (for selective disclosure)
+    // Step 7: Apply field filtering if requested (for selective disclosure)
     let claims = allClaims;
     // if (requestedFields && Array.isArray(requestedFields)) {
     //   claims = {};
@@ -102,7 +174,7 @@ export async function verifyMdlToken(vpTokenBase64, options = {}, documentType =
     //   });
     // }
     
-    // Step 7: Build result object
+    // Step 8: Build result object
     const result = {
       success: true,
       docType: document.docType,
@@ -216,9 +288,10 @@ export async function extractDeviceNonce(vpTokenBase64) {
   }
 }
 
+
 export default {
   verifyMdlToken,
   validateMdlClaims,
   getSessionTranscriptBytes,
-  extractDeviceNonce
+  extractDeviceNonce,
 }; 
