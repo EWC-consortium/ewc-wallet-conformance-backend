@@ -19,12 +19,7 @@ import {
   updateIssuerStateWithAuthCodeAfterVP,
 } from "../codeFlowJwtRoutes.js";
 
-import {
-  getCodeFlowSession,
-  storeCodeFlowSession,
-  setSessionContext,
-  clearSessionContext,
-} from "../../services/cacheServiceRedis.js";
+import { getCodeFlowSession, storeCodeFlowSession } from "../../services/cacheServiceRedis.js";
 
 // Specification references
 const SPEC_REFS = {
@@ -68,6 +63,7 @@ import {
   // Error handling utilities
   handleRouteError,
   sendErrorResponse,
+  bindSessionLoggingContext,
 } from "../../utils/routeUtils.js";
 
 const codeFlowRouterSDJWT = express.Router();
@@ -419,81 +415,92 @@ async function buildIdTokenRequestJWTForDid(uuid, existingCodeSession) {
 // ************* CREDENTIAL OFFER ENDPOINTS *************************
 // ******************************************************************
 codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
+  let sessionId;
   try {
-    const uuid = getSessionId(req);
+    sessionId = getSessionId(req);
+    bindSessionLoggingContext(req, res, sessionId);
+
     const signatureType = getSignatureType(req);
     const credentialType = getCredentialType(req);
     const client_id_scheme = getClientIdScheme(req);
 
     const sessionData = createCodeFlowSession(client_id_scheme, "code", false, false, signatureType);
-    await manageSession(uuid, sessionData);
+    await manageSession(sessionId, sessionData);
 
-    const credentialOffer = createCodeFlowCredentialOfferResponse(uuid, credentialType, client_id_scheme, true);
-    const encodedQR = await generateQRCode(credentialOffer);
+    const credentialOffer = createCodeFlowCredentialOfferResponse(sessionId, credentialType, client_id_scheme, true);
+    const encodedQR = await generateQRCode(credentialOffer, sessionId);
     
     res.json({
       qr: encodedQR,
       deepLink: credentialOffer,
-      sessionId: uuid,
+      sessionId,
     });
   } catch (error) {
-    handleRouteError(error, "offer-code-sd-jwt", res);
+    handleRouteError(error, "offer-code-sd-jwt", res, sessionId);
   }
 });
 
 codeFlowRouterSDJWT.get(["/offer-code-sd-jwt-dynamic"], async (req, res) => {
+  let sessionId;
   try {
-    const uuid = getSessionId(req);
+    sessionId = getSessionId(req);
+    bindSessionLoggingContext(req, res, sessionId);
+
     const credentialType = getCredentialType(req);
     const client_id_scheme = getClientIdScheme(req);
 
     const sessionData = createCodeFlowSession(client_id_scheme, "code", true);
-    await manageSession(uuid, sessionData);
+    await manageSession(sessionId, sessionData);
 
-    const credentialOffer = createCodeFlowCredentialOfferResponse(uuid, credentialType, client_id_scheme, false);
-    const encodedQR = await generateQRCode(credentialOffer);
+    const credentialOffer = createCodeFlowCredentialOfferResponse(sessionId, credentialType, client_id_scheme, false);
+    const encodedQR = await generateQRCode(credentialOffer, sessionId);
     
     res.json({
       qr: encodedQR,
       deepLink: credentialOffer,
-      sessionId: uuid,
+      sessionId,
     });
   } catch (error) {
-    handleRouteError(error, "offer-code-sd-jwt-dynamic", res);
+    handleRouteError(error, "offer-code-sd-jwt-dynamic", res, sessionId);
   }
 });
 
 codeFlowRouterSDJWT.get(["/offer-code-defered"], async (req, res) => {
+  let sessionId;
   try {
-    const uuid = getSessionId(req);
+    sessionId = getSessionId(req);
+    bindSessionLoggingContext(req, res, sessionId);
+
     const credentialType = getCredentialType(req);
     const client_id_scheme = getClientIdScheme(req);
 
     const sessionData = createCodeFlowSession(client_id_scheme, "code", false, true);
-    await manageSession(uuid, sessionData);
+    await manageSession(sessionId, sessionData);
 
-    const credentialOffer = createCodeFlowCredentialOfferResponse(uuid, credentialType, client_id_scheme, false);
-    const encodedQR = await generateQRCode(credentialOffer);
+    const credentialOffer = createCodeFlowCredentialOfferResponse(sessionId, credentialType, client_id_scheme, false);
+    const encodedQR = await generateQRCode(credentialOffer, sessionId);
     
     res.json({
       qr: encodedQR,
       deepLink: credentialOffer,
-      sessionId: uuid,
+      sessionId,
     });
   } catch (error) {
-    handleRouteError(error, "offer-code-defered", res);
+    handleRouteError(error, "offer-code-defered", res, sessionId);
   }
 });
 
 // auth code-flow request
 // with dynamic cred request and client_id_scheme == redirect_uri
 codeFlowRouterSDJWT.get(["/credential-offer-code-sd-jwt/:id"], (req, res) => {
+  const sessionId = req.params.id;
   try {
+    bindSessionLoggingContext(req, res, sessionId);
     const credentialType = getCredentialType(req);
-    const config = createCredentialOfferConfig(credentialType, req.params.id, false, "authorization_code");
+    const config = createCredentialOfferConfig(credentialType, sessionId, false, "authorization_code");
     res.json(config);
   } catch (error) {
-    handleRouteError(error, "credential-offer-code-sd-jwt", res);
+    handleRouteError(error, "credential-offer-code-sd-jwt", res, sessionId);
   }
 });
 
@@ -502,7 +509,13 @@ codeFlowRouterSDJWT.get(["/credential-offer-code-sd-jwt/:id"], (req, res) => {
  * https://datatracker.ietf.org/doc/html/rfc9126
  ***************************************************************/
 codeFlowRouterSDJWT.post(["/par", "/authorize/par"], async (req, res) => {
+  let issuerState = null;
   try {
+    issuerState = req.body?.issuer_state ? decodeURIComponent(req.body.issuer_state) : null;
+    if (issuerState) {
+      bindSessionLoggingContext(req, res, issuerState);
+    }
+
     const requestData = {
       client_id: req.body.client_id,
       scope: req.body.scope,
@@ -514,7 +527,7 @@ codeFlowRouterSDJWT.post(["/par", "/authorize/par"], async (req, res) => {
       state: req.body.state,
       authorizationHeader: req.get("Authorization"),
       responseType: req.body.response_type,
-      issuerState: decodeURIComponent(req.body.issuer_state),
+      issuerState,
       authorizationDetails: req.body.authorization_details,
       clientMetadata: req.body.client_metadata,
       wallet_issuer_id: req.body.wallet_issuer_id,
@@ -530,7 +543,7 @@ codeFlowRouterSDJWT.post(["/par", "/authorize/par"], async (req, res) => {
     res.statusCode = 201;
     return res.json(result);
   } catch (error) {
-    handleRouteError(error, "PAR endpoint", res);
+    handleRouteError(error, "PAR endpoint", res, issuerState);
   }
 });
 
@@ -561,18 +574,7 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
       request_uri: req.query.request_uri,
     };
 
-    // Set session context for console interception to capture all logs
-    // issuerState is the sessionId for code flow
-    if (requestData.issuerState) {
-      setSessionContext(requestData.issuerState);
-      // Clear context when response finishes
-      res.on('finish', () => {
-        clearSessionContext();
-      });
-      res.on('close', () => {
-        clearSessionContext();
-      });
-    }
+    bindSessionLoggingContext(req, res, requestData.issuerState);
 
     // Handle PAR request if present
     const parRequest = handlePARRequest(requestData.request_uri);
@@ -701,47 +703,55 @@ codeFlowRouterSDJWT.get("/authorize", async (req, res) => {
 // **************************************************
 // Dynamic VP request by reference endpoint
 codeFlowRouterSDJWT.get("/x509VPrequest_dynamic/:id", async (req, res) => {
+  let sessionId;
   try {
-    const uuid = req.params.id || uuidv4();
-    const signedVPJWT = await buildVPRequestJWTForX509(uuid);
+    sessionId = req.params.id || uuidv4();
+    bindSessionLoggingContext(req, res, sessionId);
+    const signedVPJWT = await buildVPRequestJWTForX509(sessionId);
     console.log(signedVPJWT);
     res.type("text/plain").send(signedVPJWT);
   } catch (error) {
-    handleRouteError(error, "x509VPrequest_dynamic", res);
+    handleRouteError(error, "x509VPrequest_dynamic", res, sessionId);
   }
 });
 
 codeFlowRouterSDJWT.get("/didJwksVPrequest_dynamic/:id", async (req, res) => {
+  let sessionId;
   try {
-    const uuid = req.params.id || uuidv4();
-    const signedVPJWT = await buildVPRequestJWTForDid(uuid);
+    sessionId = req.params.id || uuidv4();
+    bindSessionLoggingContext(req, res, sessionId);
+    const signedVPJWT = await buildVPRequestJWTForDid(sessionId);
     res.type("text/plain").send(signedVPJWT);
   } catch (error) {
-    handleRouteError(error, "didJwksVPrequest_dynamic", res);
+    handleRouteError(error, "didJwksVPrequest_dynamic", res, sessionId);
   }
 });
 
 // Dynamic VP request with only id_token
 codeFlowRouterSDJWT.get("/id_token_x509_request_dynamic/:id", async (req, res) => {
+  let sessionId;
   try {
-    const uuid = req.params.id || uuidv4();
-    const existingCodeSession = await getCodeFlowSession(uuid);
-    const signedVPJWT = await buildIdTokenRequestJWTForX509(uuid, existingCodeSession);
+    sessionId = req.params.id || uuidv4();
+    bindSessionLoggingContext(req, res, sessionId);
+    const existingCodeSession = await getCodeFlowSession(sessionId);
+    const signedVPJWT = await buildIdTokenRequestJWTForX509(sessionId, existingCodeSession);
     console.log(signedVPJWT);
     res.type("text/plain").send(signedVPJWT);
   } catch (error) {
-    handleRouteError(error, "id_token_x509_request_dynamic", res);
+    handleRouteError(error, "id_token_x509_request_dynamic", res, sessionId);
   }
 });
 
 codeFlowRouterSDJWT.get("/id_token_did_request_dynamic/:id", async (req, res) => {
+  let sessionId;
   try {
-    const uuid = req.params.id || uuidv4();
-    const existingCodeSession = await getCodeFlowSession(uuid);
-    const signedVPJWT = await buildIdTokenRequestJWTForDid(uuid, existingCodeSession);
+    sessionId = req.params.id || uuidv4();
+    bindSessionLoggingContext(req, res, sessionId);
+    const existingCodeSession = await getCodeFlowSession(sessionId);
+    const signedVPJWT = await buildIdTokenRequestJWTForDid(sessionId, existingCodeSession);
     res.type("text/plain").send(signedVPJWT);
   } catch (error) {
-    handleRouteError(error, "id_token_did_request_dynamic", res);
+    handleRouteError(error, "id_token_did_request_dynamic", res, sessionId);
   }
 });
 
@@ -749,11 +759,12 @@ codeFlowRouterSDJWT.get("/id_token_did_request_dynamic/:id", async (req, res) =>
   presentation by the wallet during an Issuance part of the Dynamic Credential Request 
 */
 codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
+  const issuerState = req.params.id;
   try {
+    bindSessionLoggingContext(req, res, issuerState);
     console.log("direct_post VP for VCI is below!");
     const state = req.body.state;
     const jwt = req.body.vp_token;
-    const issuerState = req.params.id;
     console.log("direct_post_vci state" + issuerState);
 
     if (!jwt) {
@@ -804,7 +815,6 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
   } catch (error) {
     // Try to mark session as failed if we have issuerState
     try {
-      const issuerState = req.params?.id;
       if (issuerState) {
         const existingCodeSession = await getCodeFlowSession(issuerState);
         if (existingCodeSession) {
@@ -823,7 +833,7 @@ codeFlowRouterSDJWT.post("/direct_post_vci/:id", async (req, res) => {
       console.error("Failed to update session status after direct_post_vci error:", sessionError);
     }
     
-    handleRouteError(error, "direct_post_vci", res);
+    handleRouteError(error, "direct_post_vci", res, issuerState);
   }
 });
 

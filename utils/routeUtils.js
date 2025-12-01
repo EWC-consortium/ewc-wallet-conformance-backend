@@ -5,7 +5,16 @@ import imageDataURI from "image-data-uri";
 import { streamToBuffer } from "@jorgeferrero/stream-to-buffer";
 import { generateNonce, buildVpRequestJWT } from "./cryptoUtils.js";
 import { getSDsFromPresentationDef } from "./vpHeplers.js";
-import { storeVPSession, getVPSession, logInfo, logWarn, logError, logDebug } from "../services/cacheServiceRedis.js";
+import {
+  storeVPSession,
+  getVPSession,
+  logInfo,
+  logWarn,
+  logError,
+  logDebug,
+  setSessionContext,
+  clearSessionContext,
+} from "../services/cacheServiceRedis.js";
 import { createPublicKey } from "crypto";
 import base64url from "base64url";
 
@@ -169,6 +178,86 @@ export const DEFAULT_MDL_DCQL_QUERY = {
 };
 
 // ============================================================================
+// LOGGING AND SESSION CONTEXT UTILITIES
+// ============================================================================
+
+/**
+ * Log utility-level errors so they're captured by the console interception middleware.
+ * @param {string} context - Logical context (e.g., function name)
+ * @param {Error} error - Error object
+ * @param {Object} metadata - Additional metadata to log
+ */
+export const logUtilityError = (context, error = {}, metadata = {}) => {
+  const payload = {
+    message: error?.message || "Unknown error",
+    stack: error?.stack,
+    ...metadata,
+  };
+  console.error(`[${context}]`, payload);
+};
+
+/**
+ * Attempt to extract an existing sessionId from request sources.
+ * @param {Object} req - Express request
+ * @param {string|null} fallback - Fallback sessionId
+ * @returns {string|null}
+ */
+export const extractSessionIdFromRequest = (req, fallback = null) => {
+  if (!req) {
+    return fallback;
+  }
+
+  return (
+    req.sessionLoggingId ||
+    req.query?.sessionId ||
+    req.params?.sessionId ||
+    req.params?.id ||
+    req.body?.sessionId ||
+    req.headers?.["x-session-id"] ||
+    fallback
+  );
+};
+
+/**
+ * Bind a sessionId to the current request/response lifecycle so console interception
+ * can associate logs with the correct session.
+ * @param {Object} req - Express request
+ * @param {Object} res - Express response
+ * @param {string} sessionId - Session identifier
+ * @returns {string|null} - The bound sessionId (or null if not provided)
+ */
+export const bindSessionLoggingContext = (req, res, sessionId) => {
+  if (!sessionId) {
+    return null;
+  }
+
+  if (req) {
+    req.sessionLoggingId = sessionId;
+  }
+
+  if (res) {
+    res.locals = res.locals || {};
+    res.locals.sessionLoggingId = sessionId;
+
+    if (!res.locals.sessionLoggingCleanupBound) {
+      const cleanup = () => {
+        clearSessionContext();
+        res.off("finish", cleanup);
+        res.off("close", cleanup);
+        res.locals.sessionLoggingCleanupBound = false;
+      };
+
+      res.on("finish", cleanup);
+      res.on("close", cleanup);
+      res.locals.sessionLoggingCleanupBound = true;
+    }
+  }
+
+  setSessionContext(sessionId);
+  return sessionId;
+};
+
+// ============================================================================
 // CRYPTOGRAPHIC UTILITIES
 // ============================================================================
 
@@ -182,7 +271,7 @@ export const loadCryptographicKeys = () => {
     const publicKeyPem = fs.readFileSync("./public-key.pem", "utf-8");
     return { privateKey, publicKeyPem };
   } catch (error) {
-    console.error("Error loading cryptographic keys:", error);
+    logUtilityError("loadCryptographicKeys", error);
     throw new Error(ERROR_MESSAGES.CRYPTO_KEY_LOAD_ERROR);
   }
 };
@@ -344,7 +433,7 @@ export const generateQRCode = async (credentialOffer, sessionId = null) => {
         stack: error.stack
       });
     } else {
-      console.error("QR code generation error:", error);
+      logUtilityError("generateQRCode", error);
     }
     throw new Error(ERROR_MESSAGES.QR_GENERATION_FAILED);
   }
@@ -406,7 +495,7 @@ export const createCredentialOfferResponse = async (credentialOffer, sessionId) 
       sessionId,
     };
   } catch (error) {
-    console.error("Credential offer response creation error:", error);
+    logUtilityError("createCredentialOfferResponse", error);
     throw error;
   }
 };
@@ -513,7 +602,7 @@ export const createErrorResponse = (error, description, status = 500, sessionId 
       error: error || "server_error",
       description: description || "An unexpected error occurred",
       status
-    }).catch(err => console.error("Failed to log error response:", err));
+    }).catch(err => logUtilityError("createErrorResponse.logError", err));
   }
   
   return {
@@ -532,17 +621,19 @@ export const createErrorResponse = (error, description, status = 500, sessionId 
  * @param {Object} res - Express response object
  */
 export const handleRouteError = (error, context, res, sessionId = null) => {
-  if (sessionId) {
-    logError(sessionId, `${context} error`, {
+  const effectiveSessionId = sessionId || res?.locals?.sessionLoggingId || null;
+
+  if (effectiveSessionId) {
+    logError(effectiveSessionId, `${context} error`, {
       error: error.message,
       stack: error.stack,
       context
-    }).catch(err => console.error("Failed to log route error:", err));
+    }).catch(err => logUtilityError("handleRouteError.logError", err));
   } else {
-    console.error(`${context} error:`, error);
+    logUtilityError(`${context} error`, error);
   }
   
-  const errorResponse = createErrorResponse("server_error", error.message, 500, sessionId);
+  const errorResponse = createErrorResponse("server_error", error.message, 500, effectiveSessionId);
   res.status(errorResponse.status).json(errorResponse.body);
 };
 
@@ -625,7 +716,11 @@ export function loadConfigurationFiles(presentationDefPath, clientMetadataPath, 
 
     return result;
   } catch (error) {
-    console.error("Failed to load configuration files:", error.message);
+    logUtilityError("loadConfigurationFiles", error, {
+      presentationDefPath,
+      clientMetadataPath,
+      privateKeyPath,
+    });
     throw new Error(CONFIG.ERROR_MESSAGES.FILE_READ_ERROR);
   }
 }
@@ -836,7 +931,7 @@ export async function processVPRequest(params) {
     await logInfo(sessionId, "VP request processing completed successfully");
     return { jwt: vpRequestJWT, status: 200 };
   } catch (error) {
-    console.error("Error in processVPRequest:", error.message);
+    logUtilityError("processVPRequest", error);
     await logError(sessionId, "Error in processVPRequest", {
       error: error.message,
       stack: error.stack
@@ -911,7 +1006,7 @@ export async function storeVPSessionData(sessionId, sessionData) {
     
     await logInfo(sessionId, "VP session data stored successfully");
   } catch (error) {
-    console.error("Failed to store VP session:", error.message);
+    logUtilityError("storeVPSessionData", error);
     await logError(sessionId, "Failed to store VP session", {
       error: error.message,
       stack: error.stack
@@ -982,7 +1077,7 @@ export function generateDidJwkIdentifier(privateKey) {
     const jwk = publicKey.export({ format: 'jwk' });
     return `did:jwk:${base64url(JSON.stringify(jwk))}`;
   } catch (error) {
-    console.error("Failed to generate DID JWK identifier:", error.message);
+    logUtilityError("generateDidJwkIdentifier", error);
     throw new Error(CONFIG.ERROR_MESSAGES.JWK_GENERATION_ERROR);
   }
 }

@@ -3,6 +3,7 @@ import {
   getSessionLogs,
   clearSessionLogs,
   logInfo,
+  client, // Import the existing Redis client
 } from "../services/cacheServiceRedis.js";
 import { createErrorResponse } from "../utils/routeUtils.js";
 
@@ -10,13 +11,15 @@ const loggingRouter = express.Router();
 
 /**
  * SESSION LOGGING API ENDPOINTS
- * 
+ *
  * This router provides endpoints to manage session-based logs stored in Redis.
  * All logs are associated with session IDs and have a 30-minute TTL.
- * 
+ *
  * Available endpoints:
+ * - GET /logs/sessions - List all session IDs that have logs
  * - GET /logs/:sessionId - Retrieve all logs for a session
  * - DELETE /logs/:sessionId - Clear logs for a session
+ * - POST /logs/batch - Get logs for multiple sessions
  */
 
 /**
@@ -96,6 +99,26 @@ loggingRouter.post("/logs/batch", async (req, res) => {
     });
   } catch (error) {
     const errorResponse = createErrorResponse(error, "POST /logs/batch");
+    res.status(500).json(errorResponse);
+  }
+});
+
+/**
+ * List all session IDs that currently have logs stored
+ */
+loggingRouter.get("/logs/sessions", async (req, res) => {
+  try {
+    // Get all keys matching the session-logs pattern
+    const keys = await client.keys("session-logs:*");
+    const sessionIds = keys.map(key => key.replace("session-logs:", ""));
+
+    res.json({
+      sessionIds,
+      count: sessionIds.length,
+      message: "List of sessions with available logs"
+    });
+  } catch (error) {
+    const errorResponse = createErrorResponse(error, "GET /logs/sessions");
     res.status(500).json(errorResponse);
   }
 });

@@ -38,6 +38,7 @@ import {
   
   // Error handling utilities
   handleRouteError,
+  bindSessionLoggingContext,
   isValidSessionId,
   isValidCredentialPayload,
   sendErrorResponse,
@@ -58,7 +59,10 @@ const manageSession = async (sessionId, sessionData) => {
     }
     return existingSession;
   } catch (error) {
-    console.error("Session management error:", error);
+    console.error(`[preAuth][${sessionId}] Session management error`, {
+      message: error?.message,
+      stack: error?.stack,
+    });
     throw new Error(ERROR_MESSAGES.SESSION_CREATION_FAILED);
   }
 };
@@ -72,8 +76,11 @@ const manageSession = async (sessionId, sessionData) => {
  * Generates a VCI request with pre-authorized flow with a transaction code
  */
 router.get("/offer-tx-code", async (req, res) => {
+  let sessionId;
   try {
-    const sessionId = getSessionId(req);
+    sessionId = getSessionId(req);
+    bindSessionLoggingContext(req, res, sessionId);
+
     const credentialType = getCredentialType(req);
     const signatureType = getSignatureType(req);
 
@@ -87,9 +94,10 @@ router.get("/offer-tx-code", async (req, res) => {
     );
 
     const response = await createCredentialOfferResponse(credentialOffer, sessionId);
+
     res.json(response);
   } catch (error) {
-    handleRouteError(error, "Offer tx-code", res);
+    handleRouteError(error, "Offer tx-code", res, sessionId);
   }
 });
 
@@ -97,8 +105,9 @@ router.get("/offer-tx-code", async (req, res) => {
  * Pre-authorized flow with transaction code - credential offer configuration
  */
 router.get("/credential-offer-tx-code/:id", (req, res) => {
+  const sessionId = req.params.id;
   try {
-    const sessionId = req.params.id;
+    bindSessionLoggingContext(req, res, sessionId);
     const credentialType = getCredentialType(req);
 
     if (!isValidSessionId(sessionId)) {
@@ -108,7 +117,7 @@ router.get("/credential-offer-tx-code/:id", (req, res) => {
     const config = createCredentialOfferConfig(credentialType, sessionId, true);
     res.json(config);
   } catch (error) {
-    handleRouteError(error, "Credential offer tx-code config", res);
+    handleRouteError(error, "Credential offer tx-code config", res, sessionId);
   }
 });
 
@@ -116,8 +125,11 @@ router.get("/credential-offer-tx-code/:id", (req, res) => {
  * Pre-authorized flow without transaction code
  */
 router.get("/offer-no-code", async (req, res) => {
+  let sessionId;
   try {
-    const sessionId = getSessionId(req);
+    sessionId = getSessionId(req);
+    bindSessionLoggingContext(req, res, sessionId);
+
     const credentialType = getCredentialType(req);
     const signatureType = getSignatureType(req);
 
@@ -133,7 +145,7 @@ router.get("/offer-no-code", async (req, res) => {
     const response = await createCredentialOfferResponse(credentialOffer, sessionId);
     res.json(response);
   } catch (error) {
-    handleRouteError(error, "Offer no-code", res);
+    handleRouteError(error, "Offer no-code", res, sessionId);
   }
 });
 
@@ -141,8 +153,11 @@ router.get("/offer-no-code", async (req, res) => {
  * Pre-authorized flow without transaction code with request body
  */
 router.post("/offer-no-code", async (req, res) => {
+  let sessionId;
   try {
-    const sessionId = getSessionId(req);
+    sessionId = getSessionId(req);
+    bindSessionLoggingContext(req, res, sessionId);
+
     const credentialType = getCredentialType(req);
     const credentialPayload = req.body;
 
@@ -162,7 +177,7 @@ router.post("/offer-no-code", async (req, res) => {
     const response = await createCredentialOfferResponse(credentialOffer, sessionId);
     res.json(response);
   } catch (error) {
-    handleRouteError(error, "Offer no-code POST", res);
+    handleRouteError(error, "Offer no-code POST", res, sessionId);
   }
 });
 
@@ -170,8 +185,9 @@ router.post("/offer-no-code", async (req, res) => {
  * Pre-authorized flow without transaction code - credential offer configuration
  */
 router.get("/credential-offer-no-code/:id", async (req, res) => {
+  const sessionId = req.params.id;
   try {
-    const sessionId = req.params.id;
+    bindSessionLoggingContext(req, res, sessionId);
     const credentialType = getCredentialType(req);
 
     if (!isValidSessionId(sessionId)) {
@@ -187,7 +203,7 @@ router.get("/credential-offer-no-code/:id", async (req, res) => {
     const config = createCredentialOfferConfig(credentialType, sessionId, false);
     res.json(config);
   } catch (error) {
-    handleRouteError(error, "Credential offer no-code config", res);
+    handleRouteError(error, "Credential offer no-code config", res, sessionId);
   }
 });
 
@@ -208,8 +224,11 @@ router.get("/credential-offer-no-code/:id", async (req, res) => {
  * frameworks/ecosystems/jurisdictions, not limited to using other custom URL schemes.
  */
 router.get("/haip-offer-tx-code", async (req, res) => {
+  let sessionId;
   try {
-    const sessionId = getSessionId(req);
+    sessionId = getSessionId(req);
+    bindSessionLoggingContext(req, res, sessionId);
+
     const credentialType = getCredentialType(req);
 
     const sessionData = createBaseSession("pre-auth", true);
@@ -225,7 +244,7 @@ router.get("/haip-offer-tx-code", async (req, res) => {
     const response = await createCredentialOfferResponse(credentialOffer, sessionId);
     res.json(response);
   } catch (error) {
-    handleRouteError(error, "HAIP offer tx-code", res);
+    handleRouteError(error, "HAIP offer tx-code", res, sessionId);
   }
 });
 
@@ -233,8 +252,9 @@ router.get("/haip-offer-tx-code", async (req, res) => {
  * HAIP pre-authorized flow with transaction code - credential offer configuration
  */
 router.get("/haip-credential-offer-tx-code/:id", (req, res) => {
+  const sessionId = req.params.id;
   try {
-    const sessionId = req.params.id;
+    bindSessionLoggingContext(req, res, sessionId);
     const credentialType = getCredentialType(req);
 
     if (!isValidSessionId(sessionId)) {
@@ -244,7 +264,7 @@ router.get("/haip-credential-offer-tx-code/:id", (req, res) => {
     const config = createCredentialOfferConfig(credentialType, sessionId, true);
     res.json(config);
   } catch (error) {
-    handleRouteError(error, "HAIP credential offer config", res);
+    handleRouteError(error, "HAIP credential offer config", res, sessionId);
   }
 });
 

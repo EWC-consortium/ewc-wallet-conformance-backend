@@ -16,6 +16,8 @@ import batchRouter from "./routes/batchRequestRoutes.js";
 import receiptRouter from "./routes/receiptsRoutes.js";
 import mdlRouter from "./routes/verify/mdlRoutes.js";
 import loggingRouter from "./routes/loggingRoutes.js";
+import vciStandardRouter from "./routes/issue/vciStandardRoutes.js";
+import vpStandardRouter from "./routes/verify/vpStandardRoutes.js";
 import bodyParser from "body-parser"; // Body parser middleware
 import {
   enableConsoleInterception,
@@ -46,35 +48,98 @@ app.use(bodyParser.json({ limit: "10mb" }));
 app.use(bodyParser.text({ limit: "10mb", type: "application/jwt" }));
 
 // Global middleware to set session context for console log interception
-// Extracts sessionId from query params or request body
-// Note: URL params (req.params) are handled by route-specific middleware
+// Extracts sessionId from multiple sources
 app.use((req, res, next) => {
-  // Try to extract sessionId from query params or request body
-  // req.params won't be available until after route matching, so route-specific
-  // middleware handles those cases (see didRoutes, x509Routes, etc.)
-  const sessionId = 
-    req.query.sessionId || 
+  // Try to extract sessionId from query params, request body, or URL params
+  // Note: req.params is available after route matching, so we check all sources
+  const sessionId =
+    req.query.sessionId ||
     (req.body && req.body.sessionId) ||
+    req.params.sessionId ||
+    req.params.id || // Common pattern in routes
     null;
-  
+
   if (sessionId) {
+    req.sessionLoggingId = sessionId;
+    res.locals = res.locals || {};
+    res.locals.sessionLoggingId = sessionId;
     setSessionContext(sessionId);
-    // Clear context when response finishes
-    res.on('finish', () => {
-      clearSessionContext();
-    });
-    res.on('close', () => {
-      clearSessionContext();
-    });
+    if (!res.locals.sessionLoggingCleanupBound) {
+      const cleanup = () => {
+        clearSessionContext();
+        res.off("finish", cleanup);
+        res.off("close", cleanup);
+        res.locals.sessionLoggingCleanupBound = false;
+      };
+      res.on("finish", cleanup);
+      res.on("close", cleanup);
+      res.locals.sessionLoggingCleanupBound = true;
+    }
   }
   next();
 });
 
-//Middleware to log all requests to the server for debugging
+//Middleware to log all requests and responses for issuer endpoints
 app.use((req, res, next) => {
-  console.log(`---> 
-  ${req.method} ${req.url}`);
-  next(); // Pass control to the next middleware function
+  const startTime = Date.now();
+  const sessionId =
+    req.sessionLoggingId ||
+    req.query.sessionId ||
+    (req.body && req.body.sessionId) ||
+    req.params.sessionId ||
+    req.params.id ||
+    "unknown";
+
+  // Log incoming request
+  console.log(`[${sessionId}] ---> ${req.method} ${req.url}`, {
+    headers: req.headers,
+    query: req.query,
+    body: req.method !== 'GET' ? req.body : undefined,
+    userAgent: req.get('User-Agent'),
+    ip: req.ip || req.connection.remoteAddress
+  });
+
+  // Store original response methods
+  const originalSend = res.send;
+  const originalJson = res.json;
+  const originalEnd = res.end;
+
+  // Override response methods to capture response data
+  let responseBody = null;
+  let responseStatus = null;
+
+  res.send = function(data) {
+    responseBody = data;
+    responseStatus = res.statusCode;
+    return originalSend.call(this, data);
+  };
+
+  res.json = function(data) {
+    responseBody = JSON.stringify(data);
+    responseStatus = res.statusCode;
+    return originalJson.call(this, data);
+  };
+
+  res.end = function(data) {
+    if (data && !responseBody) {
+      responseBody = data;
+    }
+
+    const duration = Date.now() - startTime;
+
+    // Log outgoing response
+    console.log(`[${sessionId}] <--- ${req.method} ${req.url} ${responseStatus || res.statusCode} (${duration}ms)`, {
+      status: responseStatus || res.statusCode,
+      headers: res.getHeaders(),
+      body: responseBody ? (responseBody.length > 1000 ? responseBody.substring(0, 1000) + '...' : responseBody) : undefined,
+      contentLength: res.get('Content-Length'),
+      duration: `${duration}ms`
+    });
+
+    return originalEnd.call(this, data);
+  };
+
+  next();
 });
 
 // const apiSpecPath = path.join(process.cwd(), "openapi.yml");
@@ -102,6 +167,8 @@ app.use("/", batchRouter);
 app.use("/", receiptRouter);
 app.use("/mdl", mdlRouter);
 app.use("/", loggingRouter);
+app.use("/", vciStandardRouter);
+app.use("/", vpStandardRouter);
 
 // Error handler for validation errors
 app.use((err, req, res, next) => {
