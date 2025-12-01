@@ -1076,10 +1076,10 @@
     },
     
     "urn:eu.europa.ec.eudi:pid:1:mso_mdoc": {
-      "scope": "urn:eu.europa.ec.eudi:pid:1",
+      "scope": "urn:eu.europa.ec.eudi:pid:1:mso_mdoc",
       "claims": [
         {
-          "path": ["urn:eu.europa.ec.eudi:pid:1"],
+          "path": ["urn:eu.europa.ec.eudi:pid:1:mso_mdoc"],
           "claims": [
             {
               "path": ["given_name"],
@@ -1171,7 +1171,7 @@
       ],
       "credential_signing_alg_values_supported": [-7, -9],
       "format": "mso_mdoc",
-      "doctype": "urn:eu.europa.ec.eudi:pid:1",
+      "doctype": "urn:eu.europa.ec.eudi:pid:1:mso_mdoc",
       "proof_types_supported": {
         "jwt": {
           "proof_signing_alg_values_supported": ["ES256"]

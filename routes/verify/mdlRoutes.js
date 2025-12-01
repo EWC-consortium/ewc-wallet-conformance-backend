@@ -62,12 +62,13 @@ mdlRouter.get("/generateVPRequest", async (req, res) => {
       sessionId,
       responseMode,
       // presentationDefinition: presentationDefinitionMdl,
-      dcql_query: DEFAULT_MDL_DCQL_QUERY,
+     
       clientId: CONFIG.CLIENT_ID,
       privateKey: null,
       clientMetadata,
       kid: null,
       serverURL: CONFIG.SERVER_URL,
+      dcqlQuery: DEFAULT_MDL_DCQL_QUERY,
       usePostMethod: false, // GET method, no request_uri_method
       routePath: "/mdl/VPrequest",
     });

@@ -378,7 +378,7 @@ export const getPIDSDJWTDataMsoMdoc = (decodedHeaderSubjectDID) => {
   expiryDate.setFullYear(issuanceDate.getFullYear() + 1);
 
   const claims = {
-    "urn:eu.europa.ec.eudi:pid:1": {
+    "urn:eu.europa.ec.eudi:pid:1:mso_mdoc": {
       given_name: "Hanna",
       family_name: "Matkalainen",
       birth_date: "2005-07-01",
@@ -391,7 +391,7 @@ export const getPIDSDJWTDataMsoMdoc = (decodedHeaderSubjectDID) => {
   };
 
   const disclosureFrame = {
-    "urn:eu.europa.ec.eudi:pid:1": {
+    "urn:eu.europa.ec.eudi:pid:1:mso_mdoc": {
       _sd: [
         "given_name",
         "family_name",

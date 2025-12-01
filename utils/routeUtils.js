@@ -159,19 +159,19 @@ export const DEFAULT_MDL_DCQL_QUERY = {
     {
       claims: [
         {
-          path: ["urn:eu.europa.ec.eudi:pid", "family_name"],
+          path: ["urn:eu.europa.ec.eudi:pid:1:mso_mdoc", "family_name"],
         },
         {
-          path: ["urn:eu.europa.ec.eudi:pid", "given_name"],
+          path: ["urn:eu.europa.ec.eudi:pid:1:mso_mdoc", "given_name"],
         },
         {
-          path: ["urn:eu.europa.ec.eudi:pid", "age_over_21"],
+          path: ["urn:eu.europa.ec.eudi:pid:1:mso_mdoc", "age_over_18"],
         },
       ],
       format: "mso_mdoc",
       id: "cred1",
       meta: {
-        doctype_value: "urn:eu.europa.ec.eudi:pid",
+        doctype_value: "urn:eu.europa.ec.eudi:pid:1:mso_mdoc",
       },
     },
   ],

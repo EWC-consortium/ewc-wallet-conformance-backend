@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "mocha tests/**/*.js",
-    "dev": "SERVER_URL=https://045d8493873e.ngrok-free.app  node server.js"
+    "dev": "SERVER_URL=https://511ce2721940.ngrok-free.app  node server.js"
   },
   "author": "",
   "license": "ISC",
@@ -28,6 +28,7 @@
     "@sd-jwt/sd-jwt-vc": "^0.7.2",
     "base64url": "^3.0.1",
     "bs58": "^6.0.0",
+    "cbor": "^10.0.9",
     "cbor-x": "^1.6.0",
     "chai": "^5.2.0",
     "did-resolver": "^4.1.0",
@@ -43,15 +44,14 @@
     "multicodec": "^3.2.1",
     "multiformats": "^13.3.1",
     "node-fetch": "^3.3.2",
-    "node-forge": "^1.3.1",
+    "node-forge": "^1.3.2",
     "node-jose": "^2.2.0",
     "pem-jwk": "^2.0.0",
     "qr-image": "^3.2.0",
     "redis": "^4.7.0",
     "uuid": "^9.0.1",
     "waltid-sd-jwt": "^1.2311200231.0",
-    "zlib": "^1.0.5",
-    "cbor": "^10.0.9"
+    "zlib": "^1.0.5"
   },
   "devDependencies": {
     "mocha": "^11.5.0",

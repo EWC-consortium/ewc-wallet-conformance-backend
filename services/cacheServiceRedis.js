@@ -388,9 +388,6 @@ export async function storeSessionLog(sessionId, logLevel, message, metadata = {
     
     const ttlInSeconds = 1800; // 30 minutes
     await client.setEx(key, ttlInSeconds, JSON.stringify(logs));
-    
-    // Also log to console for immediate visibility
-    console.log(`[${sessionId}] ${logLevel.toUpperCase()}: ${message}`, metadata);
   } catch (err) {
     console.error("Error storing session log:", err);
   }
@@ -439,18 +436,22 @@ export async function clearSessionLogs(sessionId) {
 
 // Convenience functions for different log levels
 export async function logInfo(sessionId, message, metadata = {}) {
+  console.log(`Logging info for session ${sessionId}: ${message}, metadata: ${JSON.stringify(metadata)}`);
   return await storeSessionLog(sessionId, 'info', message, metadata);
 }
 
 export async function logWarn(sessionId, message, metadata = {}) {
+  console.log(`Logging warn for session ${sessionId}: ${message}, metadata: ${JSON.stringify(metadata)}`);
   return await storeSessionLog(sessionId, 'warn', message, metadata);
 }
 
 export async function logError(sessionId, message, metadata = {}) {
+  console.log(`Logging error for session ${sessionId}: ${message}, metadata: ${JSON.stringify(metadata)}`);
   return await storeSessionLog(sessionId, 'error', message, metadata);
 }
 
 export async function logDebug(sessionId, message, metadata = {}) {
+  console.log(`Logging debug for session ${sessionId}: ${message}, metadata: ${JSON.stringify(metadata)}`);
   return await storeSessionLog(sessionId, 'debug', message, metadata);
 }
 
