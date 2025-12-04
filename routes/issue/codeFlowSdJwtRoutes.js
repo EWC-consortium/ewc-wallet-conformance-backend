@@ -19,7 +19,7 @@ import {
   updateIssuerStateWithAuthCodeAfterVP,
 } from "../codeFlowJwtRoutes.js";
 
-import { getCodeFlowSession, storeCodeFlowSession } from "../../services/cacheServiceRedis.js";
+import { getCodeFlowSession, storeCodeFlowSession, logInfo, logWarn, logError } from "../../services/cacheServiceRedis.js";
 
 // Specification references
 const SPEC_REFS = {
@@ -64,6 +64,10 @@ import {
   handleRouteError,
   sendErrorResponse,
   bindSessionLoggingContext,
+  
+  // WIA/WUA validation utilities
+  validateWIA,
+  extractWIAFromTokenRequest,
 } from "../../utils/routeUtils.js";
 
 const codeFlowRouterSDJWT = express.Router();
@@ -533,6 +537,32 @@ codeFlowRouterSDJWT.post(["/par", "/authorize/par"], async (req, res) => {
       wallet_issuer_id: req.body.wallet_issuer_id,
       user_hint: req.body.user_hint,
     };
+
+    // Extract and validate Wallet Instance Attestation (WIA) if present
+    // Based on TS3 spec: https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/blob/main/docs/technical-specifications/ts3-wallet-unit-attestation.md
+    const wiaJwt = extractWIAFromTokenRequest(req.body, req.headers);
+    if (wiaJwt) {
+      const wiaValidation = await validateWIA(wiaJwt, issuerState);
+      if (wiaValidation.valid) {
+        if (issuerState) {
+          await logInfo(issuerState, "WIA validated successfully in PAR request", {
+            wiaIssuer: wiaValidation.payload?.iss,
+            wiaExp: wiaValidation.payload?.exp
+          }).catch(() => {});
+        }
+      } else {
+        if (issuerState) {
+          await logWarn(issuerState, "WIA validation failed in PAR request (continuing without WIA)", {
+            error: wiaValidation.error
+          }).catch(() => {});
+        }
+      }
+    } else {
+      // Log that WIA was not found, but don't fail
+      if (issuerState) {
+        await logInfo(issuerState, "WIA not found in PAR request (continuing without WIA)", {}).catch(() => {});
+      }
+    }
 
     const result = createPARRequest(requestData);
 

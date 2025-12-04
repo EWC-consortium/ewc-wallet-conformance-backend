@@ -17,6 +17,7 @@ import {
 } from "../services/cacheServiceRedis.js";
 import { createPublicKey } from "crypto";
 import base64url from "base64url";
+import jwt from "jsonwebtoken";
 
 // ============================================================================
 // SHARED CONSTANTS
@@ -1111,4 +1112,229 @@ export function generateDidJwkIdentifiers(didJwkIdentifier) {
   const client_id = `decentralized_identifier:${didJwkIdentifier}`;
   const kid = `${didJwkIdentifier}#0`; // did:jwk uses #0 as default key ID
   return { client_id, kid };
-} 
+}
+
+// ============================================================================
+// WIA AND WUA VALIDATION UTILITIES
+// ============================================================================
+
+/**
+ * Validates Wallet Instance Attestation (WIA) JWT
+ * Based on TS3 Wallet Unit Attestation spec:
+ * https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/blob/main/docs/technical-specifications/ts3-wallet-unit-attestation.md
+ * 
+ * @param {string} wiaJwt - The WIA JWT string
+ * @param {string} sessionId - Session ID for logging
+ * @returns {Promise<{valid: boolean, payload?: object, error?: string}>}
+ */
+export const validateWIA = async (wiaJwt, sessionId = null) => {
+  try {
+    if (!wiaJwt || typeof wiaJwt !== 'string') {
+      return { valid: false, error: 'WIA JWT is missing or invalid' };
+    }
+
+    // Decode JWT to check structure
+    const decoded = jwt.decode(wiaJwt, { complete: true });
+    if (!decoded || !decoded.header || !decoded.payload) {
+      return { valid: false, error: 'WIA JWT is malformed' };
+    }
+
+    // Check expiration
+    const now = Math.floor(Date.now() / 1000);
+    if (decoded.payload.exp && decoded.payload.exp < now) {
+      return { valid: false, error: 'WIA JWT has expired' };
+    }
+
+    // Check required claims (basic structure check)
+    if (!decoded.payload.iss) {
+      return { valid: false, error: 'WIA JWT missing iss claim' };
+    }
+
+    // TODO: Verify signature against Wallet Provider's JWKS
+    // This requires fetching the JWKS from the issuer (decoded.payload.iss)
+    // For now, we'll log the WIA but note that signature verification is pending
+    
+    if (sessionId) {
+      await logInfo(sessionId, "WIA extracted and basic validation passed", {
+        wiaIssuer: decoded.payload.iss,
+        wiaExp: decoded.payload.exp,
+        wiaIat: decoded.payload.iat,
+        signatureVerification: 'pending'
+      }).catch(() => {});
+    }
+
+    return { valid: true, payload: decoded.payload };
+  } catch (error) {
+    const errorMsg = `WIA validation error: ${error.message}`;
+    if (sessionId) {
+      await logError(sessionId, errorMsg, { error: error.message, stack: error.stack }).catch(() => {});
+    }
+    return { valid: false, error: errorMsg };
+  }
+};
+
+/**
+ * Validates Wallet Unit Attestation (WUA) JWT
+ * Based on TS3 Wallet Unit Attestation spec:
+ * https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/blob/main/docs/technical-specifications/ts3-wallet-unit-attestation.md
+ * 
+ * @param {string} wuaJwt - The WUA JWT string
+ * @param {string} sessionId - Session ID for logging
+ * @returns {Promise<{valid: boolean, payload?: object, error?: string}>}
+ */
+export const validateWUA = async (wuaJwt, sessionId = null) => {
+  try {
+    if (!wuaJwt || typeof wuaJwt !== 'string') {
+      return { valid: false, error: 'WUA JWT is missing or invalid' };
+    }
+
+    // Decode JWT to check structure
+    const decoded = jwt.decode(wuaJwt, { complete: true });
+    if (!decoded || !decoded.header || !decoded.payload) {
+      return { valid: false, error: 'WUA JWT is malformed' };
+    }
+
+    // Check expiration
+    const now = Math.floor(Date.now() / 1000);
+    if (decoded.payload.exp && decoded.payload.exp < now) {
+      return { valid: false, error: 'WUA JWT has expired' };
+    }
+
+    // Check required claims
+    if (!decoded.payload.iss) {
+      return { valid: false, error: 'WUA JWT missing iss claim' };
+    }
+
+    // Check for eudi_wallet_info (optional but recommended)
+    const hasEudiWalletInfo = !!decoded.payload.eudi_wallet_info;
+    
+    // Check for attested_keys (required per spec)
+    const hasAttestedKeys = Array.isArray(decoded.payload.attested_keys) && decoded.payload.attested_keys.length > 0;
+    
+    // Check for status/revocation information (required per spec)
+    const hasStatus = !!decoded.payload.status && !!decoded.payload.status.status_list;
+    
+    // TODO: Verify signature against Wallet Provider's JWKS
+    // TODO: Check revocation status using status_list if present
+    // This requires fetching the status list and checking the index
+    
+    if (sessionId) {
+      await logInfo(sessionId, "WUA extracted and basic validation passed", {
+        wuaIssuer: decoded.payload.iss,
+        wuaExp: decoded.payload.exp,
+        wuaIat: decoded.payload.iat,
+        hasEudiWalletInfo,
+        hasAttestedKeys,
+        hasStatus,
+        attestedKeysCount: decoded.payload.attested_keys?.length || 0,
+        signatureVerification: 'pending',
+        revocationCheck: 'pending'
+      }).catch(() => {});
+    }
+
+    // Warn if required elements are missing
+    if (!hasAttestedKeys) {
+      if (sessionId) {
+        await logWarn(sessionId, "WUA missing attested_keys", {}).catch(() => {});
+      }
+    }
+    if (!hasStatus) {
+      if (sessionId) {
+        await logWarn(sessionId, "WUA missing status/revocation information", {}).catch(() => {});
+      }
+    }
+
+    return { valid: true, payload: decoded.payload };
+  } catch (error) {
+    const errorMsg = `WUA validation error: ${error.message}`;
+    if (sessionId) {
+      await logError(sessionId, errorMsg, { error: error.message, stack: error.stack }).catch(() => {});
+    }
+    return { valid: false, error: errorMsg };
+  }
+};
+
+/**
+ * Extracts WIA from token endpoint request
+ * WIA is sent as client_assertion with client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer
+ * 
+ * @param {object} reqBody - Request body
+ * @param {object} reqHeaders - Request headers
+ * @returns {string|null} - WIA JWT or null if not found
+ */
+export const extractWIAFromTokenRequest = (reqBody, reqHeaders) => {
+  // Check for client_assertion in body (OAuth 2.0 client assertion)
+  if (reqBody.client_assertion && reqBody.client_assertion_type === 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer') {
+    return reqBody.client_assertion;
+  }
+  
+  // Check Authorization header for client assertion
+  const authHeader = reqHeaders.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    // If it looks like a JWT (3 parts separated by dots), it might be WIA
+    if (token.split('.').length === 3) {
+      // Decode to check if it's a WIA (would have specific claims)
+      try {
+        const decoded = jwt.decode(token, { complete: false });
+        // WIA would typically have iss, exp, iat claims
+        if (decoded && decoded.iss && decoded.exp) {
+          return token;
+        }
+      } catch (e) {
+        // Not a valid JWT, ignore
+      }
+    }
+  }
+  
+  return null;
+};
+
+/**
+ * Extracts WUA from credential request
+ * WUA can be in proofs.attestation or in the header of proofs.jwt
+ * 
+ * @param {object} requestBody - Credential request body
+ * @returns {string|null} - WUA JWT or null if not found
+ */
+export const extractWUAFromCredentialRequest = (requestBody) => {
+  // Check for key_attestation in proofs.attestation
+  if (requestBody.proofs && requestBody.proofs.attestation) {
+    const attestation = requestBody.proofs.attestation;
+    // Can be string (JWT) or object with jwt property
+    if (typeof attestation === 'string') {
+      return attestation;
+    } else if (attestation && typeof attestation === 'object' && attestation.jwt) {
+      return attestation.jwt;
+    }
+  }
+  
+  // Check for key_attestation in proofs.jwt header
+  if (requestBody.proofs && requestBody.proofs.jwt) {
+    const jwtProof = Array.isArray(requestBody.proofs.jwt) 
+      ? requestBody.proofs.jwt[0] 
+      : requestBody.proofs.jwt;
+    
+    if (typeof jwtProof === 'string') {
+      try {
+        const decoded = jwt.decode(jwtProof, { complete: true });
+        if (decoded && decoded.header && decoded.header.key_attestation) {
+          return decoded.header.key_attestation;
+        }
+      } catch (e) {
+        // Not a valid JWT, ignore
+      }
+    }
+  }
+  
+  // Check for key_attestation at top level (alternative location)
+  if (requestBody.key_attestation) {
+    if (typeof requestBody.key_attestation === 'string') {
+      return requestBody.key_attestation;
+    } else if (requestBody.key_attestation.jwt) {
+      return requestBody.key_attestation.jwt;
+    }
+  }
+  
+  return null;
+}; 

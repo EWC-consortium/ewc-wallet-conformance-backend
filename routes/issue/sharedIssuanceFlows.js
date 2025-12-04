@@ -56,6 +56,12 @@ import {
   handleCredentialGenerationBasedOnFormat,
   handleCredentialGenerationBasedOnFormatDeferred,
 } from "../../utils/credGenerationUtils.js";
+import {
+  validateWIA,
+  validateWUA,
+  extractWIAFromTokenRequest,
+  extractWUAFromCredentialRequest,
+} from "../../utils/routeUtils.js";
 
 const sharedRouter = express.Router();
 
@@ -479,6 +485,7 @@ const getSessionFromToken = async (token) => {
   return { sessionObject, flowType, sessionKey };
 };
 
+
 // Handle pre-authorized code flow
 const handlePreAuthorizedCodeFlow = async (
   preAuthorizedCode,
@@ -709,6 +716,54 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
       authorization_details,
     } = req.body;
 
+    // Extract and validate Wallet Instance Attestation (WIA) if present
+    // Based on TS3 spec: https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/blob/main/docs/technical-specifications/ts3-wallet-unit-attestation.md
+    const wiaJwt = extractWIAFromTokenRequest(req.body, req.headers);
+    if (wiaJwt) {
+      // Extract sessionId early for logging if available
+      let tempSessionId = sessionId;
+      if (!tempSessionId) {
+        if (preAuthorizedCode) {
+          tempSessionId = preAuthorizedCode;
+        } else if (code) {
+          tempSessionId = await getSessionKeyAuthCode(code);
+        }
+      }
+      
+      const wiaValidation = await validateWIA(wiaJwt, tempSessionId);
+      if (wiaValidation.valid) {
+        if (tempSessionId) {
+          await logInfo(tempSessionId, "WIA validated successfully", {
+            wiaIssuer: wiaValidation.payload?.iss,
+            wiaExp: wiaValidation.payload?.exp
+          }).catch(() => {});
+        }
+      } else {
+        if (tempSessionId) {
+          await logWarn(tempSessionId, "WIA validation failed (continuing without WIA)", {
+            error: wiaValidation.error
+          }).catch(() => {});
+        }
+      }
+    } else {
+      // Log that WIA was not found, but don't fail
+      let tempSessionId = sessionId;
+      if (!tempSessionId) {
+        if (preAuthorizedCode) {
+          tempSessionId = preAuthorizedCode;
+        } else if (code) {
+          tempSessionId = await getSessionKeyAuthCode(code);
+        }
+      }
+      if (tempSessionId) {
+        await logInfo(tempSessionId, "WIA not found in token request (continuing without WIA)", {}).catch(() => {});
+      }
+    }
+
+    // TODO: Implement Wallet Unit Attestation (WUA) based client authentication for token endpoint requests
+    //       as profiled in CS-01 (token endpoint and PAR MUST be client-authenticated using WUA;
+    //       see https://github.com/webuild-consortium/wp4-architecture/blob/main/conformance-specs/cs-01-credential-issuance.md#624-wu-processes-the-offer).
+
     // Validate required parameters
     if (!(code || preAuthorizedCode)) {
       return res.status(400).json({
@@ -890,12 +945,41 @@ sharedRouter.post("/credential", async (req, res) => {
       });
     }
 
+    // Extract and validate Wallet Unit Attestation (WUA) if present
+    // Based on TS3 spec: https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/blob/main/docs/technical-specifications/ts3-wallet-unit-attestation.md
+    const wuaJwt = extractWUAFromCredentialRequest(requestBody);
+    if (wuaJwt) {
+      const wuaValidation = await validateWUA(wuaJwt, sessionId);
+      if (wuaValidation.valid) {
+        if (sessionId) {
+          await logInfo(sessionId, "WUA validated successfully", {
+            wuaIssuer: wuaValidation.payload?.iss,
+            wuaExp: wuaValidation.payload?.exp,
+            hasAttestedKeys: Array.isArray(wuaValidation.payload?.attested_keys) && wuaValidation.payload.attested_keys.length > 0,
+            hasStatus: !!wuaValidation.payload?.status
+          }).catch(() => {});
+        }
+      } else {
+        if (sessionId) {
+          await logWarn(sessionId, "WUA validation failed (continuing without WUA)", {
+            error: wuaValidation.error
+          }).catch(() => {});
+        }
+      }
+    } else {
+      // Log that WUA was not found, but don't fail
+      if (sessionId) {
+        await logInfo(sessionId, "WUA not found in credential request (continuing without WUA)", {}).catch(() => {});
+      }
+    }
+
     // Log credential request received
     if (sessionId) {
       await logInfo(sessionId, "Credential request received", {
         credential_configuration_id: requestBody.credential_configuration_id,
         credential_identifier: requestBody.credential_identifier,
-        hasProof: !!requestBody.proof || !!requestBody.proofs
+        hasProof: !!requestBody.proof || !!requestBody.proofs,
+        hasWUA: !!wuaJwt
       }).catch(() => {});
     }
 
@@ -1242,8 +1326,9 @@ sharedRouter.post("/credential_deferred", async (req, res) => {
       getServerUrl()
     );
 
-    // OID4VCI v1.0 Section 9.2: Deferred Credential Response has the same structure
-    // as immediate credential response - format is specified in metadata, not in response
+    // OID4VCI v1.0 Section 9.2: Deferred Credential Response uses 'credential' (singular),
+    // not 'credentials' (plural) like the immediate credential response.
+    // Format is specified in metadata, not in response.
     return res.status(200).json({
       credential,
       // notification_id: sessionObject.notification_id,
