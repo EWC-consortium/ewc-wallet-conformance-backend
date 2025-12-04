@@ -1235,9 +1235,18 @@ sharedRouter.post("/notification", async (req, res) => {
     if(event === "credential_failure" || event === "credential_deleted") {
       const sessionObject = await getCodeFlowSession(sessionId);
       if (sessionObject) {
+
         sessionObject.status = "failed";
         console.error("Credential failure or deletion detected. Marking session as failed. Reason: " + event_description);
-        await storeCodeFlowSession(sessionKey, sessionObject);
+        
+        if(sessionObject.flowType === "code") {
+          return res.status(204).send();
+          await storeCodeFlowSession(sessionKey, sessionObject);
+        }else{
+          await storePreAuthSession(sessionKey, sessionObject);
+        }
+
+        
       }
     }
     if(event === "credential_accepted") {
