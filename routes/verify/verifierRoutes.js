@@ -208,10 +208,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     const vpSession = await getVPSession(sessionId);
     
     if (!vpSession) {
-      console.warn(`Session validation failed. Received: sessionId '${sessionId}' not found, expected: valid session ID`);
-      await logError(sessionId, "Session ID not found", {
+      await logError(sessionId, "VP session not found for direct_post request", {
         sessionId,
-        error: `Session validation failed. Received: sessionId '${sessionId}' not found, expected: valid session ID`
+        endpoint: "/direct_post/:id",
+        error: "Session validation failed - session not found"
       });
       return res.status(400).json({ error: `Session ID ${sessionId} not found.` });
     }
@@ -243,7 +243,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     });
 
     if (isMdoc) {
-      console.log("mDL verification using custom cbor-x decoder...");
       await logInfo(sessionId, "Processing mDL verification using custom cbor-x decoder", {
         isMdoc: true
       });
@@ -262,7 +261,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             vpSession.error_description = `No vp_token found in the request body. Received: ${received}, expected: vp_token string`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
-            console.error("Failed to update session status after vp_token missing error:", storageError);
+            await logError(sessionId, "Failed to update session status after vp_token missing error", {
+              error: storageError.message,
+              stack: storageError.stack
+            }).catch(() => {});
           }
           return res.status(400).json({ error: `No vp_token found in the request body. Received: ${received}, expected: vp_token string` });
         }
@@ -314,7 +316,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         const mdocResult = await verifyMdlToken(vpToken, verificationOptions);
 
         if (!mdocResult.success) {
-          console.error(`mDL verification failed. Received: ${mdocResult.error}, expected: valid mDL token`);
           await logError(sessionId, "mDL verification failed", {
             received: mdocResult.error,
             expected: "valid mDL token",
@@ -328,7 +329,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             vpSession.error_description = `mDL verification failed. Received: ${mdocResult.error}, expected: valid mDL token`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
-            console.error("Failed to update session status after mDL verification failure:", storageError);
+            await logError(sessionId, "Failed to update session status after mDL verification failure", {
+              error: storageError.message,
+              stack: storageError.stack
+            }).catch(() => {});
           }
           return res.status(400).json({ 
             error: `mDL verification failed. Received: ${mdocResult.error}, expected: valid mDL token`,
@@ -346,7 +350,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         if (vpSession.sdsRequested && !validateMdlClaims(claims, vpSession.sdsRequested)) {
           const receivedClaims = Object.keys(claims || {});
           const requestedClaims = vpSession.sdsRequested;
-          console.log(`mDL claims mismatch. Received: [${receivedClaims.join(', ')}], expected: [${JSON.stringify(requestedClaims)}]`);
           await logError(sessionId, "mDL claims do not match what was requested", {
             received: receivedClaims,
             expected: requestedClaims,
@@ -360,7 +363,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             vpSession.error_description = `mDL claims mismatch. Received: [${receivedClaims.join(', ')}], expected: [${JSON.stringify(requestedClaims)}]`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
-            console.error("Failed to update session status after claims mismatch:", storageError);
+            await logError(sessionId, "Failed to update session status after claims mismatch", {
+              error: storageError.message,
+              stack: storageError.stack
+            }).catch(() => {});
           }
           return res.status(400).json({
             error: `mDL claims mismatch. Received: [${receivedClaims.join(', ')}], expected: [${JSON.stringify(requestedClaims)}]`,
@@ -387,7 +393,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         return res.status(200).json({ status: "ok" });
 
       } catch (error) {
-        console.error("Error processing mDL response:", error);
         await logError(sessionId, "Error processing mDL response", {
           error: error.message,
           stack: error.stack
@@ -401,14 +406,16 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             await storeVPSession(sessionId, vpSession);
           }
         } catch (storageError) {
-          console.error("Failed to update session status after mDL processing error:", storageError);
+          await logError(sessionId, "Failed to update session status after mDL processing error", {
+            error: storageError.message,
+            stack: storageError.stack
+          }).catch(() => {});
         }
         return res.status(400).json({ error: `mDL verification failed: ${error.message}` });
       }
     }
 
     // Handle different response modes
-    console.log("response mode: " + vpSession.response_mode);
     await logInfo(sessionId, "Processing VP response mode", {
       responseMode: vpSession.response_mode
     });
@@ -419,7 +426,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     // This is for HAIP Digital Credentials API responses where the wallet
     // posts the entire VP as a signed JWT in the request body
     if (vpSession.response_mode === 'dc_api.jwt') {
-      console.log("Processing HAIP dc_api.jwt response mode");
       await logInfo(sessionId, "Processing HAIP dc_api.jwt response mode", {
         responseMode: "dc_api.jwt"
       });
@@ -430,7 +436,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         // Extract encrypted JWT from request body
         const encryptedJWT = req.body.response;
         
-        console.log("HAIP dc_api.jwt encrypted JWT received:", encryptedJWT ? "Yes" : "No");
         await logDebug(sessionId, "HAIP dc_api.jwt encrypted JWT received", {
           hasEncryptedJWT: !!encryptedJWT,
           encryptedJWTLength: encryptedJWT?.length
@@ -449,19 +454,19 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         }
 
         // Decrypt the JWT using X509 EC private key
-        console.log("Decrypting HAIP dc_api.jwt response...");
         await logDebug(sessionId, "Starting HAIP dc_api.jwt decryption");
         const privateKeyForDecryption = fs.readFileSync("./x509EC/ec_private_pkcs8.key", "utf8");
-        
+
         let decryptedResponse;
         try {
           decryptedResponse = await decryptJWE(encryptedJWT, privateKeyForDecryption, "dc_api.jwt");
-          console.log("HAIP dc_api.jwt decrypted response:", decryptedResponse);
+          await logDebug(sessionId, "HAIP dc_api.jwt decryption successful", {
+            decryptedLength: decryptedResponse?.length
+          });
           await logInfo(sessionId, "HAIP dc_api.jwt decryption successful", {
             decryptedResponseType: typeof decryptedResponse
           });
         } catch (decryptError) {
-          console.error("Failed to decrypt HAIP dc_api.jwt response:", decryptError);
           await logError(sessionId, "Failed to decrypt HAIP dc_api.jwt response", {
             error: decryptError.message,
             stack: decryptError.stack
@@ -488,7 +493,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
         if (!vpToken) {
           const received = decryptedResponse === null ? "null" : decryptedResponse === undefined ? "undefined" : typeof decryptedResponse;
-          console.log(`No VP token found in decrypted response. Received: ${received}, expected: object/string with vp_token or response property`);
           await logError(sessionId, "No VP token found in decrypted HAIP dc_api.jwt response", {
             received,
             expected: "object/string with vp_token or response property",
@@ -500,7 +504,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           });
         }
 
-        console.log("HAIP dc_api.jwt extracted vpToken:", vpToken);
         await logDebug(sessionId, "HAIP dc_api.jwt extracted vpToken", {
           vpTokenType: typeof vpToken,
           vpTokenLength: typeof vpToken === 'string' ? vpToken.length : 'N/A'
@@ -514,7 +517,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           const credentialKeys = Object.keys(vpToken);
           if (credentialKeys.length > 0) {
             mdocData = vpToken[credentialKeys[0]];
-            console.log("Extracted mdoc data from credential ID:", credentialKeys[0]);
+            await logDebug(sessionId, "Extracted mdoc data from HAIP dc_api.jwt credential", {
+              credentialId: credentialKeys[0],
+              credentialCount: credentialKeys.length
+            });
           } else {
             return res.status(400).json({ 
               error: "No credentials found in HAIP dc_api.jwt mdoc response" 
@@ -534,7 +540,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           });
         }
 
-        console.log("Processing mdoc data:", mdocData.substring(0, 100) + "...");
+        await logDebug(sessionId, "Processing mdoc data from HAIP dc_api.jwt", {
+          mdocDataLength: mdocData.length,
+          mdocDataPrefix: mdocData.substring(0, 100)
+        });
 
         const verificationOptions = {
           requestedFields: vpSession.sdsRequested, // Apply selective disclosure if requested
@@ -548,7 +557,12 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         const mdocResult = await verifyMdlToken(mdocData, verificationOptions, documentType);
 
         if (!mdocResult.success) {
-          console.error(`mDL verification failed. Received: ${mdocResult.error}, expected: valid mDL token`);
+          await logError(sessionId, "mDL verification failed in HAIP dc_api.jwt processing", {
+            received: mdocResult.error,
+            expected: "valid mDL token",
+            details: mdocResult.details,
+            documentType
+          });
           return res.status(400).json({ 
             error: `mDL verification failed. Received: ${mdocResult.error}, expected: valid mDL token`,
             details: mdocResult.details 
@@ -561,7 +575,12 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         if (vpSession.sdsRequested && !validateMdlClaims(claims, vpSession.sdsRequested)) {
           const receivedClaims = Object.keys(claims || {});
           const requestedClaims = vpSession.sdsRequested;
-          console.log(`mDL claims mismatch. Received: [${receivedClaims.join(', ')}], expected: [${JSON.stringify(requestedClaims)}]`);
+          await logError(sessionId, "mDL claims mismatch in HAIP dc_api.jwt processing", {
+            received: receivedClaims,
+            expected: requestedClaims,
+            requested: vpSession.sdsRequested,
+            received: Object.keys(claims)
+          });
           return res.status(400).json({
             error: `mDL claims mismatch. Received: [${receivedClaims.join(', ')}], expected: [${JSON.stringify(requestedClaims)}]`,
             requested: vpSession.sdsRequested,
@@ -583,7 +602,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         return res.status(200).json({ status: "ok" });
 
       } catch (error) {
-        console.error("Error processing HAIP dc_api.jwt response:", error);
         await logError(sessionId, "Error processing HAIP dc_api.jwt response", {
           error: error.message,
           stack: error.stack
@@ -640,19 +658,17 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
         // Check if it's encrypted (JWE has 5 parts)
         if (jwtResponse.split('.').length === 5) {
-          console.log("Processing encrypted JWE response for direct_post.jwt");
           await logInfo(sessionId, "Processing encrypted JWE response for direct_post.jwt");
-          
+
           // Decrypt the JWE - this may return JWT string (per spec) or payload object (wallet-specific)
           const decrypted = await decryptJWE(jwtResponse, privateKey, "direct_post.jwt");
-          console.log("Decrypted result type:", typeof decrypted);
           await logDebug(sessionId, "JWE decryption completed", {
             decryptedType: typeof decrypted
           });
           
           if (typeof decrypted === 'string') {
             // OpenID4VP spec compliant: JWE decrypted to JWT string
-            console.log("Processing JWT string from JWE (per OpenID4VP spec)");
+            await logInfo(sessionId, "Processing JWT string from JWE (per OpenID4VP spec)");
             const decodedPayload = jwt.decode(decrypted);
             vpToken = decodedPayload?.vp_token;
             
@@ -674,7 +690,7 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             }
           } else if (decrypted && decrypted.vp_token) {
             // Wallet-specific behavior: JWE decrypted to payload object
-            console.log("Processing payload object from JWE (wallet-specific behavior)");
+            await logInfo(sessionId, "Processing payload object from JWE (wallet-specific behavior)");
             await logDebug(sessionId, "Decrypted payload keys", {
               allKeys: Object.keys(decrypted),
               hasNonce: 'nonce' in decrypted,
@@ -735,9 +751,9 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             const received = decrypted ? `decrypted object without vp_token (keys: ${Object.keys(decrypted).join(', ')})` : "decryption failed";
             return res.status(400).json({ error: `Failed to decrypt JWE response or no vp_token found. Received: ${received}, expected: decrypted object with vp_token property` });
           }
-          
-          console.log("Extracted vp_token for processing");
-          
+
+          await logInfo(sessionId, "Extracted vp_token for processing");
+
           // Debug: Log the actual VP token structure before processing
           await logDebug(sessionId, "VP token full structure", {
             type: typeof vpToken,
@@ -831,15 +847,18 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             claimsCount: result.extractedClaims ? result.extractedClaims.length : 0
           });
         } else {
-          console.log("Processing unencrypted JWT response for direct_post.jwt");
+          await logInfo(sessionId, "Processing unencrypted JWT response for direct_post.jwt");
           // If not encrypted, just verify the signed JWT
           const decodedJWT = jwt.decode(jwtResponse);
-          
+
           // Extract VP token from the JWT payload
           vpToken = decodedJWT?.vp_token;
           if (!vpToken) {
             const received = decodedJWT?.vp_token === undefined ? "vp_token missing in payload" : `vp_token is ${typeof decodedJWT?.vp_token}`;
-            console.log(`No VP token in JWT response. Received: ${received}, expected: vp_token string in JWT payload`);
+            await logError(sessionId, "No VP token found in unencrypted JWT response", {
+              received,
+              expected: "vp_token string in JWT payload"
+            });
             return res.status(400).json({ error: `No VP token in JWT response. Received: ${received}, expected: vp_token string in JWT payload` });
           }
           if (typeof vpToken === 'string') {
@@ -910,7 +929,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
                   submittedNonce = nestedDecoded.payload.nonce;
                 }
               } catch (innerDecodeError) {
-                console.warn("Failed to decode nested vp_token for nonce extraction:", innerDecodeError);
+                await logWarn(sessionId, "Failed to decode nested vp_token for nonce extraction", {
+                  error: innerDecodeError.message,
+                  stack: innerDecodeError.stack
+                }).catch(() => {});
               }
             }
           }
@@ -926,7 +948,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
 
         if (!submittedNonce) {
           const received = "nonce not found in vp_token (checked key-binding JWT, VP token payload, and nested structures)";
-          console.log(`No submitted nonce found in vp_token. Received: ${received}, expected: nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec. See ${SPEC_REFS.VP_NONCE}`);
           await logError(sessionId, "VP 1.0 violation: nonce not found in VP token", {
             received,
             expected: "nonce in SD-JWT key-binding JWT per OpenID4VP 1.0 spec",
@@ -962,7 +983,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             vpSession.error_description = `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'. See ${SPEC_REFS.VP_NONCE}`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
-            console.error("Failed to update session status after nonce mismatch:", storageError);
+            await logError(sessionId, "Failed to update session status after nonce mismatch", {
+              error: storageError.message,
+              stack: storageError.stack
+            }).catch(() => {});
           }
           return res.status(400).json({ error: `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'. See ${SPEC_REFS.VP_NONCE}` });
         }
@@ -982,7 +1006,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
               vpSession.error_description = `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'. See ${SPEC_REFS.VP_CREDENTIAL_RESPONSE}`;
               await storeVPSession(sessionId, vpSession);
             } catch (storageError) {
-              console.error("Failed to update session status after audience mismatch:", storageError);
+              await logError(sessionId, "Failed to update session status after audience mismatch", {
+                error: storageError.message,
+                stack: storageError.stack
+              }).catch(() => {});
             }
             return res.status(400).json({ error: `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'. See ${SPEC_REFS.VP_CREDENTIAL_RESPONSE}` });
           }
@@ -999,7 +1026,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             vpSession.error_description = `Claims mismatch. Received: ${receivedClaims}, expected: ${requestedClaims}`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
-            console.error("Failed to update session status after claims mismatch:", storageError);
+            await logError(sessionId, "Failed to update session status after claims mismatch", {
+              error: storageError.message,
+              stack: storageError.stack
+            }).catch(() => {});
           }
           return res.status(400).json({
             error: `Claims mismatch. Received: ${receivedClaims}, expected: ${requestedClaims}`,
@@ -1018,7 +1048,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         return res.status(200).json({ status: "ok" });
 
       } catch (error) {
-        console.error("Error processing JWT response:", error);
         await logError(sessionId, "Error processing JWT response", {
           error: error.message,
           stack: error.stack
@@ -1058,7 +1087,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             vpSession.error_description = `state parameter missing. Received: ${received}, expected: state parameter string. See ${SPEC_REFS.VP_STATE}`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
-            console.error("Failed to update session status after state missing error:", storageError);
+            await logError(sessionId, "Failed to update session status after state missing error", {
+              error: storageError.message,
+              stack: storageError.stack
+            }).catch(() => {});
           }
           return res.status(400).json({ error: `state parameter missing. Received: ${received}, expected: state parameter string. See ${SPEC_REFS.VP_STATE}` });
         }
@@ -1075,7 +1107,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             vpSession.error_description = `state mismatch. Received: '${submittedState}', expected: '${vpSession.state}'. See ${SPEC_REFS.VP_STATE}`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
-            console.error("Failed to update session status after state mismatch:", storageError);
+            await logError(sessionId, "Failed to update session status after state mismatch", {
+              error: storageError.message,
+              stack: storageError.stack
+            }).catch(() => {});
           }
           return res.status(400).json({ error: `state mismatch. Received: '${submittedState}', expected: '${vpSession.state}'. See ${SPEC_REFS.VP_STATE}` });
         }
@@ -1142,7 +1177,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           keybindJwtHasNonce: !!jwtFromKeybind?.payload?.nonce
         });
       }catch(error){
-        console.error("Error processing direct_post response:", error);
         await logError(sessionId, "Error processing direct_post response", {
           error: error.message,
           stack: error.stack
@@ -1360,7 +1394,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           hasKeybindJwt: !!jwtFromKeybind,
           vpTokenPreview: vpToken ? vpToken.substring(0, 100) : null
         });
-        console.log(`No submitted nonce found in vp_token. Received: ${received}, expected: nonce in key-binding JWT or VP token payload. See ${SPEC_REFS.VP_NONCE}`);
         return res.status(400).json({ error: `submitted nonce not found in vp_token. Received: ${received}, expected: nonce in key-binding JWT or VP token payload. See ${SPEC_REFS.VP_NONCE}` });
       }
         
@@ -1371,7 +1404,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
     
 
       if (vpSession.nonce != submittedNonce) {
-        console.log(`Nonce mismatch. Received: '${submittedNonce}', expected: '${vpSession.nonce}'. See ${SPEC_REFS.VP_NONCE}`);
         await logError(sessionId, "Nonce mismatch", {
           received: submittedNonce,
           expected: vpSession.nonce,
@@ -1384,7 +1416,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           vpSession.error_description = `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'. See ${SPEC_REFS.VP_NONCE}`;
           await storeVPSession(sessionId, vpSession);
         } catch (storageError) {
-          console.error("Failed to update session status after nonce mismatch:", storageError);
+          await logError(sessionId, "Failed to update session status after nonce mismatch", {
+            error: storageError.message,
+            stack: storageError.stack
+          }).catch(() => {});
         }
         return res.status(400).json({ error: `submitted nonce doesn't match the auth request one. Received: '${submittedNonce}', expected: '${vpSession.nonce}'. See ${SPEC_REFS.VP_NONCE}` });
       }
@@ -1404,7 +1439,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
             vpSession.error_description = `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'. See ${SPEC_REFS.VP_CREDENTIAL_RESPONSE}`;
             await storeVPSession(sessionId, vpSession);
           } catch (storageError) {
-            console.error("Failed to update session status after audience mismatch:", storageError);
+            await logError(sessionId, "Failed to update session status after audience mismatch", {
+              error: storageError.message,
+              stack: storageError.stack
+            }).catch(() => {});
           }
           return res.status(400).json({ error: `aud claim does not match verifier client_id. Received: '${jwtFromKeybind.payload.aud}', expected: '${vpSession.client_id}'. See ${SPEC_REFS.VP_CREDENTIAL_RESPONSE}` });
         }
@@ -1422,7 +1460,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
           vpSession.error_description = `Claims mismatch. Received: ${receivedClaims}, expected: ${requestedClaims}`;
           await storeVPSession(sessionId, vpSession);
         } catch (storageError) {
-          console.error("Failed to update session status after claims mismatch:", storageError);
+          await logError(sessionId, "Failed to update session status after claims mismatch", {
+            error: storageError.message,
+            stack: storageError.stack
+          }).catch(() => {});
         }
         return res.status(400).json({
           error: `Claims mismatch. Received: ${receivedClaims}, expected: ${requestedClaims}`,
@@ -1432,8 +1473,7 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
       vpSession.status = "success";
       vpSession.claims = { ...claimsFromExtraction };
       await storeVPSession(sessionId, vpSession);
-      console.log(`vp session ${sessionId} status is success`);
-      
+
       await logInfo(sessionId, "direct_post processing completed successfully", {
         status: "success",
         claimsCount: Object.keys(claimsFromExtraction || {}).length
@@ -1444,7 +1484,6 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
   } catch (error) {
     // Get sessionId from request params (sessionId variable might not be in scope if error occurred early)
     const errorSessionId = req?.params?.id || 'unknown';
-    console.error("Error processing request:", error.message);
     await logError(errorSessionId, "Error processing direct_post request", {
       error: error.message,
       stack: error.stack
@@ -1461,7 +1500,10 @@ verifierRouter.post("/direct_post/:id", async (req, res) => {
         }
       }
     } catch (storageError) {
-      console.error("Failed to update session status after direct_post error:", storageError);
+      await logError(errorSessionId, "Failed to update session status after direct_post error", {
+        error: storageError.message,
+        stack: storageError.stack
+      }).catch(() => {});
     }
     return res.status(400).json({ error: error.message });
   }
@@ -1704,10 +1746,8 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
   });
   
   // Log received request
-  console.log("Received direct_post VP for session:", sessionId);
   if (!jwtVp) {
     const received = req.body.vp_token === undefined ? "vp_token missing" : `vp_token is ${typeof req.body.vp_token}`;
-    console.error(`No VP token provided. Received: ${received}, expected: vp_token JWT string`);
     await logError(sessionId, "No VP token provided in direct_post_jwt request", {
       received,
       expected: "vp_token JWT string"
@@ -1718,7 +1758,6 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
   try {
     decodedWithHeader = jwt.decode(jwtVp, { complete: true });
   } catch (error) {
-    console.error("Failed to decode JWT:", error);
     await logError(sessionId, "Failed to decode JWT in direct_post_jwt", {
       error: error.message,
       stack: error.stack
@@ -1729,7 +1768,6 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
     decodedWithHeader?.payload?.vp?.verifiableCredential;
   if (!credentialsJwtArray) {
     const received = !decodedWithHeader?.payload ? "no payload" : !decodedWithHeader?.payload?.vp ? "no vp claim" : !decodedWithHeader?.payload?.vp?.verifiableCredential ? "no verifiableCredential array" : "unknown";
-    console.error(`Invalid JWT structure. Received: ${received}, expected: JWT with payload.vp.verifiableCredential array`);
     await logError(sessionId, "Invalid JWT structure in direct_post_jwt", {
       received,
       expected: "JWT with payload.vp.verifiableCredential array",
@@ -1745,14 +1783,18 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
   // Convert credentials to claims
   let claims;
   try {
-    console.log(credentialsJwtArray);
+    await logDebug(sessionId, "Converting credentials to claims", {
+      credentialsCount: credentialsJwtArray?.length,
+      credentialTypes: credentialsJwtArray?.map(c => typeof c)
+    });
     claims = await flattenCredentialsToClaims(credentialsJwtArray, sessionId);
-    console.log(claims);
+    await logDebug(sessionId, "Claims conversion completed", {
+      claimsCount: Object.keys(claims || {}).length
+    });
     if (!claims) {
       throw new Error("Claims conversion returned null or undefined.");
     }
   } catch (error) {
-    console.error("Error processing claims:", error);
     await logError(sessionId, "Error processing claims in direct_post_jwt", {
       error: error.message,
       stack: error.stack
@@ -1761,14 +1803,12 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
   }
   // Update session status
   const index = sessions.indexOf(sessionId);
-  console.log("Session index:", index);
   await logDebug(sessionId, "Looking up session index", {
     index,
     sessionId
   });
-  
+
   if (index === -1) {
-    console.error(`Session ID not found. Received: sessionId '${sessionId}' not in sessions array, expected: valid session ID`);
     await logError(sessionId, "Session ID not found in direct_post_jwt", {
       received: `sessionId '${sessionId}' not in sessions array`,
       expected: "valid session ID",
@@ -1779,8 +1819,7 @@ verifierRouter.post("/direct_post_jwt/:id", async (req, res) => {
   // Log successful verification
   verificationSessions[index].status = "success";
   verificationSessions[index].claims = claims;
-  console.log("Verification success:", verificationSessions[index]);
-  
+
   await logInfo(sessionId, "direct_post_jwt verification completed successfully", {
     status: "success",
     claimsCount: Object.keys(claims || {}).length
@@ -1804,7 +1843,6 @@ verifierRouter.get(["/verificationStatus"], async (req, res) => {
   let result = null;
   if (vpSession) {
     let status = vpSession.status;
-    console.log(`sending status ${status} for session ${sessionId}`);
     await logInfo(sessionId, "Verification status retrieved", {
       status,
       hasResult: status === "success"
@@ -1911,7 +1949,6 @@ async function flattenCredentialsToClaims(credentials, sessionId = null) {
     });
     if (decodedCredential) {
       let claims = decodedCredential.payload.vc.credentialSubject;
-      console.log(claims);
       if (sessionId) {
         logDebug(sessionId, "Decoded credential claims", {
           claims: Object.keys(claims)

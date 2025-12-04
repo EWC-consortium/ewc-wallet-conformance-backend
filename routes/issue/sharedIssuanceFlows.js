@@ -187,22 +187,37 @@ const parseAuthorizationDetails = (authorizationDetails) => {
 };
 
   // Validate credential request parameters
-const validateCredentialRequest = (requestBody) => {
+const validateCredentialRequest = (requestBody, sessionId = null) => {
   const { credential_identifier, credential_configuration_id } = requestBody;
-  
-  if ((credential_identifier && credential_configuration_id) || 
+
+  if ((credential_identifier && credential_configuration_id) ||
       (!credential_identifier && !credential_configuration_id)) {
-    const received = credential_identifier && credential_configuration_id 
-      ? "both credential_identifier and credential_configuration_id" 
+    const received = credential_identifier && credential_configuration_id
+      ? "both credential_identifier and credential_configuration_id"
       : "neither credential_identifier nor credential_configuration_id";
     throw new Error(`${ERROR_MESSAGES.INVALID_CREDENTIAL_REQUEST}. Received: ${received}, expected: exactly one`);
   }
 
-  console.log("validateCredentialRequest requestBody", requestBody);
+  // Log credential request validation details
+  if (sessionId) {
+    logInfo(sessionId, "Validating credential request", {
+      credential_configuration_id,
+      credential_identifier,
+      hasProofs: !!requestBody.proofs,
+      hasProof: !!requestBody.proof,
+      proofTypes: requestBody.proofs ? Object.keys(requestBody.proofs) : []
+    }).catch(() => {});
+  }
 
   // V1.0 requires proofs (plural) - reject legacy proof (singular)
   if (requestBody.proof) {
-    console.log(`Received 'proof' (singular): ${JSON.stringify(requestBody.proof)}, expected 'proofs' (plural) object`);
+    if (sessionId) {
+      logError(sessionId, "Invalid proof format: received 'proof' (singular), expected 'proofs' (plural)", {
+        receivedProofType: "singular",
+        expectedProofType: "plural",
+        specRef: SPEC_REFS.VCI_PROOF
+      }).catch(() => {});
+    }
     throw new Error(`${ERROR_MESSAGES.INVALID_PROOF}: V1.0 requires 'proofs' (plural), not 'proof' (singular). See ${SPEC_REFS.VCI_PROOF}`);
   }
 
@@ -253,7 +268,7 @@ const validateCredentialRequest = (requestBody) => {
 };
 
 // Validate proof JWT
-const validateProofJWT = (proofJwt, effectiveConfigurationId) => {
+const validateProofJWT = (proofJwt, effectiveConfigurationId, sessionId = null) => {
   const issuerConfig = loadIssuerConfig();
   const credConfig = issuerConfig.credential_configurations_supported[effectiveConfigurationId];
 
@@ -262,13 +277,23 @@ const validateProofJWT = (proofJwt, effectiveConfigurationId) => {
   }
 
   if (!credConfig.proof_types_supported?.jwt) {
-    console.log(`No JWT proof type configuration found for ${effectiveConfigurationId}, skipping algorithm validation.`);
+    if (sessionId) {
+      logWarn(sessionId, "No JWT proof type configuration found, skipping algorithm validation", {
+        effectiveConfigurationId,
+        availableProofTypes: Object.keys(credConfig.proof_types_supported || {})
+      }).catch(() => {});
+    }
     return null;
   }
 
   const supportedAlgs = credConfig.proof_types_supported.jwt.proof_signing_alg_values_supported;
   if (!supportedAlgs || supportedAlgs.length === 0) {
-    console.log(`No proof signing algorithms defined for ${effectiveConfigurationId}, skipping algorithm validation.`);
+    if (sessionId) {
+      logWarn(sessionId, "No proof signing algorithms defined, skipping algorithm validation", {
+        effectiveConfigurationId,
+        supportedAlgorithms: supportedAlgs
+      }).catch(() => {});
+    }
     return null;
   }
 
@@ -286,7 +311,7 @@ const validateProofJWT = (proofJwt, effectiveConfigurationId) => {
 };
 
 // Resolve public key for proof verification
-const resolvePublicKeyForProof = async (decodedProofHeader) => {
+const resolvePublicKeyForProof = async (decodedProofHeader, sessionId = null) => {
   if (decodedProofHeader.jwk) {
     return decodedProofHeader.jwk;
   }
@@ -318,7 +343,7 @@ const resolvePublicKeyForProof = async (decodedProofHeader) => {
   }
 
   if (decodedProofHeader.kid?.startsWith("did:web:")) {
-    return await resolveDidWebPublicKey(decodedProofHeader.kid);
+    return await resolveDidWebPublicKey(decodedProofHeader.kid, sessionId);
   }
 
   const received = decodedProofHeader.kid ? `kid: ${decodedProofHeader.kid}` : 'no kid in header';
@@ -327,7 +352,7 @@ const resolvePublicKeyForProof = async (decodedProofHeader) => {
 };
 
 // Resolve DID Web public key
-const resolveDidWebPublicKey = async (didWeb) => {
+const resolveDidWebPublicKey = async (didWeb, sessionId = null) => {
   try {
     const [did, keyFragment] = didWeb.split("#");
     if (!keyFragment) {
@@ -341,11 +366,18 @@ const resolveDidWebPublicKey = async (didWeb) => {
     const domain = didParts.shift();
     const path = didParts.join("/");
 
-    const didDocUrl = path 
+    const didDocUrl = path
       ? `https://${domain}/${path}/did.json`
       : `https://${domain}/.well-known/did.json`;
 
-    console.log(`Resolving did:web by fetching DID document from: ${didDocUrl}`);
+    if (sessionId) {
+      logInfo(sessionId, "Resolving did:web public key", {
+        didWeb,
+        didDocUrl,
+        domain,
+        path
+      }).catch(() => {});
+    }
     
     const response = await fetch(didDocUrl);
     if (!response.ok) {
@@ -374,7 +406,7 @@ const resolveDidWebPublicKey = async (didWeb) => {
 };
 
 // Verify proof JWT signature and claims
-const verifyProofJWT = async (proofJwt, publicKeyForProof, flowType) => {
+const verifyProofJWT = async (proofJwt, publicKeyForProof, flowType, sessionId = null) => {
   try {
     // Verify signature and other claims
     // Note: Nonce validation is done earlier in the credential endpoint handler
@@ -393,7 +425,13 @@ const verifyProofJWT = async (proofJwt, publicKeyForProof, flowType) => {
       throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_ISS}. Received: payload without iss claim, expected: payload with iss claim (required for code flow). See ${SPEC_REFS.VCI_PROOF}`);
     }
 
-    console.log(`Proof JWT validated. Issuer (Wallet): ${proofPayload.iss}, Nonce verified.`);
+    if (sessionId) {
+      logInfo(sessionId, "Proof JWT signature and claims validated successfully", {
+        walletIssuer: proofPayload.iss,
+        nonceVerified: true,
+        flowType
+      }).catch(() => {});
+    }
     return proofPayload;
   } catch (error) {
     if (error.message.includes("signature verification failed")) {
@@ -517,7 +555,8 @@ const handleAuthorizationCodeFlow = async (code, code_verifier, authorizationDet
   const pkceVerified = await validatePKCE(
     existingCodeSession,
     code_verifier,
-    existingCodeSession.requests?.challenge
+    existingCodeSession.requests?.challenge,
+    sessionId
   );
 
   if (!pkceVerified) {
@@ -570,7 +609,7 @@ const handleAuthorizationCodeFlow = async (code, code_verifier, authorizationDet
 };
 
 // Handle immediate credential issuance
-const handleImmediateCredentialIssuance = async (requestBody, sessionObject, effectiveConfigurationId) => {
+const handleImmediateCredentialIssuance = async (requestBody, sessionObject, effectiveConfigurationId, sessionId = null) => {
   const requestedCredentialType = [effectiveConfigurationId];
   requestBody.vct = requestedCredentialType[0];
 
@@ -596,7 +635,14 @@ const handleImmediateCredentialIssuance = async (requestBody, sessionObject, eff
     getServerUrl(),
     format
   );
-  console.log("Credential issued: ", credential);
+
+  if (sessionId) {
+    logInfo(sessionId, "Credential generated successfully", {
+      credentialFormat: format,
+      credentialLength: credential.length,
+      effectiveConfigurationId
+    }).catch(() => {});
+  }
 
   // Generate notification_id for this issuance flow
   const notification_id = uuidv4();
@@ -684,7 +730,12 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
 
     res.json(tokenResponse);
   } catch (error) {
-    console.error("Token endpoint error:", error);
+    if (sessionId) {
+      logError(sessionId, "Token endpoint error", {
+        error: error.message,
+        stack: error.stack
+      }).catch(() => {});
+    }
     
     // Handle authorization_pending and slow_down errors
     if (error.errorCode === 'authorization_pending') {
@@ -735,7 +786,7 @@ sharedRouter.post("/credential", async (req, res) => {
     // Validate credential request BEFORE we do any session lookup so that
     // malformed requests can return the appropriate 4xx without requiring
     // a stored session (useful for unit tests and spec compliance checks).
-    const effectiveConfigurationId = validateCredentialRequest(requestBody);
+    const effectiveConfigurationId = validateCredentialRequest(requestBody, sessionId);
 
     // Get session after request validation
     const sessionData = await getSessionFromToken(token);
@@ -806,7 +857,7 @@ sharedRouter.post("/credential", async (req, res) => {
         // Store nonce value for deletion after successful signature verification
         const nonceValue = decodedPayloadForNonce.nonce;
         
-        const decodedProofHeader = validateProofJWT(requestBody.proofJwt, effectiveConfigurationId);
+        const decodedProofHeader = validateProofJWT(requestBody.proofJwt, effectiveConfigurationId, sessionId);
         
         // Always verify proof JWT, even if algorithm validation was skipped
         // If header validation was skipped, decode the header to get public key info
@@ -816,8 +867,8 @@ sharedRouter.post("/credential", async (req, res) => {
           throw new Error(`${ERROR_MESSAGES.INVALID_PROOF_MALFORMED}. Received: unable to decode JWT header, expected: valid JWT with header`);
         }
         
-        const publicKeyForProof = await resolvePublicKeyForProof(headerForVerification);
-        await verifyProofJWT(requestBody.proofJwt, publicKeyForProof, flowType);
+        const publicKeyForProof = await resolvePublicKeyForProof(headerForVerification, sessionId);
+        await verifyProofJWT(requestBody.proofJwt, publicKeyForProof, flowType, sessionId);
         
         // Delete the nonce after successful signature verification
         await deleteNonce(nonceValue);
@@ -868,7 +919,7 @@ sharedRouter.post("/credential", async (req, res) => {
       return res.status(202).json(response);
     } else {
       try {
-        const response = await handleImmediateCredentialIssuance(requestBody, sessionObject, effectiveConfigurationId);
+        const response = await handleImmediateCredentialIssuance(requestBody, sessionObject, effectiveConfigurationId, sessionId);
         if (sessionId) {
           await logInfo(sessionId, "Credential issued successfully", {
             effectiveConfigurationId,
@@ -1127,7 +1178,13 @@ sharedRouter.post("/credential_deferred", async (req, res) => {
       // notification_id: sessionObject.notification_id,
     });
   } catch (error) {
-    console.error("Deferred credential endpoint error:", error);
+    if (sessionId) {
+      logError(sessionId, "Deferred credential endpoint error", {
+        error: error.message,
+        stack: error.stack,
+        transaction_id: req.body.transaction_id
+      }).catch(() => {});
+    }
     return res.status(500).json({
       error: "server_error",
       error_description: error.message,
@@ -1336,26 +1393,48 @@ sharedRouter.get("/issueStatus", async (req, res) => {
 // ************* HELPER FUNCTIONS **********************************
 // *****************************************************************
 
-async function validatePKCE(session, code_verifier, stored_code_challenge) {
+async function validatePKCE(session, code_verifier, stored_code_challenge, sessionId = null) {
   if (!stored_code_challenge) {
-    console.log("PKCE validation failed. Received: no stored_code_challenge in session, expected: stored_code_challenge from authorization request");
+    if (sessionId) {
+      logError(sessionId, "PKCE validation failed: missing stored code challenge", {
+        reason: "no_stored_code_challenge",
+        hasCodeVerifier: !!code_verifier,
+        hasStoredChallenge: false
+      }).catch(() => {});
+    }
     return false;
   }
-  
+
   if (!code_verifier) {
-    console.log("PKCE validation failed. Received: no code_verifier in token request, expected: code_verifier parameter");
+    if (sessionId) {
+      logError(sessionId, "PKCE validation failed: missing code verifier", {
+        reason: "no_code_verifier",
+        hasCodeVerifier: false,
+        hasStoredChallenge: !!stored_code_challenge
+      }).catch(() => {});
+    }
     return false;
   }
 
   const tester = await base64UrlEncodeSha256(code_verifier);
   if (tester === stored_code_challenge) {
-    console.log("PKCE verification success");
+    if (sessionId) {
+      logInfo(sessionId, "PKCE verification successful", {
+        codeChallengeMatch: true
+      }).catch(() => {});
+    }
     return true;
   }
 
-  console.log("PKCE verification FAILED!!!");
-  console.log(`Received: challenge derived from code_verifier = ${tester}`);
-  console.log(`Expected: stored_code_challenge = ${stored_code_challenge}`);
+  if (sessionId) {
+    logError(sessionId, "PKCE verification failed: code challenge mismatch", {
+      reason: "challenge_mismatch",
+      receivedChallenge: tester,
+      expectedChallenge: stored_code_challenge,
+      codeVerifierPresent: true,
+      storedChallengePresent: true
+    }).catch(() => {});
+  }
   return false;
 }
 

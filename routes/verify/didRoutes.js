@@ -249,7 +249,6 @@ didRouter
       });
 
       if (walletNonce || walletMetadata) {
-        console.log(`Received from wallet: wallet_nonce=${walletNonce}, wallet_metadata=${walletMetadata}`);
         await logInfo(sessionId, "Received wallet data", {
           walletNonce,
           walletMetadata
@@ -283,7 +282,10 @@ didRouter
             await storeVPSession(sessionId, vpSession);
           }
         } catch (storageError) {
-          console.error("Failed to update session status after DID VP request processing failure:", storageError);
+          await logError(sessionId, "Failed to update session status after DID VP request processing failure", {
+            error: storageError.message,
+            stack: storageError.stack
+          }).catch(() => {});
         }
         return res.status(result.status).json({ error: result.error });
       }

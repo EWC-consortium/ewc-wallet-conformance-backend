@@ -1002,9 +1002,21 @@ describe('Shared Issuance Flows', () => {
     it('should handle deferred credential issuance successfully', async () => {
       const transactionId = 'test-transaction-id-' + uuidv4();
       const sessionId = 'test-session-id-' + uuidv4();
+
+      // Create a valid proof JWT for the test
+      const proofPayload = {
+        nonce: cryptoUtils.generateNonce(),
+        iss: 'test-wallet',
+        aud: process.env.SERVER_URL
+      };
+      const proofJwt = signProofJwt(proofPayload);
+
       const sessionObject = {
         status: 'pending',
-        requestBody: { test: 'data' },
+        requestBody: {
+          vct: 'test-cred-config',
+          proofs: { jwt: proofJwt }
+        },
         transaction_id: transactionId
       };
       
@@ -1019,8 +1031,8 @@ describe('Shared Issuance Flows', () => {
 
       // May succeed or fail depending on credential generation
       if (response.status === 200) {
-        expect(response.body).to.have.property('format');
         expect(response.body).to.have.property('credential');
+        expect(typeof response.body.credential).to.equal('string');
       } else {
         expect([400, 500]).to.include(response.status);
       }

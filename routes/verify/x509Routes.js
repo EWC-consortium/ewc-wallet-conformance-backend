@@ -292,7 +292,10 @@ x509Router
             await storeVPSession(sessionId, vpSession);
           }
         } catch (storageError) {
-          console.error("Failed to update session status after x509 VP request processing failure:", storageError);
+          await logError(sessionId, "Failed to update session status after x509 VP request processing failure", {
+            error: storageError.message,
+            stack: storageError.stack
+          }).catch(() => {});
         }
         return res.status(result.status).json({ error: result.error });
       }
@@ -342,7 +345,10 @@ x509Router
             await storeVPSession(sessionId, vpSession);
           }
         } catch (storageError) {
-          console.error("Failed to update session status after x509 VP request processing failure:", storageError);
+          await logError(sessionId, "Failed to update session status after x509 VP request processing failure", {
+            error: storageError.message,
+            stack: storageError.stack
+          }).catch(() => {});
         }
         return res.status(result.status).json({ error: result.error });
       }

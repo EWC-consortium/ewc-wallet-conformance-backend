@@ -57,8 +57,8 @@ export async function storePreAuthSession(sessionKey, sessionValue) {
   try {
     // Check if Redis client is connected
     if (!client.isReady) {
-      console.error("Redis client is not ready");
-      throw new Error("Redis client is not ready");
+      console.log("Redis not ready, skipping storePreAuthSession");
+      return;
     }
     
     const key = `pre-auth-sessions:${sessionKey}`;
@@ -74,8 +74,8 @@ export async function getPreAuthSession(sessionKey) {
   try {
     // Check if Redis client is connected
     if (!client.isReady) {
-      console.error("Redis client is not ready");
-      throw new Error("Redis client is not ready");
+      console.log("Redis not ready, skipping getPreAuthSession");
+      return null;
     }
     
     const key = `pre-auth-sessions:${sessionKey}`;
@@ -114,6 +114,10 @@ export async function getSessionKeyFromAccessToken(accessToken) {
 
 export async function storeCodeFlowSession(sessionKey, sessionValue) {
   try {
+    if (!client.isReady) {
+      console.log("Redis not ready, skipping storeCodeFlowSession");
+      return;
+    }
     const key = `code-flow-sessions:${sessionKey}`;
     const ttlInSeconds = 180; // 3 minutes
     await client.setEx(key, ttlInSeconds, JSON.stringify(sessionValue)); // Set with expiration
@@ -125,6 +129,10 @@ export async function storeCodeFlowSession(sessionKey, sessionValue) {
 // Function to retrieve a code-flow session from Redis
 export async function getCodeFlowSession(sessionKey) {
   try {
+    if (!client.isReady) {
+      console.log("Redis not ready, skipping getCodeFlowSession");
+      return null;
+    }
     const key = `code-flow-sessions:${sessionKey}`;
     const result = await client.get(key);
     if (result) {
@@ -189,6 +197,10 @@ export async function getSessionAccessToken(token) {
 
 export async function getDeferredSessionTransactionId(transaction_id) {
   try {
+    if (!client.isReady) {
+      console.log("Redis not ready, skipping getDeferredSessionTransactionId");
+      return null;
+    }
     const keys = await client.keys("code-flow-sessions:*"); // Get all session keys
     for (const key of keys) {
       const session = await client.get(key);
@@ -242,6 +254,10 @@ export async function getVPSession(sessionKey) {
 // Function to store a nonce in Redis cache
 export async function storeNonce(nonce, ttlInSeconds = 300) {
   try {
+    if (!client.isReady) {
+      console.log("Redis not ready, skipping storeNonce");
+      return;
+    }
     const key = `nonces:${nonce}`;
     await client.setEx(key, ttlInSeconds, "1"); // Store with expiration, value doesn't matter for nonce
     console.log(`Nonce stored under key: ${key} with TTL: ${ttlInSeconds}s`);
@@ -253,6 +269,10 @@ export async function storeNonce(nonce, ttlInSeconds = 300) {
 // Function to check if a nonce exists in Redis cache
 export async function checkNonce(nonce) {
   try {
+    if (!client.isReady) {
+      console.log("Redis not ready, skipping checkNonce");
+      return false;
+    }
     const key = `nonces:${nonce}`;
     const result = await client.exists(key);
     const exists = result === 1;
@@ -360,8 +380,8 @@ export async function storeSessionLog(sessionId, logLevel, message, metadata = {
   try {
     // Check if Redis client is connected
     if (!client.isReady) {
-      console.error("Redis client is not ready");
-      throw new Error("Redis client is not ready");
+      console.log("Redis not ready, skipping storeSessionLog");
+      return;
     }
     
     const key = `session-logs:${sessionId}`;

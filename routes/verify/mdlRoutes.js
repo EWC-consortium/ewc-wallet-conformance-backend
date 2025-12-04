@@ -106,7 +106,6 @@ mdlRouter
       });
 
       if (walletNonce || walletMetadata) {
-        console.log(`Received from wallet: wallet_nonce=${walletNonce}, wallet_metadata=${walletMetadata}`);
         await logInfo(sessionId, "Received wallet data", {
           walletNonce,
           walletMetadata
@@ -140,7 +139,10 @@ mdlRouter
             await storeVPSession(sessionId, vpSession);
           }
         } catch (storageError) {
-          console.error("Failed to update session status after mDL VP request processing failure:", storageError);
+          await logError(sessionId, "Failed to update session status after mDL VP request processing failure", {
+            error: storageError.message,
+            stack: storageError.stack
+          }).catch(() => {});
         }
         return res.status(result.status).json({ error: result.error });
       }
@@ -182,13 +184,11 @@ mdlRouter
       const { getVPSession } = await import("../../services/cacheServiceRedis.js");
       let storedSession = await getVPSession(sessionId);
       if (!storedSession) {
-        console.log(`No session found for UUID: ${sessionId}`);
         await logInfo(sessionId, "No existing session found, creating new one", {
           sessionId
         });
         const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
         await handleSessionCreation(sessionId, presentationDefinitionMdl, responseMode);
-        console.log(`New session created for UUID: ${sessionId}`);
         await logInfo(sessionId, "New mDL session created", {
           sessionId
         });
@@ -211,7 +211,6 @@ mdlRouter
         return res.status(result.status).json({ error: result.error });
       }
 
-      console.log("result.jwt", result.jwt);
       await logInfo(sessionId, "mDL VP request processed successfully (GET)", {
         jwtLength: result.jwt?.length
       });
@@ -259,7 +258,6 @@ mdlRouter.get("/VPrequest/dcapi/:id", async (req, res) => {
       response_mode: responseMode,
     });
 
-    console.log(`New session created for UUID: ${sessionId}`);
     await logInfo(sessionId, "mDL DC API session created", {
       sessionId,
       hasNonce: !!nonce,
@@ -284,7 +282,6 @@ mdlRouter.get("/VPrequest/dcapi/:id", async (req, res) => {
       return res.status(result.status).json({ error: result.error });
     }
 
-    console.log("result.jwt", result.jwt);
     await logInfo(sessionId, "mDL DC API request processed successfully", {
       jwtLength: result.jwt?.length
     });
