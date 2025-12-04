@@ -608,7 +608,7 @@ const handleImmediateCredentialIssuance = async (requestBody, sessionObject, eff
 };
 
 // Handle deferred credential issuance
-const handleDeferredCredentialIssuance = async (requestBody, sessionObject) => {
+const handleDeferredCredentialIssuance = async (requestBody, sessionObject, sessionKey, flowType) => {
   const transaction_id = generateNonce();
   const notification_id = uuidv4();
 
@@ -618,10 +618,10 @@ const handleDeferredCredentialIssuance = async (requestBody, sessionObject) => {
   sessionObject.isCredentialReady = false;
   sessionObject.attempt = 0;
 
-  if (sessionObject.flowType === "code") {
-    await storeCodeFlowSession('test-session-key', sessionObject);
+  if (flowType === "code") {
+    await storeCodeFlowSession(sessionKey, sessionObject);
   } else {
-    await storePreAuthSession('test-pre-auth-key', sessionObject);
+    await storePreAuthSession(sessionKey, sessionObject);
   }
 
   return {
@@ -859,7 +859,7 @@ sharedRouter.post("/credential", async (req, res) => {
 
     // Handle credential issuance
     if (sessionObject.isDeferred) {
-      const response = await handleDeferredCredentialIssuance(requestBody, sessionObject);
+      const response = await handleDeferredCredentialIssuance(requestBody, sessionObject, sessionKey, flowType);
       if (sessionId) {
         await logInfo(sessionId, "Deferred credential issuance initiated", {
           transaction_id: response.transaction_id
