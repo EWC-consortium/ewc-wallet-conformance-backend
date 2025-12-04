@@ -222,7 +222,6 @@ vpStandardRouter
         clientMetadata,
         serverURL: CONFIG.SERVER_URL,
         clientId: CONFIG.CLIENT_ID,
-        privateKey: null,
         kid: null,
         walletNonce,
         walletMetadata,
@@ -271,7 +270,6 @@ vpStandardRouter
         clientMetadata,
         serverURL: CONFIG.SERVER_URL,
         clientId: CONFIG.CLIENT_ID,
-        privateKey: null,
         kid: null,
       });
 

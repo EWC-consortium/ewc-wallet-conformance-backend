@@ -773,3 +773,10 @@ export function checkTokenStatus(decompressedBuffer, tokenIndex) {
   // In this example, 0 = valid, 1 = revoked.
   return bits[tokenIndex] === 0 //? "valid" : "revoked";
 }
+
+
+export function buildVerifierAttestationJwt(va_jwt) {
+  return {
+    va_jwt: va_jwt
+  }
+}

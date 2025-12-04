@@ -62,9 +62,8 @@ mdlRouter.get("/generateVPRequest", async (req, res) => {
       sessionId,
       responseMode,
       // presentationDefinition: presentationDefinitionMdl,
-     
+
       clientId: CONFIG.CLIENT_ID,
-      privateKey: null,
       clientMetadata,
       kid: null,
       serverURL: CONFIG.SERVER_URL,
@@ -117,7 +116,6 @@ mdlRouter
         clientMetadata,
         serverURL: CONFIG.SERVER_URL,
         clientId: CONFIG.CLIENT_ID,
-        privateKey: null,
         kid: null,
         walletNonce,
         walletMetadata,
@@ -199,7 +197,6 @@ mdlRouter
         clientMetadata,
         serverURL: CONFIG.SERVER_URL,
         clientId: CONFIG.CLIENT_ID,
-        privateKey: null,
         kid: null,
       });
 
@@ -269,7 +266,6 @@ mdlRouter.get("/VPrequest/dcapi/:id", async (req, res) => {
       clientMetadata: clientMetadataMDL,
       serverURL: CONFIG.SERVER_URL,
       clientId: CONFIG.CLIENT_ID,
-      privateKey: null,
       kid: null,
       audience: "https://self-issued.me/v2", // DC API audience
     });

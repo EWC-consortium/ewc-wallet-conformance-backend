@@ -61,7 +61,7 @@ testRouter.get('/generateVPRequest', async (req, res) => {
       client_id,
       response_uri,
       { test: 'definition' },
-      null,
+      null, // privateKey - only used for verifier_attestation scheme
       { test: 'metadata' },
       null,
       'http://localhost:3000',
@@ -182,7 +182,7 @@ testRouter.get('/generateVPRequestDCQL', async (req, res) => {
       client_id,
       response_uri,
       null,
-      null,
+      null, // privateKey - only used for verifier_attestation scheme
       { test: 'metadata' },
       null,
       'http://localhost:3000',

@@ -89,6 +89,7 @@ export const ERROR_MESSAGES = {
 export const CONFIG = {
   SERVER_URL: process.env.SERVER_URL || "http://localhost:3000",
   CLIENT_ID: "x509_san_dns:dss.aegean.gr",
+  VERIFIER_ATTESTATION_CLIENT_ID: "verifier_attestation:dss.aegean.gr",
   DEFAULT_RESPONSE_MODE: "direct_post",
   DEFAULT_NONCE_LENGTH: 16,
   QR_CONFIG: {
@@ -731,12 +732,12 @@ export function loadConfigurationFiles(presentationDefPath, clientMetadataPath, 
  * @returns {Promise<Object>} - The VP request result
  */
 export async function generateVPRequest(params) {
+  // update this for verifier attestation to include in the jose header the verifier attestation jwt
   const {
     sessionId,
     responseMode,
     presentationDefinition,
     clientId,
-    privateKey,
     clientMetadata,
     kid,
     serverURL,
@@ -749,7 +750,6 @@ export async function generateVPRequest(params) {
   await logInfo(sessionId, "Starting VP request generation in routeUtils", {
     responseMode,
     clientId,
-    hasPrivateKey: !!privateKey,
     hasDcqlQuery: !!dcqlQuery,
     hasTransactionData: !!transactionData,
     usePostMethod,
@@ -800,30 +800,26 @@ export async function generateVPRequest(params) {
   await storeVPSessionData(sessionId, sessionData);
   await logInfo(sessionId, "VP session data stored successfully");
 
-  // Build VP request JWT if private key is provided
-  if (privateKey) {
-    await logDebug(sessionId, "Building VP request JWT with private key");
-    await buildVpRequestJWT(
-      clientId,
-      responseUri,
-      presentationDefinition,
-      privateKey,
-      clientMetadata,
-      kid,
-      serverURL,
-      "vp_token",
-      nonce,
-      dcqlQuery,
-      transactionData ? [transactionData] : null,
-      responseMode,
-      undefined,
-      undefined,
-      state
-    );
-    await logInfo(sessionId, "VP request JWT built successfully");
-  } else {
-    await logDebug(sessionId, "No private key provided, skipping JWT build");
-  }
+  // Build VP request JWT (key is determined from client_id scheme)
+  await logDebug(sessionId, "Building VP request JWT");
+  await buildVpRequestJWT(
+    clientId,
+    responseUri,
+    presentationDefinition,
+    null, // privateKey - only used for verifier_attestation scheme
+    clientMetadata,
+    kid,
+    serverURL,
+    "vp_token",
+    nonce,
+    dcqlQuery,
+    transactionData ? [transactionData] : null,
+    responseMode,
+    undefined,
+    undefined,
+    state
+  );
+  await logInfo(sessionId, "VP request JWT built successfully");
 
   // Create OpenID4VP request URL
   const requestUri = `${serverURL}${routePath}/${sessionId}`;
@@ -857,7 +853,6 @@ export async function processVPRequest(params) {
     clientMetadata,
     serverURL,
     clientId,
-    privateKey,
     kid,
     audience,
     walletNonce,
@@ -866,7 +861,6 @@ export async function processVPRequest(params) {
 
   await logInfo(sessionId, "Starting VP request processing in routeUtils", {
     clientId,
-    hasPrivateKey: !!privateKey,
     hasAudience: !!audience,
     hasWalletNonce: !!walletNonce,
     hasWalletMetadata: !!walletMetadata
@@ -903,7 +897,7 @@ export async function processVPRequest(params) {
       clientId,
       responseUri,
       vpSession.presentation_definition,
-      privateKey,
+      null, // privateKey - only used for verifier_attestation scheme
       clientMetadata,
       kid,
       serverURL,
@@ -915,7 +909,7 @@ export async function processVPRequest(params) {
       audience,
       walletNonce,
       walletMetadata,
-      null, // va_jwt - Verifier Attestation JWT (not used in this flow)
+      null, // va_jwt - Verifier Attestation JWT (not used in response processing)
       vpSession.state
     );
     

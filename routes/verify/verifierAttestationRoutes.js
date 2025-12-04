@@ -19,29 +19,11 @@ import {
   clearSessionContext,
 } from "../../services/cacheServiceRedis.js";
 
-const x509Router = express.Router();
+const vAttestationRouter = express.Router();
 
-/**
- * SESSION-BASED LOGGING SYSTEM
- * 
- * This router implements session-based logging that captures all logs/warnings
- * for each session ID and stores them in Redis cache.
- * 
- * Usage:
- * 1. All endpoints automatically log their activities with session context
- * 2. Get logs: GET /x509/logs/:sessionId
- * 3. Clear logs: DELETE /x509/logs/:sessionId
- * 4. To enable console interception globally, call enableConsoleInterception()
- * 
- * Features:
- * - Automatic session context detection from query params or URL params
- * - Structured logging with timestamps and metadata
- * - 30-minute TTL for log entries
- * - Maximum 100 log entries per session to prevent memory issues
- */
 
 // Middleware to set session context for console interception
-x509Router.use((req, res, next) => {
+vAttestationRouter.use((req, res, next) => {
   const sessionId = req.query.sessionId || req.params.sessionId || req.params.id;
   if (sessionId) {
     setSessionContext(sessionId);
@@ -62,7 +44,7 @@ const { presentationDefinition, clientMetadata } = loadConfigurationFiles(
 /**
  * Generate VP request with presentation definition
  */
-x509Router.get("/generateVPRequest", async (req, res) => {
+vAttestationRouter.get("/va/generateVPRequest", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
@@ -76,12 +58,12 @@ x509Router.get("/generateVPRequest", async (req, res) => {
       sessionId,
       responseMode,
       presentationDefinition,
-      clientId: CONFIG.CLIENT_ID,
+      clientId: CONFIG.VERIFIER_ATTESTATION_CLIENT_ID,
       clientMetadata,
       kid: null,
       serverURL: CONFIG.SERVER_URL,
       usePostMethod: true,
-      routePath: "/x509/x509VPrequest",
+      routePath: "/verifierAttestationVPrequest",
     });
 
     await logInfo(sessionId, "VP request generated successfully", { result });
@@ -96,7 +78,7 @@ x509Router.get("/generateVPRequest", async (req, res) => {
 /**
  * Generate VP request for GET method
  */
-x509Router.get("/generateVPRequestGet", async (req, res) => {
+vAttestationRouter.get("/va/generateVPRequestGet", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
@@ -110,12 +92,12 @@ x509Router.get("/generateVPRequestGet", async (req, res) => {
       sessionId,
       responseMode,
       presentationDefinition,
-      clientId: CONFIG.CLIENT_ID,
+      clientId: CONFIG.VERIFIER_ATTESTATION_CLIENT_ID,
       clientMetadata,
       kid: null,
       serverURL: CONFIG.SERVER_URL,
       usePostMethod: false,
-      routePath: "/x509/x509VPrequest",
+      routePath: "/verifierAttestationVPrequest",
     });
 
     await logInfo(sessionId, "VP request generated successfully (GET method)", { result });
@@ -130,7 +112,7 @@ x509Router.get("/generateVPRequestGet", async (req, res) => {
 /**
  * Generate VP request with DCQL query
  */
-x509Router.get("/generateVPRequestDCQL", async (req, res) => {
+vAttestationRouter.get("/va/generateVPRequestDCQL", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
@@ -144,13 +126,13 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
       sessionId,
       responseMode,
       presentationDefinition: null,
-      clientId: CONFIG.CLIENT_ID,
+      clientId: CONFIG.VERIFIER_ATTESTATION_CLIENT_ID,
       clientMetadata,
       kid: null,
       serverURL: CONFIG.SERVER_URL,
       dcqlQuery: DEFAULT_DCQL_QUERY,
       usePostMethod: true,
-      routePath: "/x509/x509VPrequest",
+      routePath: "/verifierAttestationVPrequest",
     });
 
     await logInfo(sessionId, "VP request with DCQL generated successfully", { result });
@@ -165,7 +147,7 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
 /**
  * Generate VP request with DCQL query for GET method
  */
-x509Router.get("/generateVPRequestDCQLGET", async (req, res) => {
+vAttestationRouter.get("/va/generateVPRequestDCQLGET", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
@@ -179,13 +161,13 @@ x509Router.get("/generateVPRequestDCQLGET", async (req, res) => {
       sessionId,
       responseMode,
       presentationDefinition: null,
-      clientId: CONFIG.CLIENT_ID,
+      clientId: CONFIG.VERIFIER_ATTESTATION_CLIENT_ID,
       clientMetadata,
       kid: null,
       serverURL: CONFIG.SERVER_URL,
       dcqlQuery: DEFAULT_DCQL_QUERY,
       usePostMethod: false,
-      routePath: "/x509/x509VPrequest",
+      routePath: "/verifierAttestationVPrequest",
     });
 
     await logInfo(sessionId, "VP request with DCQL generated successfully (GET method)", { result });
@@ -200,7 +182,7 @@ x509Router.get("/generateVPRequestDCQLGET", async (req, res) => {
 /**
  * Generate VP request with transaction data
  */
-x509Router.get("/generateVPRequestTransaction", async (req, res) => {
+vAttestationRouter.get("/va/generateVPRequestTransaction", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
@@ -218,14 +200,14 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
       sessionId,
       responseMode,
       presentationDefinition: null,
-      clientId: CONFIG.CLIENT_ID,
+      clientId: CONFIG.VERIFIER_ATTESTATION_CLIENT_ID,
       clientMetadata,
       kid: null,
       serverURL: CONFIG.SERVER_URL,
       dcqlQuery: DEFAULT_DCQL_QUERY,
       transactionData: base64UrlEncodedTxData,
       usePostMethod: true,
-      routePath: "/x509/x509VPrequest",
+      routePath: "/verifierAttestationVPrequest",
     });
 
     await logInfo(sessionId, "VP request with transaction data generated successfully", { result });
@@ -240,15 +222,15 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
 /**
  * Request URI endpoint (handles both POST and GET)
  */
-x509Router
-  .route("/x509VPrequest/:id")
+vAttestationRouter
+  .route("/verifierAttestationVPrequest/:id")
   .post(express.urlencoded({ extended: true }), async (req, res) => {
     const sessionId = req.params.id;
     try {
       const { wallet_nonce: walletNonce, wallet_metadata: walletMetadata } = req.body;
 
-      await logInfo(sessionId, "Processing POST VP request", { 
-        endpoint: "POST /x509VPrequest/:id",
+      await logInfo(sessionId, "Processing POST VP request", {
+        endpoint: "POST /verifierAttestationVPrequest/:id",
         hasWalletNonce: !!walletNonce,
         hasWalletMetadata: !!walletMetadata
       });
@@ -264,7 +246,7 @@ x509Router
         sessionId,
         clientMetadata,
         serverURL: CONFIG.SERVER_URL,
-        clientId: CONFIG.CLIENT_ID,
+        clientId: CONFIG.VERIFIER_ATTESTATION_CLIENT_ID,
         kid: null,
         walletNonce,
         walletMetadata,
@@ -310,15 +292,15 @@ x509Router
   .get(async (req, res) => {
     try {
       const sessionId = req.params.id;
-      
-      await logInfo(sessionId, "Processing GET VP request", { 
-        endpoint: "GET /x509VPrequest/:id" 
+
+      await logInfo(sessionId, "Processing GET VP request", {
+        endpoint: "GET /verifierAttestationVPrequest/:id"
       });
       const result = await processVPRequest({
         sessionId,
         clientMetadata,
         serverURL: CONFIG.SERVER_URL,
-        clientId: CONFIG.CLIENT_ID,
+        clientId: CONFIG.VERIFIER_ATTESTATION_CLIENT_ID,
         kid: null,
       });
 
@@ -360,4 +342,4 @@ x509Router
     }
   });
 
-export default x509Router; 
+export default vAttestationRouter; 

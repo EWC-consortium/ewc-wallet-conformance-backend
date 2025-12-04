@@ -1711,7 +1711,7 @@ verifierRouter.get("/vpRequest/:type/:id", async (req, res) => {
     clientId,
     response_uri,
     presentationDefinition,
-    null, // privateKey will be loaded in buildVpRequestJWT
+    null, // privateKey - only used for verifier_attestation scheme
     "redirect_uri", // client_id_scheme
     client_metadata,
     null, // kid

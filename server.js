@@ -18,6 +18,7 @@ import mdlRouter from "./routes/verify/mdlRoutes.js";
 import loggingRouter from "./routes/loggingRoutes.js";
 import vciStandardRouter from "./routes/issue/vciStandardRoutes.js";
 import vpStandardRouter from "./routes/verify/vpStandardRoutes.js";
+import vAttestationRouter from "./routes/verify/verifierAttestationRoutes.js";
 import bodyParser from "body-parser"; // Body parser middleware
 import {
   enableConsoleInterception,
@@ -169,7 +170,7 @@ app.use("/mdl", mdlRouter);
 app.use("/", loggingRouter);
 app.use("/", vciStandardRouter);
 app.use("/", vpStandardRouter);
-
+app.use("/", vAttestationRouter);
 // Error handler for validation errors
 app.use((err, req, res, next) => {
   // Format error response

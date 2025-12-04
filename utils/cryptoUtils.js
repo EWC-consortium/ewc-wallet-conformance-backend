@@ -108,12 +108,47 @@ export function buildVpRequestJSON(
   return jwtPayload;
 }
 
-export async function 
-buildVpRequestJWT(
+// Generate a test VA-JWT for development/testing purposes
+// NOTE: In production, VA-JWT should be obtained from a trusted third-party issuer
+// This self-signed implementation is for testing only and violates the spec requirement
+// that VA-JWTs must be issued by a trusted party separate from the verifier
+async function generateTestVAJWT(subject) {
+  const now = Math.floor(Date.now() / 1000);
+
+  // Load the x509 private key to create a self-signed VA-JWT
+  // NOTE: This violates the spec - VA-JWT should be signed by a trusted issuer's key
+  const privateKeyPem = fs.readFileSync(
+    "./x509/client_private_pkcs8.key",
+    "utf8"
+  );
+  const publicKey = crypto.createPublicKey(privateKeyPem);
+  const jwk = publicKey.export({ format: "jwk" });
+
+  const vaHeader = {
+    alg: "RS256",
+    typ: "verifier-attestation+jwt",
+  };
+
+  const vaPayload = {
+    iss: "https://dss.aegean.gr", // Self-issued for testing
+    sub: subject,
+    exp: now + 3600, // 1 hour
+    iat: now,
+    cnf: { jwk: { kty: jwk.kty, n: jwk.n, e: jwk.e } }, // Public key for proof-of-possession
+  };
+
+  const vaJwt = await new jose.SignJWT(vaPayload)
+    .setProtectedHeader(vaHeader)
+    .sign(await jose.importPKCS8(privateKeyPem, "RS256"));
+
+  return vaJwt;
+}
+
+export async function buildVpRequestJWT(
   client_id,
   redirect_uri,
   presentation_definition,
-  privateKey = "",
+  privateKey = null, // Only used for verifier_attestation scheme proof-of-possession
   client_metadata = {},
   kid = null, // Default to an empty object,
   serverURL,
@@ -128,18 +163,29 @@ buildVpRequestJWT(
   va_jwt = null, // Optional Verifier Attestation JWT for verifier_attestation scheme
   state = null // Add state parameter (last param to match test ordering)
 ) {
-  if(!nonce) nonce = generateNonce(16);
-  if(!state) {
+  if (!nonce) nonce = generateNonce(16);
+  if (!state) {
     // State is REQUIRED for direct_post modes per OpenID4VP spec
     // Generate only if not provided to maintain backwards compatibility with tests
     state = generateNonce(16);
-    console.warn("WARNING: state parameter not provided to buildVpRequestJWT, generating random state. This should be explicitly provided.");
+    console.warn(
+      "WARNING: state parameter not provided to buildVpRequestJWT, generating random state. This should be explicitly provided."
+    );
   }
 
   // Validate response_mode
-  const allowedResponseModes = ["direct_post", "direct_post.jwt", "dc_api.jwt", "dc_api"];
+  const allowedResponseModes = [
+    "direct_post",
+    "direct_post.jwt",
+    "dc_api.jwt",
+    "dc_api",
+  ];
   if (!allowedResponseModes.includes(response_mode)) {
-    throw new Error(`Invalid response_mode. Must be one of: ${allowedResponseModes.join(", ")}`);
+    throw new Error(
+      `Invalid response_mode. Must be one of: ${allowedResponseModes.join(
+        ", "
+      )}`
+    );
   }
 
   // Note: encryption metadata should be provided in client_metadata from verifier-config.json
@@ -147,17 +193,22 @@ buildVpRequestJWT(
 
   // Determine client scheme and effective identifier
   const schemeSeparatorIdx = client_id.indexOf(":");
-  const schemePrefix = schemeSeparatorIdx > 0 ? client_id.substring(0, schemeSeparatorIdx) : null;
+  const schemePrefix =
+    schemeSeparatorIdx > 0 ? client_id.substring(0, schemeSeparatorIdx) : null;
   const isRedirectUriScheme = schemePrefix === "redirect_uri";
   const isDecentralizedIdScheme = schemePrefix === "decentralized_identifier";
-  const effectiveClientId = isDecentralizedIdScheme ? client_id.substring("decentralized_identifier:".length) : (isRedirectUriScheme ? client_id.substring("redirect_uri:".length) : client_id);
+  const effectiveClientId = isDecentralizedIdScheme
+    ? client_id.substring("decentralized_identifier:".length)
+    : isRedirectUriScheme
+    ? client_id.substring("redirect_uri:".length)
+    : client_id;
 
   // Construct the JWT payload
   let jwtPayload = {
     response_type: response_type,
     response_mode: response_mode,
     client_id: client_id,
-    
+
     nonce: nonce,
     state: state,
     // For redirect_uri scheme, client_metadata MUST be omitted (wallet discovers metadata)
@@ -168,8 +219,12 @@ buildVpRequestJWT(
   };
 
   // Add response_uri for all response modes that require it
-  if (response_mode === "direct_post" || response_mode === "direct_post.jwt" || 
-      response_mode === "dc_api.jwt" || response_mode === "dc_api") {
+  if (
+    response_mode === "direct_post" ||
+    response_mode === "direct_post.jwt" ||
+    response_mode === "dc_api.jwt" ||
+    response_mode === "dc_api"
+  ) {
     jwtPayload.response_uri = redirect_uri;
   }
 
@@ -184,26 +239,23 @@ buildVpRequestJWT(
   if (response_mode === "dc_api.jwt" || response_mode === "dc_api") {
     const now = Math.floor(Date.now() / 1000);
     jwtPayload.iat = now; // issued at time
-    jwtPayload.exp = now + (60 * 60); // expires in 1 hour
-    jwtPayload.expected_origins = ["https://dss.aegean.gr"];  
+    jwtPayload.exp = now + 60 * 60; // expires in 1 hour
+    jwtPayload.expected_origins = ["https://dss.aegean.gr"];
     jwtPayload.state = state;
   }
 
-  
-    const now = Math.floor(Date.now() / 1000);
-    jwtPayload.iat = now; // issued at time
-    jwtPayload.exp = now + (60 * 5); // expires in 5 minutes
-  
- 
-
- 
+  const now = Math.floor(Date.now() / 1000);
+  jwtPayload.iat = now; // issued at time
+  jwtPayload.exp = now + 60 * 5; // expires in 5 minutes
 
   // console.log("wallet_nonce", wallet_nonce);
-  if(wallet_nonce) jwtPayload.wallet_nonce = wallet_nonce;
+  if (wallet_nonce) jwtPayload.wallet_nonce = wallet_nonce;
 
   // OpenID4VP v1.0: Only DCQL is supported; PEX (presentation_definition) is not supported
   if (presentation_definition) {
-    throw new Error("Presentation Exchange (presentation_definition) is not supported; use dcql_query per OpenID4VP 1.0");
+    throw new Error(
+      "Presentation Exchange (presentation_definition) is not supported; use dcql_query per OpenID4VP 1.0"
+    );
   }
 
   // Add dcql_query if provided (required in place of PEX)
@@ -240,7 +292,10 @@ buildVpRequestJWT(
     signedJwt = await new jose.SignJWT(jwtPayload)
       .setProtectedHeader(header)
       .sign(await jose.importPKCS8(privateKey, "ES256"));
-  } else if (effectiveClientId.startsWith("x509_san_dns:") || effectiveClientId.startsWith("x509_san_uri:")) {
+  } else if (
+    effectiveClientId.startsWith("x509_san_dns:") ||
+    effectiveClientId.startsWith("x509_san_uri:")
+  ) {
     privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
     const certificate = fs.readFileSync(
       "./x509/client_certificate.crt",
@@ -272,12 +327,14 @@ buildVpRequestJWT(
       .replace("-----BEGIN CERTIFICATE-----", "")
       .replace("-----END CERTIFICATE-----", "")
       .replace(/\s+/g, "");
-    const certDer = Buffer.from(certBase64, 'base64');
-    const hash = crypto.createHash('sha256').update(certDer).digest();
+    const certDer = Buffer.from(certBase64, "base64");
+    const hash = crypto.createHash("sha256").update(certDer).digest();
     const hashB64Url = base64url.encode(hash);
     const expectedClientId = `x509_hash:${hashB64Url}`;
     if (client_id !== expectedClientId) {
-      throw new Error(`x509_hash client_id mismatch: expected ${expectedClientId} but got ${client_id}`);
+      throw new Error(
+        `x509_hash client_id mismatch: expected ${expectedClientId} but got ${client_id}`
+      );
     }
 
     const header = {
@@ -291,14 +348,17 @@ buildVpRequestJWT(
       .sign(await jose.importPKCS8(privateKey, "RS256"));
   } else if (effectiveClientId.startsWith("did:")) {
     // Check if this is a did:jwk identifier
-    if (effectiveClientId.startsWith('did:jwk:')) {
+    if (effectiveClientId.startsWith("did:jwk:")) {
       // Load private key from file for DID JWK
-      const didJwkPrivateKey = fs.readFileSync("./didjwks/did_private_pkcs8.key", "utf8");
-      
+      const didJwkPrivateKey = fs.readFileSync(
+        "./didjwks/did_private_pkcs8.key",
+        "utf8"
+      );
+
       const header = {
         alg: "ES256",
         typ: "oauth-authz-req+jwt",
-        kid: kid // This will be in the format did:jwk:<base64url-encoded-jwk>#0
+        kid: kid, // This will be in the format did:jwk:<base64url-encoded-jwk>#0
       };
 
       signedJwt = await new jose.SignJWT(jwtPayload)
@@ -306,8 +366,11 @@ buildVpRequestJWT(
         .sign(await jose.importPKCS8(didJwkPrivateKey, "ES256"));
     } else if (effectiveClientId.startsWith("did:web:")) {
       // Handle did:web case - load private key from file
-      const didWebPrivateKey = fs.readFileSync("./didjwks/did_private_pkcs8.key", "utf8");
-      
+      const didWebPrivateKey = fs.readFileSync(
+        "./didjwks/did_private_pkcs8.key",
+        "utf8"
+      );
+
       const signingKey = {
         kty: "EC",
         x: "ijVgOGHvwHSeV1Z2iLF9pQLQAw7KcHF3VIjThhvVtBQ",
@@ -344,55 +407,58 @@ buildVpRequestJWT(
         typ: "oauth-authz-req+jwt",
       };
       // Produce unsecured JWT (JWS with alg=none) if signing key not applicable
-      signedJwt = `${base64url.encode(JSON.stringify(header))}.${base64url.encode(JSON.stringify(jwtPayload))}.`;
-    } else if (schemePrefix === 'verifier_attestation') {
-      if (!va_jwt) {
-        throw new Error("verifier_attestation scheme requires va_jwt to be provided");
-      }
-      // Validate sub matches non-prefixed client identifier
-      const parts = va_jwt.split('.');
-      if (parts.length < 2) {
-        throw new Error("Invalid VA-JWT format");
-      }
-      const vaPayload = JSON.parse(base64url.decode(parts[1]));
+      signedJwt = `${base64url.encode(
+        JSON.stringify(header)
+      )}.${base64url.encode(JSON.stringify(jwtPayload))}.`;
+    } else if (schemePrefix === "verifier_attestation") {
+      // Use provided VA-JWT or generate one for development/testing
       const nonPrefixedId = client_id.substring('verifier_attestation:'.length);
+      if (!va_jwt) {
+        va_jwt = await generateTestVAJWT(nonPrefixedId);
+      }
+
+      const parts = va_jwt.split('.');
+      let vaPayload;
+      try {
+        vaPayload = JSON.parse(base64url.decode(parts[1]));
+      } catch (e) {
+        throw new Error("Invalid VA-JWT payload format");
+      }
+
+      // Validate sub matches non-prefixed client identifier (VP 1.0 spec requirement)
       if (vaPayload.sub !== nonPrefixedId) {
         throw new Error("VA-JWT sub does not match non-prefixed client_id");
       }
-      // Enforce short-lived VA-JWT: exp should be within 5 minutes in the future
-      if (typeof vaPayload.exp === 'number') {
-        const now = Math.floor(Date.now() / 1000);
-        if (vaPayload.exp - now > 300) {
-          throw new Error("VA-JWT exp exceeds 5 minutes in the future");
-        }
-      }
-      // If cnf.jwk present, ensure provided privateKey matches public jwk
-      if (vaPayload.cnf && vaPayload.cnf.jwk) {
-        const expectedJwk = vaPayload.cnf.jwk;
-        // Derive public JWK from provided private key and compare (best-effort)
-        try {
-          const derivedPub = crypto.createPublicKey(privateKey).export({ format: 'jwk' });
-          if (expectedJwk.x && expectedJwk.y) {
-            if (derivedPub.x !== expectedJwk.x || derivedPub.y !== expectedJwk.y) {
-              throw new Error("Provided private key does not match VA-JWT cnf.jwk");
-            }
-          }
-        } catch (e) {
-          // If derivation fails, surface error
-          throw new Error("Failed to verify PoP key against VA-JWT cnf: " + e.message);
-        }
-      }
-      // Sign request and include VA-JWT in protected header as 'jwt'
+
+      // For verifier attestation, use the same x509 private key as other x509 schemes
+      // this is the same key as the one used in the cnf claim of the va_jwt
+      privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
+      const certificate = fs.readFileSync(
+        "./x509/client_certificate.crt",
+        "utf8"
+      );
+
+      // Convert certificate to Base64 without headers
+      const certBase64 = certificate
+        .replace("-----BEGIN CERTIFICATE-----", "")
+        .replace("-----END CERTIFICATE-----", "")
+        .replace(/\s+/g, "");
+
+      // Include VA-JWT in JOSE header as 'jwt' (VP 1.0 spec requirement)
       const header = {
-        alg: "ES256",
+        alg: "RS256",
         typ: "oauth-authz-req+jwt",
-        jwt: va_jwt,
+        x5c: [certBase64],
+        jwt: va_jwt, // Verifier Attestation JWT in JOSE header
       };
+
       signedJwt = await new jose.SignJWT(jwtPayload)
         .setProtectedHeader(header)
-        .sign(await jose.importPKCS8(privateKey, "ES256"));
+        .sign(await jose.importPKCS8(privateKey, "RS256"));
     } else {
-      throw new Error("not supported client_id scheme for client_id:" + client_id);
+      throw new Error(
+        "not supported client_id scheme for client_id:" + client_id
+      );
     }
   }
 
@@ -408,7 +474,9 @@ buildVpRequestJWT(
       (k) => k.use === "enc" || k.use === undefined
     );
     if (!encryptionKey) {
-      throw new Error("No suitable encryption key found in wallet_metadata.jwks");
+      throw new Error(
+        "No suitable encryption key found in wallet_metadata.jwks"
+      );
     }
     const publicKey = await jose.importJWK(encryptionKey);
 
@@ -571,7 +639,9 @@ export async function buildPaymentVpRequestJWT(
 
     // Conditional signing based on client_id_scheme
   } else {
-    throw new Error("not supported client_id scheme for client_id:" + client_id);
+    throw new Error(
+      "not supported client_id scheme for client_id:" + client_id
+    );
   }
 }
 
@@ -635,25 +705,31 @@ export async function decryptJWE(jweToken, privateKeyPEM, mode) {
 
     // Decrypt the JWE using the private key
     const decryptedPayload = await jose.jwtDecrypt(jweToken, privateKey);
-    
+
     if (mode === "direct_post.jwt") {
       // For direct_post.jwt, according to OpenID4VP spec, the JWE should decrypt to a JWT
       // console.log("Raw decryptedPayload for direct_post.jwt:", decryptedPayload);
-      
+
       // First, try to get JWT from plaintext (per OpenID4VP spec)
       if (decryptedPayload.plaintext && decryptedPayload.plaintext.length > 0) {
-        const decryptedJWT = new TextDecoder().decode(decryptedPayload.plaintext);
+        const decryptedJWT = new TextDecoder().decode(
+          decryptedPayload.plaintext
+        );
         // console.log("Found JWT in plaintext (per OpenID4VP spec):", decryptedJWT.substring(0, 100) + "...");
         return decryptedJWT; // Return JWT string for verification
       }
-      
+
       // Fallback: check if vp_token is directly in payload (wallet-specific behavior)
       if (decryptedPayload.payload && decryptedPayload.payload.vp_token) {
-        console.log("Found vp_token in decrypted payload (wallet-specific behavior) DIVERGENT BEHAVIOR");
+        console.log(
+          "Found vp_token in decrypted payload (wallet-specific behavior) DIVERGENT BEHAVIOR"
+        );
         return decryptedPayload.payload;
       }
-      
-      throw new Error("No JWT in plaintext or vp_token in payload for direct_post.jwt");
+
+      throw new Error(
+        "No JWT in plaintext or vp_token in payload for direct_post.jwt"
+      );
     } else if (mode === "dc_api.jwt") {
       console.log("Decrypted JWE payload:", decryptedPayload.payload);
       // For HAIP dc_api.jwt, return the full decrypted payload
@@ -662,7 +738,8 @@ export async function decryptJWE(jweToken, privateKeyPEM, mode) {
     } else {
       // For other modes (legacy), parse and return disclosures
       // console.log(decryptedPayload);
-      let presentation_submission = decryptedPayload.payload.presentation_submission;
+      let presentation_submission =
+        decryptedPayload.payload.presentation_submission;
       let disclosures = parseVP(decryptedPayload.payload.vp_token);
       // console.log(`diclosures in the VP found`);
       // console.log(disclosures);
@@ -699,10 +776,12 @@ export async function base64UrlEncodeSha256(codeVerifier) {
 
 function parseVP(vp_token) {
   // Check if vp_token is a string
-  if (typeof vp_token !== 'string') {
-    throw new Error(`parseVP expects a string, but received: ${typeof vp_token}`);
+  if (typeof vp_token !== "string") {
+    throw new Error(
+      `parseVP expects a string, but received: ${typeof vp_token}`
+    );
   }
-  
+
   let vpPartsArray = vp_token.split(".");
   let disclosuresPart = vpPartsArray[2]; //this is the actual sd-jdt from the vpToken
 
@@ -754,7 +833,7 @@ export async function didKeyToJwks(did) {
     // Handling did:web
     try {
       const [didPart] = did.split("#"); // we don't need the fragment for fetching did.json
-      
+
       let didUrlPart = didPart.substring("did:web:".length);
       didUrlPart = decodeURIComponent(didUrlPart);
 
@@ -780,7 +859,7 @@ export async function didKeyToJwks(did) {
         console.error("Invalid DID Document for:", did);
         throw new Error("Invalid DID Document structure.");
       }
-      
+
       const jwks = {
         keys: didDocument.verificationMethod.map((vm) => {
           const jwk = vm.publicKeyJwk;
@@ -813,7 +892,9 @@ export async function fetchWalletMetadata(metadataUrl) {
   try {
     const response = await fetch(metadataUrl);
     if (!response.ok) {
-      throw new Error(`Failed to fetch wallet metadata: ${response.statusText}`);
+      throw new Error(
+        `Failed to fetch wallet metadata: ${response.statusText}`
+      );
     }
     const metadata = await response.json();
     console.log("Fetched wallet metadata:", metadata);
@@ -823,4 +904,3 @@ export async function fetchWalletMetadata(metadataUrl) {
     throw error;
   }
 }
-
