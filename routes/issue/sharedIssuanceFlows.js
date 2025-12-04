@@ -480,7 +480,11 @@ const getSessionFromToken = async (token) => {
 };
 
 // Handle pre-authorized code flow
-const handlePreAuthorizedCodeFlow = async (preAuthorizedCode, authorizationDetails) => {
+const handlePreAuthorizedCodeFlow = async (
+  preAuthorizedCode,
+  authorizationDetails,
+  dpopCnf = null
+) => {
   const existingPreAuthSession = await getPreAuthSession(preAuthorizedCode);
   
   if (!existingPreAuthSession) {
@@ -509,7 +513,11 @@ const handlePreAuthorizedCodeFlow = async (preAuthorizedCode, authorizationDetai
   const parsedAuthDetails = parseAuthorizationDetails(authorizationDetails);
   const chosenCredentialConfigurationId = parsedAuthDetails?.[0]?.credential_configuration_id;
 
-  const generatedAccessToken = buildAccessToken(getServerUrl(), loadCryptographicKeys().privateKey);
+  const generatedAccessToken = buildAccessToken(
+    getServerUrl(),
+    loadCryptographicKeys().privateKey,
+    dpopCnf
+  );
   const cNonceForSession = generateNonce();
 
   // Update session
@@ -525,7 +533,7 @@ const handlePreAuthorizedCodeFlow = async (preAuthorizedCode, authorizationDetai
   const tokenResponse = {
     access_token: generatedAccessToken,
     refresh_token: generateRefreshToken(),
-    token_type: "bearer",
+    token_type: dpopCnf ? "DPoP" : "bearer",
     expires_in: TOKEN_EXPIRES_IN,
   };
 
@@ -538,7 +546,12 @@ const handlePreAuthorizedCodeFlow = async (preAuthorizedCode, authorizationDetai
 };
 
 // Handle authorization code flow
-const handleAuthorizationCodeFlow = async (code, code_verifier, authorizationDetails) => {
+const handleAuthorizationCodeFlow = async (
+  code,
+  code_verifier,
+  authorizationDetails,
+  dpopCnf = null
+) => {
   const issuanceSessionId = await getSessionKeyAuthCode(code);
   
   if (!issuanceSessionId) {
@@ -580,7 +593,11 @@ const handleAuthorizationCodeFlow = async (code, code_verifier, authorizationDet
 
   const parsedAuthDetails = parseAuthorizationDetails(authorizationDetails);
   const chosenCredentialConfigurationId = parsedAuthDetails?.[0]?.credential_configuration_id;
-  const generatedAccessToken = buildAccessToken(getServerUrl(), loadCryptographicKeys().privateKey);
+  const generatedAccessToken = buildAccessToken(
+    getServerUrl(),
+    loadCryptographicKeys().privateKey,
+    dpopCnf
+  );
   const cNonceForSession = generateNonce();
 
   // Update session
@@ -596,7 +613,7 @@ const handleAuthorizationCodeFlow = async (code, code_verifier, authorizationDet
   const tokenResponse = {
     access_token: generatedAccessToken,
     refresh_token: generateRefreshToken(),
-    token_type: "Bearer",
+    token_type: dpopCnf ? "DPoP" : "Bearer",
     expires_in: TOKEN_EXPIRES_IN,
   };
 
@@ -682,9 +699,15 @@ const handleDeferredCredentialIssuance = async (requestBody, sessionObject, sess
 
 sharedRouter.post("/token_endpoint", async (req, res) => {
   let sessionId = null;
-  
+
   try {
-    const { grant_type, code, 'pre-authorized_code': preAuthorizedCode, code_verifier, authorization_details } = req.body;
+    const {
+      grant_type,
+      code,
+      "pre-authorized_code": preAuthorizedCode,
+      code_verifier,
+      authorization_details,
+    } = req.body;
 
     // Validate required parameters
     if (!(code || preAuthorizedCode)) {
@@ -702,25 +725,71 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
       // For authorization code flow, we need to look up the sessionId from the code
       sessionId = await getSessionKeyAuthCode(code);
     }
-    
+
     // Set session context for console interception to capture all logs
     if (sessionId) {
       setSessionContext(sessionId);
       // Clear context when response finishes
-      res.on('finish', () => {
+      res.on("finish", () => {
         clearSessionContext();
       });
-      res.on('close', () => {
+      res.on("close", () => {
         clearSessionContext();
       });
     }
 
+    // Attempt to extract DPoP confirmation (cnf.jkt) from DPoP header if present
+    let dpopCnf = null;
+    const dpopHeader = req.headers["dpop"];
+    if (typeof dpopHeader === "string") {
+      try {
+        // Per RFC 9449, the public key used for DPoP is carried in the JWS header as "jwk"
+        const protectedHeader = jose.decodeProtectedHeader(dpopHeader);
+        if (protectedHeader && protectedHeader.jwk) {
+          const jkt = await jose.calculateJwkThumbprint(
+            protectedHeader.jwk,
+            "sha256"
+          );
+          dpopCnf = { jkt };
+        } else if (sessionId) {
+          // Header present but missing jwk -> will fall back to Bearer
+          logWarn(sessionId, "DPoP header present but missing 'jwk'; issuing Bearer access token", {
+            hasDpopHeader: true,
+            hasJwkInHeader: !!(protectedHeader && protectedHeader.jwk),
+          }).catch(() => {});
+        }
+      } catch (e) {
+        // If DPoP proof is malformed, respond with an error specific to DPoP
+        return res.status(400).json({
+          error: "invalid_dpop_proof",
+          error_description: `Invalid DPoP proof: ${e.message}`,
+        });
+      }
+    } else if (sessionId) {
+      // No DPoP header at all -> behavior falls back to Bearer-style token
+      logWarn(sessionId, "DPoP header not present; issuing Bearer access token", {
+        hasDpopHeader: false,
+      }).catch(() => {});
+    }
+
     let tokenResponse;
 
-    if (grant_type === "urn:ietf:params:oauth:grant-type:pre-authorized_code") {
-      tokenResponse = await handlePreAuthorizedCodeFlow(preAuthorizedCode, authorization_details);
+    if (
+      grant_type ===
+      "urn:ietf:params:oauth:grant-type:pre-authorized_code"
+    ) {
+      tokenResponse = await handlePreAuthorizedCodeFlow(
+        preAuthorizedCode,
+        authorization_details,
+        dpopCnf
+      );
     } else if (grant_type === "authorization_code") {
-      tokenResponse = await handleAuthorizationCodeFlow(code, code_verifier, authorization_details);
+      tokenResponse = await handleAuthorizationCodeFlow(
+        code,
+        code_verifier,
+        authorization_details,
+        dpopCnf
+      );
     } else {
       return res.status(400).json({
         error: "unsupported_grant_type",
@@ -733,28 +802,30 @@ sharedRouter.post("/token_endpoint", async (req, res) => {
     if (sessionId) {
       logError(sessionId, "Token endpoint error", {
         error: error.message,
-        stack: error.stack
+        stack: error.stack,
       }).catch(() => {});
     }
-    
+
     // Handle authorization_pending and slow_down errors
-    if (error.errorCode === 'authorization_pending') {
+    if (error.errorCode === "authorization_pending") {
       return res.status(400).json({
         error: "authorization_pending",
         error_description: error.message,
       });
     }
-    
-    if (error.errorCode === 'slow_down') {
+
+    if (error.errorCode === "slow_down") {
       return res.status(400).json({
         error: "slow_down",
         error_description: error.message,
       });
     }
-    
-    if (error.message.includes(ERROR_MESSAGES.INVALID_GRANT) || 
-        error.message.includes(ERROR_MESSAGES.INVALID_GRANT_CODE) ||
-        error.message.includes(ERROR_MESSAGES.PKCE_FAILED)) {
+
+    if (
+      error.message.includes(ERROR_MESSAGES.INVALID_GRANT) ||
+      error.message.includes(ERROR_MESSAGES.INVALID_GRANT_CODE) ||
+      error.message.includes(ERROR_MESSAGES.PKCE_FAILED)
+    ) {
       return res.status(400).json({
         error: "invalid_grant",
         error_description: error.message,

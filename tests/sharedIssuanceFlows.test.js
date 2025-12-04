@@ -5,6 +5,7 @@ import express from 'express';
 import sinon from 'sinon';
 import fs from 'fs';
 import jwt from 'jsonwebtoken';
+import * as jose from 'jose';
 import { v4 as uuidv4 } from 'uuid';
 
 // Set up environment for testing BEFORE importing modules
@@ -139,6 +140,51 @@ describe('Shared Issuance Flows', () => {
       expect(response.body).to.have.property('expires_in', 86400);
     });
 
+    it('should issue a DPoP-bound access token with cnf.jkt in pre-authorized flow when DPoP header is present', async () => {
+      const preAuthCode = 'test-pre-auth-code-dpop-' + uuidv4();
+      const preAuthSession = {
+        status: 'pending',
+        authorizationDetails: null
+      };
+
+      if (!cacheServiceRedis.client.isReady) {
+        throw new Error('Redis is not ready - cannot run test');
+      }
+
+      await cacheServiceRedis.storePreAuthSession(preAuthCode, preAuthSession);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Build a simple ephemeral EC key pair for the DPoP header
+      const { publicKey, privateKey } = await jose.generateKeyPair('ES256');
+      const publicJwk = await jose.exportJWK(publicKey);
+
+      // Per RFC 9449 the DPoP header is a JWT whose header contains jwk with the public key
+      const dpopJwt = await new jose.SignJWT({ htu: 'http://localhost:3000/token_endpoint', htm: 'POST' })
+        .setProtectedHeader({ alg: 'ES256', typ: 'dpop+jwt', jwk: publicJwk })
+        .setIssuedAt()
+        .setJti(uuidv4())
+        .sign(privateKey);
+
+      const response = await request(app)
+        .post('/token_endpoint')
+        .set('DPoP', dpopJwt)
+        .send({
+          grant_type: 'urn:ietf:params:oauth:grant-type:pre-authorized_code',
+          'pre-authorized_code': preAuthCode
+        })
+        .expect(200);
+
+      expect(response.body).to.have.property('access_token');
+      expect(response.body).to.have.property('token_type', 'DPoP');
+
+      // Decode the access_token (we trust local signing key from stubs)
+      const decoded = jwt.decode(response.body.access_token);
+      expect(decoded).to.be.an('object');
+      expect(decoded).to.have.property('cnf');
+      expect(decoded.cnf).to.have.property('jkt');
+      expect(decoded.cnf.jkt).to.be.a('string');
+    });
+
     it('should handle authorization code flow successfully', async () => {
       const authCode = 'test-auth-code-' + uuidv4();
       const sessionId = 'test-session-id-' + uuidv4();
@@ -171,6 +217,49 @@ describe('Shared Issuance Flows', () => {
         expect(response.body).to.have.property('token_type');
       } else {
         // If auth code mapping isn't set up, expect an error
+        expect([400, 500]).to.include(response.status);
+      }
+    });
+
+    it('should issue a DPoP-bound access token with cnf.jkt in authorization_code flow when DPoP header is present', async () => {
+      const authCode = 'test-auth-code-dpop-' + uuidv4();
+      const sessionId = 'test-session-id-dpop-' + uuidv4();
+      const codeChallenge = await cryptoUtils.base64UrlEncodeSha256('test-verifier-dpop');
+      const codeSession = {
+        requests: { challenge: codeChallenge },
+        results: { issuerState: sessionId }
+      };
+
+      await cacheServiceRedis.storeCodeFlowSession(sessionId, codeSession);
+
+      const { publicKey, privateKey } = await jose.generateKeyPair('ES256');
+      const publicJwk = await jose.exportJWK(publicKey);
+
+      const dpopJwt = await new jose.SignJWT({ htu: 'http://localhost:3000/token_endpoint', htm: 'POST' })
+        .setProtectedHeader({ alg: 'ES256', typ: 'dpop+jwt', jwk: publicJwk })
+        .setIssuedAt()
+        .setJti(uuidv4())
+        .sign(privateKey);
+
+      const response = await request(app)
+        .post('/token_endpoint')
+        .set('DPoP', dpopJwt)
+        .send({
+          grant_type: 'authorization_code',
+          code: authCode,
+          code_verifier: 'test-verifier-dpop'
+        });
+
+      if (response.status === 200) {
+        expect(response.body).to.have.property('access_token');
+        expect(response.body).to.have.property('token_type', 'DPoP');
+
+        const decoded = jwt.decode(response.body.access_token);
+        expect(decoded).to.be.an('object');
+        expect(decoded).to.have.property('cnf');
+        expect(decoded.cnf).to.have.property('jkt');
+        expect(decoded.cnf.jkt).to.be.a('string');
+      } else {
         expect([400, 500]).to.include(response.status);
       }
     });

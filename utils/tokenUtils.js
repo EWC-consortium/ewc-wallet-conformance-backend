@@ -1,10 +1,20 @@
-import fs from "fs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { error } from "console";
-import {generateNonce} from "../utils/cryptoUtils.js"
+import { generateNonce } from "../utils/cryptoUtils.js";
 
-export function buildAccessToken(issuerURL, privateKey) {
+/**
+ * Builds an access token.
+ *
+ * When a DPoP confirmation object is provided (per RFC 9449),
+ * the token is key-bound by embedding the cnf claim:
+ *   { "cnf": { "jkt": "<thumbprint>" } }
+ *
+ * @param {string} issuerURL
+ * @param {string|Buffer} privateKey
+ * @param {{ jkt: string } | null} [cnf] - DPoP confirmation (JWK thumbprint)
+ * @returns {string} signed JWT access token
+ */
+export function buildAccessToken(issuerURL, privateKey, cnf = null) {
   const payload = {
     iss: issuerURL,
     sub: "user123", // This should be the authenticated user's identifier
@@ -13,6 +23,12 @@ export function buildAccessToken(issuerURL, privateKey) {
     iat: Math.floor(Date.now() / 1000), // Current time
     scope: "openid",
   };
+
+  // Attach DPoP confirmation if provided
+  if (cnf && typeof cnf === "object" && typeof cnf.jkt === "string") {
+    payload.cnf = { jkt: cnf.jkt };
+  }
+
   // Sign the JWT
   const token = jwt.sign(payload, privateKey, { algorithm: "ES256" });
 
