@@ -1240,10 +1240,12 @@ sharedRouter.post("/notification", async (req, res) => {
         console.error("Credential failure or deletion detected. Marking session as failed. Reason: " + event_description);
         
         if(sessionObject.flowType === "code") {
-          return res.status(204).send();
+         
           await storeCodeFlowSession(sessionKey, sessionObject);
+          return res.status(204).send();
         }else{
           await storePreAuthSession(sessionKey, sessionObject);
+          return res.status(204).send();
         }
 
         
@@ -1254,7 +1256,12 @@ sharedRouter.post("/notification", async (req, res) => {
       if (sessionObject) {
         sessionObject.status = "success";
         console.error("credential accepted event received. Marking session as successful.");
+         if(sessionObject.flowType === "code") {
         await storeCodeFlowSession(sessionKey, sessionObject);
+        
+        }else{
+          await storePreAuthSession(sessionKey, sessionObject);
+        }
       }
     }
 
