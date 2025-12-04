@@ -475,7 +475,6 @@ const handlePreAuthorizedCodeFlow = async (preAuthorizedCode, authorizationDetai
   const cNonceForSession = generateNonce();
 
   // Update session
-  existingPreAuthSession.status = "success";
   existingPreAuthSession.accessToken = generatedAccessToken;
   existingPreAuthSession.c_nonce = cNonceForSession;
 
@@ -546,8 +545,6 @@ const handleAuthorizationCodeFlow = async (code, code_verifier, authorizationDet
   const cNonceForSession = generateNonce();
 
   // Update session
-  existingCodeSession.results.status = "success";
-  existingCodeSession.status = "success";
   existingCodeSession.requests.accessToken = generatedAccessToken;
   existingCodeSession.c_nonce = cNonceForSession;
 
@@ -584,10 +581,10 @@ const handleImmediateCredentialIssuance = async (requestBody, sessionObject, eff
     const availableConfigs = Object.keys(issuerConfig.credential_configurations_supported || {}).join(', ') || 'none';
     throw new Error(`Credential configuration not found. Received: '${effectiveConfigurationId}', expected: one of [${availableConfigs}]`);
   }
-  
+
   // Determine format - default to 'dc+sd-jwt' for backward compatibility
   let format = credConfig.format || 'dc+sd-jwt';
-  
+
   // Map VCI v1.0 format identifiers to internal format identifiers
   if (format === 'mso_mdoc') {
     format = 'mDL'; // Use 'mDL' for internal processing
@@ -601,15 +598,22 @@ const handleImmediateCredentialIssuance = async (requestBody, sessionObject, eff
   );
   console.log("Credential issued: ", credential);
 
+  // Generate notification_id for this issuance flow
+  const notification_id = uuidv4();
+
   return {
-    credentials: [{ credential }]
+    credentials: [{ credential }],
+    notification_id
   };
 };
 
 // Handle deferred credential issuance
 const handleDeferredCredentialIssuance = async (requestBody, sessionObject) => {
   const transaction_id = generateNonce();
+  const notification_id = uuidv4();
+
   sessionObject.transaction_id = transaction_id;
+  sessionObject.notification_id = notification_id;
   sessionObject.requestBody = requestBody;
   sessionObject.isCredentialReady = false;
   sessionObject.attempt = 0;
@@ -867,9 +871,32 @@ sharedRouter.post("/credential", async (req, res) => {
         const response = await handleImmediateCredentialIssuance(requestBody, sessionObject, effectiveConfigurationId);
         if (sessionId) {
           await logInfo(sessionId, "Credential issued successfully", {
-            effectiveConfigurationId
+            effectiveConfigurationId,
+            notification_id: response.notification_id
           }).catch(() => {});
         }
+
+        // Mark session as successful after credential issuance and store notification_id
+        if (sessionObject && sessionKey) {
+          try {
+            sessionObject.status = "success";
+            sessionObject.notification_id = response.notification_id;
+
+            if (flowType === "code") {
+              await storeCodeFlowSession(sessionKey, sessionObject);
+            } else {
+              await storePreAuthSession(sessionKey, sessionObject);
+            }
+          } catch (storageError) {
+            console.error("Failed to update session status after successful credential issuance:", storageError);
+            if (sessionId) {
+              await logError(sessionId, "Failed to update session status after successful credential issuance", {
+                error: storageError.message
+              }).catch(() => {});
+            }
+          }
+        }
+
         return res.json(response);
       } catch (credError) {
         console.error("Credential generation error:", credError);
@@ -1097,6 +1124,7 @@ sharedRouter.post("/credential_deferred", async (req, res) => {
     // as immediate credential response - format is specified in metadata, not in response
     return res.status(200).json({
       credential,
+      // notification_id: sessionObject.notification_id,
     });
   } catch (error) {
     console.error("Deferred credential endpoint error:", error);
@@ -1127,6 +1155,118 @@ sharedRouter.post("/nonce", async (req, res) => {
     res.status(500).json({
       error: "server_error",
       error_description: ERROR_MESSAGES.STORAGE_FAILED,
+    });
+  }
+});
+
+// *****************************************************************
+// ************* Notification ENDPOINT ********************************
+// *****************************************************************
+
+sharedRouter.post("/notification", async (req, res) => {
+  let sessionId = null;
+
+  try {
+    const { notification_id, event, event_description } = req.body;
+
+    // Validate required parameters
+    if (!notification_id) {
+      return res.status(400).json({
+        error: "invalid_notification_request",
+        error_description: "Missing required parameter: notification_id",
+      });
+    }
+
+    if (!event) {
+      return res.status(400).json({
+        error: "invalid_notification_request",
+        error_description: "Missing required parameter: event",
+      });
+    }
+
+  
+    // Validate Authorization header with Bearer token
+    const authHeader = req.headers["authorization"];
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        error: "invalid_token",
+        error_description: "Missing or invalid Authorization header. Expected: Bearer <access_token>",
+      });
+    }
+
+    const accessToken = authHeader.substring(7); // Remove "Bearer " prefix
+
+    // Find session associated with the access token
+    const sessionData = await getSessionFromToken(accessToken);
+    const sessionObject = sessionData.sessionObject;
+    const sessionKey = sessionData.sessionKey;
+
+    if (!sessionObject) {
+      return res.status(401).json({
+        error: "invalid_token",
+        error_description: "Invalid or expired access token",
+      });
+    }
+
+    sessionId = extractSessionId(sessionKey);
+
+    // Set session context for console interception to capture all logs
+    if (sessionId) {
+      setSessionContext(sessionId);
+      // Clear context when response finishes
+      res.on('finish', () => {
+        clearSessionContext();
+      });
+      res.on('close', () => {
+        clearSessionContext();
+      });
+    }
+
+      // Log the notification event
+    if (sessionId) {
+      const logData = {
+        notification_id,
+        event,
+        event_description: event_description || null
+      };
+      await logInfo(sessionId, `Notification received: ${event}`, logData).catch(() => {});
+    }
+
+    if(event === "credential_failure" || event === "credential_deleted") {
+      const sessionObject = await getCodeFlowSession(sessionId);
+      if (sessionObject) {
+        sessionObject.status = "failed";
+        console.error("Credential failure or deletion detected. Marking session as failed. Reason: " + event_description);
+        await storeCodeFlowSession(sessionKey, sessionObject);
+      }
+    }
+    if(event === "credential_accepted") {
+      const sessionObject = await getCodeFlowSession(sessionId);
+      if (sessionObject) {
+        sessionObject.status = "success";
+        console.error("credential accepted event received. Marking session as successful.");
+        await storeCodeFlowSession(sessionKey, sessionObject);
+      }
+    }
+
+
+    // Successfully processed notification - return 204 No Content
+    res.status(204).send();
+
+  } catch (error) {
+    console.error("Notification endpoint error:", error);
+
+    if (sessionId) {
+      await logError(sessionId, "Notification endpoint error", {
+        error: error.message,
+        stack: error.stack
+      }).catch(err => console.error("Failed to log notification error:", err));
+    }
+
+    // For unexpected server errors, return 500
+    res.status(500).json({
+      error: "server_error",
+      error_description: error.message,
     });
   }
 });

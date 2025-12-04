@@ -1,6 +1,7 @@
 import express from "express";
 import fs from "fs";
 import { pemToJWK } from "../utils/cryptoUtils.js";
+import { PROXY_PATH } from "../utils/routeUtils.js";
 const metadataRouter = express.Router();
 
 const serverURL = process.env.SERVER_URL || "http://localhost:3000";
@@ -36,11 +37,14 @@ metadataRouter.get(
   [
     "/.well-known/openid-credential-issuer",
     "/.well-known/openid-credential-issuer/:suffix(*)",
+    "/openid-credential-issuer/:suffix(*)",
   ],
   async (req, res) => {
     const rawSuffix = req.params?.suffix || "";
     const normalizedSuffix = rawSuffix.replace(/^\/+/, "");
-    const issuerBase = normalizedSuffix ? `${serverURL}/${normalizedSuffix}` : serverURL;
+
+    // If the suffix matches PROXY_PATH, don't add it again since SERVER_URL already includes it
+    const issuerBase = (normalizedSuffix && normalizedSuffix !== PROXY_PATH) ? `${serverURL}/${normalizedSuffix}` : serverURL;
 
     issuerConfig.credential_issuer = issuerBase;
     issuerConfig.authorization_servers = [serverURL];
