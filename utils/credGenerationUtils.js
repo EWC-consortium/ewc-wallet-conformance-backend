@@ -258,8 +258,7 @@ export async function handleCredentialGenerationBasedOnFormat(
   if (match) {
     issuerName = match[1];
   }
-  //TODO fix this
-  issuerName = "https://dss.aegean.gr";
+ 
 
   // Determine credential payload based on type
   switch (credType) {
@@ -936,8 +935,7 @@ export async function handleCredentialGenerationBasedOnFormatDeferred(sessionObj
   if (match) {
     issuerName = match[1];
   }
-  //TODO fix this
-  issuerName = "https://dss.aegean.gr";
+
 
   // Determine credential payload based on type
   switch (credType) {
