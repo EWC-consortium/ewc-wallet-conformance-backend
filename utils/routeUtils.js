@@ -1150,15 +1150,38 @@ export const validateWIA = async (wiaJwt, sessionId = null) => {
       return { valid: false, error: 'WIA JWT missing iss claim' };
     }
 
+    // Per spec: WIA SHALL have a time-to-live of less than 24 hours
+    // I.e., the difference between expiration time exp and the time of issuance SHALL be less than 24 hours
+    if (decoded.payload.exp && decoded.payload.iat) {
+      const ttlInSeconds = decoded.payload.exp - decoded.payload.iat;
+      const ttlInHours = ttlInSeconds / 3600;
+      const maxTtlHours = 24;
+      
+      if (ttlInSeconds < 0) {
+        return { valid: false, error: 'WIA JWT has invalid expiration (exp < iat)' };
+      }
+      
+      if (ttlInHours >= maxTtlHours) {
+        return { valid: false, error: `WIA JWT TTL (${ttlInHours.toFixed(2)} hours) exceeds maximum allowed (${maxTtlHours} hours)` };
+      }
+    } else if (!decoded.payload.exp || !decoded.payload.iat) {
+      return { valid: false, error: 'WIA JWT missing exp or iat claim required for TTL validation' };
+    }
+
     // TODO: Verify signature against Wallet Provider's JWKS
+    // The WIA SHALL be signed by the Wallet Provider
     // This requires fetching the JWKS from the issuer (decoded.payload.iss)
     // For now, we'll log the WIA but note that signature verification is pending
     
     if (sessionId) {
+      const ttlInHours = decoded.payload.exp && decoded.payload.iat 
+        ? ((decoded.payload.exp - decoded.payload.iat) / 3600).toFixed(2)
+        : 'unknown';
       await logInfo(sessionId, "WIA extracted and basic validation passed", {
         wiaIssuer: decoded.payload.iss,
         wiaExp: decoded.payload.exp,
         wiaIat: decoded.payload.iat,
+        ttlHours: ttlInHours,
         signatureVerification: 'pending'
       }).catch(() => {});
     }
@@ -1207,6 +1230,17 @@ export const validateWUA = async (wuaJwt, sessionId = null) => {
 
     // Check for eudi_wallet_info (optional but recommended)
     const hasEudiWalletInfo = !!decoded.payload.eudi_wallet_info;
+    let generalInfo;
+    let keyStorageInfo;
+    if (!hasEudiWalletInfo) {
+      return { valid: false, error: 'eudi_wallet_info claim is missing' };
+    }else{
+      generalInfo = decoded.payload.eudi_wallet_info.general_info;
+      keyStorageInfo = decoded.payload.eudi_wallet_info.key_storage_info;
+      if (!generalInfo || !keyStorageInfo) {
+        return { valid: false, error: 'general_info or key_storage_info claim is missing' };
+      }
+    }
     
     // Check for attested_keys (required per spec)
     const hasAttestedKeys = Array.isArray(decoded.payload.attested_keys) && decoded.payload.attested_keys.length > 0;
@@ -1226,6 +1260,8 @@ export const validateWUA = async (wuaJwt, sessionId = null) => {
         hasEudiWalletInfo,
         hasAttestedKeys,
         hasStatus,
+        generalInfo,
+        keyStorageInfo,
         attestedKeysCount: decoded.payload.attested_keys?.length || 0,
         signatureVerification: 'pending',
         revocationCheck: 'pending'
@@ -1255,36 +1291,23 @@ export const validateWUA = async (wuaJwt, sessionId = null) => {
 };
 
 /**
- * Extracts WIA from token endpoint request
- * WIA is sent as client_assertion with client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer
+ * Extracts WIA from token endpoint request or Pushed Authorization Request (PAR)
+ * 
+ * Per spec: WIA SHALL be sent to the Authorization Server in the Pushed Authorization Request 
+ * and the Token Request as client_assertion with client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer
+ * 
+ * The WIA SHALL be sent along with a Proof-of-Possession (PoP), as specified in Appendix E 
+ * of OpenID for Verifiable Credential Issuance v1.0.
  * 
  * @param {object} reqBody - Request body
- * @param {object} reqHeaders - Request headers
+ * @param {object} reqHeaders - Request headers (unused, kept for API compatibility)
  * @returns {string|null} - WIA JWT or null if not found
  */
 export const extractWIAFromTokenRequest = (reqBody, reqHeaders) => {
-  // Check for client_assertion in body (OAuth 2.0 client assertion)
+  // WIA is sent as client_assertion in the request body (OAuth 2.0 client assertion)
+  // Per OAuth 2.0 spec, client assertions are sent in the body, not in Authorization header
   if (reqBody.client_assertion && reqBody.client_assertion_type === 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer') {
     return reqBody.client_assertion;
-  }
-  
-  // Check Authorization header for client assertion
-  const authHeader = reqHeaders.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7);
-    // If it looks like a JWT (3 parts separated by dots), it might be WIA
-    if (token.split('.').length === 3) {
-      // Decode to check if it's a WIA (would have specific claims)
-      try {
-        const decoded = jwt.decode(token, { complete: false });
-        // WIA would typically have iss, exp, iat claims
-        if (decoded && decoded.iss && decoded.exp) {
-          return token;
-        }
-      } catch (e) {
-        // Not a valid JWT, ignore
-      }
-    }
   }
   
   return null;
@@ -1324,15 +1347,6 @@ export const extractWUAFromCredentialRequest = (requestBody) => {
       } catch (e) {
         // Not a valid JWT, ignore
       }
-    }
-  }
-  
-  // Check for key_attestation at top level (alternative location)
-  if (requestBody.key_attestation) {
-    if (typeof requestBody.key_attestation === 'string') {
-      return requestBody.key_attestation;
-    } else if (requestBody.key_attestation.jwt) {
-      return requestBody.key_attestation.jwt;
     }
   }
   
