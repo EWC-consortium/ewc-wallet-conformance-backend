@@ -2,7 +2,7 @@
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import fetch from "node-fetch";
-import { createProofJwt, generateDidJwkFromPrivateJwk, ensureOrCreateEcKeyPair } from "./lib/crypto.js";
+import { createProofJwt, generateDidJwkFromPrivateJwk, ensureOrCreateEcKeyPair, createWIA, createWUA } from "./lib/crypto.js";
 import { storeWalletCredentialByType } from "./lib/cache.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -67,6 +67,24 @@ async function main() {
     credential_configuration_id: configurationId,
     ...(credential_issuer ? { locations: [credential_issuer] } : {}),
   }] : undefined;
+  
+  // Generate WIA (Wallet Instance Attestation) for token request
+  let wiaJwt = null;
+  try {
+    const { privateJwk: wiaPrivateJwk, publicJwk: wiaPublicJwk } = await ensureOrCreateEcKeyPair(argv.key, "ES256");
+    const wiaIssuer = generateDidJwkFromPrivateJwk(wiaPublicJwk);
+    wiaJwt = await createWIA({
+      privateJwk: wiaPrivateJwk,
+      publicJwk: wiaPublicJwk,
+      issuer: wiaIssuer,
+      audience: tokenEndpoint,
+      alg: "ES256",
+      ttlHours: 1
+    });
+  } catch (wiaError) {
+    console.warn("Failed to generate WIA:", wiaError?.message);
+  }
+  
   const tokenPayload = {
     grant_type: "urn:ietf:params:oauth:grant-type:pre-authorized_code",
     "pre-authorized_code": preAuthorizedCode,
@@ -74,6 +92,7 @@ async function main() {
     ...(authorizationDetails && authorizationDetails.length
       ? { authorization_details: JSON.stringify(authorizationDetails) }
       : {}),
+    ...(wiaJwt ? { client_assertion: wiaJwt, client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" } : {}),
   };
   const tokenRes = await httpPostJson(tokenEndpoint, tokenPayload);
 
@@ -120,9 +139,41 @@ async function main() {
 
   // credential request
   const credentialEndpoint = `${apiBase}/credential`;
+  
+  // Generate WUA (Wallet Unit Attestation) for credential request
+  let wuaJwt = null;
+  try {
+    const { privateJwk: wuaPrivateJwk, publicJwk: wuaPublicJwk } = await ensureOrCreateEcKeyPair(argv.key, "ES256");
+    const wuaIssuer = generateDidJwkFromPrivateJwk(wuaPublicJwk);
+    wuaJwt = await createWUA({
+      privateJwk: wuaPrivateJwk,
+      publicJwk: wuaPublicJwk,
+      issuer: wuaIssuer,
+      audience: credentialEndpoint,
+      attestedKeys: [publicJwk], // Attest the key used for proof
+      eudiWalletInfo: {
+        general_info: {
+          name: "Test Wallet Client",
+          version: "1.0.0"
+        },
+        key_storage_info: {
+          storage_type: "software",
+          protection_level: "software"
+        }
+      },
+      alg: "ES256",
+      ttlHours: 24
+    });
+  } catch (wuaError) {
+    console.warn("Failed to generate WUA:", wuaError?.message);
+  }
+  
   const credReq = {
     credential_configuration_id: configurationId,
-    proofs: { jwt: [proofJwt] },
+    proofs: { 
+      jwt: [proofJwt],
+      ...(wuaJwt ? { attestation: wuaJwt } : {})
+    },
   };
 
   const credRes = await fetch(credentialEndpoint, {

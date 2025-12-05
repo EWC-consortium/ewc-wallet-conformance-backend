@@ -1,6 +1,6 @@
 import express from "express";
 import fetch from "node-fetch";
-import { createProofJwt, generateDidJwkFromPrivateJwk, ensureOrCreateEcKeyPair, createPkcePair } from "./lib/crypto.js";
+import { createProofJwt, generateDidJwkFromPrivateJwk, ensureOrCreateEcKeyPair, createPkcePair, createWIA, createWUA } from "./lib/crypto.js";
 import { performPresentation, resolveDeepLinkFromEndpoint } from "./lib/presentation.js";
 import { storeWalletCredentialByType, walletRedisClient, appendWalletLog, getWalletLogs } from "./lib/cache.js";
 import { jwtVerify, decodeJwt, decodeProtectedHeader, createLocalJWKSet, importJWK, importX509 } from "jose";
@@ -639,6 +639,25 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   console.log("[preauth] apiBase=", apiBase, "configurationId=", configurationId); try { slog("[preauth] apiBase", { apiBase, configurationId }); } catch {}
   console.log("[preauth] tokenEndpoint=", tokenEndpoint); try { slog("[preauth] tokenEndpoint", { tokenEndpoint }); } catch {}
   console.log("[preauth] requesting token..."); try { slog("[preauth] requesting token"); } catch {}
+  
+  // Generate WIA (Wallet Instance Attestation) for token request
+  let wiaJwt = null;
+  try {
+    const { privateJwk: wiaPrivateJwk, publicJwk: wiaPublicJwk } = await ensureOrCreateEcKeyPair(keyPath, "ES256");
+    const wiaIssuer = generateDidJwkFromPrivateJwk(wiaPublicJwk);
+    wiaJwt = await createWIA({
+      privateJwk: wiaPrivateJwk,
+      publicJwk: wiaPublicJwk,
+      issuer: wiaIssuer,
+      audience: tokenEndpoint,
+      alg: "ES256",
+      ttlHours: 1
+    });
+    console.log("[preauth] WIA generated for token request"); try { slog("[preauth] WIA generated", { hasWIA: !!wiaJwt }); } catch {}
+  } catch (wiaError) {
+    console.warn("[preauth] Failed to generate WIA:", wiaError?.message); try { slog("[preauth] WIA generation failed", { error: wiaError?.message }); } catch {}
+  }
+  
   const tokenAuthzDetails = [
     {
       type: "openid_credential",
@@ -651,6 +670,7 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
     "pre-authorized_code": preAuthorizedCode,
     ...(txCode ? { tx_code: txCode } : {}),
     authorization_details: JSON.stringify(tokenAuthzDetails),
+    ...(wiaJwt ? { client_assertion: wiaJwt, client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" } : {}),
   };
   const tokenRes = await httpPostForm(tokenEndpoint, tokenPayload, logSessionId);
   console.log("[preauth] tokenRes.status=", tokenRes.status); 
@@ -722,9 +742,46 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   try { console.log("[preauth] proof JWT created. len=", proofJwt?.length || 0); slog("[preauth] proof created", { length: proofJwt?.length || 0 }); } catch {}
 
   const credentialEndpoint = issuerMeta.credential_endpoint || `${apiBase}/credential`;
+  
+  // Generate WUA (Wallet Unit Attestation) for credential request
+  let wuaJwt = null;
+  try {
+    const { privateJwk: wuaPrivateJwk, publicJwk: wuaPublicJwk } = await ensureOrCreateEcKeyPair(keyPath, "ES256");
+    const wuaIssuer = generateDidJwkFromPrivateJwk(wuaPublicJwk);
+    
+    // Create WUA with required claims
+    wuaJwt = await createWUA({
+      privateJwk: wuaPrivateJwk,
+      publicJwk: wuaPublicJwk,
+      issuer: wuaIssuer,
+      audience: credentialEndpoint,
+      attestedKeys: [publicJwk], // Attest the key used for proof
+      eudiWalletInfo: {
+        general_info: {
+          name: "Test Wallet Client",
+          version: "1.0.0"
+        },
+        key_storage_info: {
+          storage_type: "software",
+          protection_level: "software"
+        }
+      },
+      alg: "ES256",
+      ttlHours: 24
+    });
+    console.log("[preauth] WUA generated for credential request"); try { slog("[preauth] WUA generated", { hasWUA: !!wuaJwt }); } catch {}
+  } catch (wuaError) {
+    console.warn("[preauth] Failed to generate WUA:", wuaError?.message); try { slog("[preauth] WUA generation failed", { error: wuaError?.message }); } catch {}
+  }
   console.log("[preauth] credentialEndpoint=", credentialEndpoint); try { slog("[preauth] credentialEndpoint", { credentialEndpoint }); } catch {}
   console.log("[preauth] requesting credential..."); try { slog("[preauth] requesting credential"); } catch {}
-  const credReq = { credential_configuration_id: configurationId, proofs: { jwt: [proofJwt] } };
+  const credReq = { 
+    credential_configuration_id: configurationId, 
+    proofs: { 
+      jwt: [proofJwt],
+      ...(wuaJwt ? { attestation: wuaJwt } : {})
+    } 
+  };
   console.log("[preauth] credential request:", JSON.stringify({ ...credReq, proofs: { jwt: ["<redacted>"] } }, null, 2)); try { slog("[preauth] credential request body", { hasBody: true }); } catch {}
   if (accessToken) {
     console.log("[preauth] access_token preview:", `${accessToken.substring(0, 20)}...`); try { slog("[preauth] access_token preview", { preview: `${accessToken.substring(0, 20)}...` }); } catch {}
@@ -942,7 +999,29 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   let finalAuthorizeUrl = authorizeUrl.toString();
   if (parEndpoint) {
     try {
-      const parRes = await httpPostForm(parEndpoint, authzParams, logSessionId);
+      // Generate WIA (Wallet Instance Attestation) for PAR request
+      let parWiaJwt = null;
+      try {
+        const { privateJwk: parWiaPrivateJwk, publicJwk: parWiaPublicJwk } = await ensureOrCreateEcKeyPair(keyPath, "ES256");
+        const parWiaIssuer = generateDidJwkFromPrivateJwk(parWiaPublicJwk);
+        parWiaJwt = await createWIA({
+          privateJwk: parWiaPrivateJwk,
+          publicJwk: parWiaPublicJwk,
+          issuer: parWiaIssuer,
+          audience: parEndpoint,
+          alg: "ES256",
+          ttlHours: 1
+        });
+        console.log("[codeflow][par] WIA generated for PAR request"); try { slog("[codeflow][par] WIA generated", { hasWIA: !!parWiaJwt }); } catch {}
+      } catch (parWiaError) {
+        console.warn("[codeflow][par] Failed to generate WIA:", parWiaError?.message); try { slog("[codeflow][par] WIA generation failed", { error: parWiaError?.message }); } catch {}
+      }
+      
+      const parParams = {
+        ...authzParams,
+        ...(parWiaJwt ? { client_assertion: parWiaJwt, client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" } : {})
+      };
+      const parRes = await httpPostForm(parEndpoint, parParams, logSessionId);
       console.log("[codeflow][par] endpoint=", parEndpoint, "status=", parRes.status); try { slog("[codeflow][par] endpoint", { endpoint: parEndpoint, status: parRes.status }); } catch {}
       if (parRes.ok) {
         const parBody = await parRes.json().catch(() => ({}));
@@ -1007,6 +1086,25 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   console.log("[codeflow] apiBase=", apiBase, "configurationId=", configurationId); try { slog("[codeflow] apiBase", { apiBase, configurationId }); } catch {}
   console.log("[codeflow] tokenEndpoint=", tokenEndpoint); try { slog("[codeflow] tokenEndpoint", { tokenEndpoint }); } catch {}
   console.log("[codeflow] requesting token..."); try { slog("[codeflow] requesting token"); } catch {}
+  
+  // Generate WIA (Wallet Instance Attestation) for token request
+  let wiaJwt = null;
+  try {
+    const { privateJwk: wiaPrivateJwk, publicJwk: wiaPublicJwk } = await ensureOrCreateEcKeyPair(keyPath, "ES256");
+    const wiaIssuer = generateDidJwkFromPrivateJwk(wiaPublicJwk);
+    wiaJwt = await createWIA({
+      privateJwk: wiaPrivateJwk,
+      publicJwk: wiaPublicJwk,
+      issuer: wiaIssuer,
+      audience: tokenEndpoint,
+      alg: "ES256",
+      ttlHours: 1
+    });
+    console.log("[codeflow] WIA generated for token request"); try { slog("[codeflow] WIA generated", { hasWIA: !!wiaJwt }); } catch {}
+  } catch (wiaError) {
+    console.warn("[codeflow] Failed to generate WIA:", wiaError?.message); try { slog("[codeflow] WIA generation failed", { error: wiaError?.message }); } catch {}
+  }
+  
   // Mirror authorization_details in token request (many issuers expect it)
   const tokenAuthzDetails = [
     {
@@ -1022,6 +1120,7 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
     client_id: "wallet-client",
     redirect_uri: redirectUri,
     authorization_details: JSON.stringify(tokenAuthzDetails),
+    ...(wiaJwt ? { client_assertion: wiaJwt, client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" } : {}),
   }, logSessionId);
   console.log("[codeflow] tokenRes.status=", tokenRes.status); try { slog("[codeflow] tokenRes.status", { status: tokenRes.status }); } catch {}
   if (!tokenRes.ok) {
@@ -1073,9 +1172,47 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   const proofJwt = await createProofJwt({ privateJwk, publicJwk, audience: aud2, nonce: c_nonce, issuer: didJwk, typ: "openid4vci-proof+jwt", alg: selectedAlg2 });
 
   const credentialEndpoint = issuerMeta.credential_endpoint || `${apiBase}/credential`;
+  
+  // Generate WUA (Wallet Unit Attestation) for credential request
+  let wuaJwt = null;
+  try {
+    const { privateJwk: wuaPrivateJwk, publicJwk: wuaPublicJwk } = await ensureOrCreateEcKeyPair(keyPath, "ES256");
+    const wuaIssuer = generateDidJwkFromPrivateJwk(wuaPublicJwk);
+    
+    // Create WUA with required claims
+    wuaJwt = await createWUA({
+      privateJwk: wuaPrivateJwk,
+      publicJwk: wuaPublicJwk,
+      issuer: wuaIssuer,
+      audience: credentialEndpoint,
+      attestedKeys: [publicJwk], // Attest the key used for proof
+      eudiWalletInfo: {
+        general_info: {
+          name: "Test Wallet Client",
+          version: "1.0.0"
+        },
+        key_storage_info: {
+          storage_type: "software",
+          protection_level: "software"
+        }
+      },
+      alg: "ES256",
+      ttlHours: 24
+    });
+    console.log("[codeflow] WUA generated for credential request"); try { slog("[codeflow] WUA generated", { hasWUA: !!wuaJwt }); } catch {}
+  } catch (wuaError) {
+    console.warn("[codeflow] Failed to generate WUA:", wuaError?.message); try { slog("[codeflow] WUA generation failed", { error: wuaError?.message }); } catch {}
+  }
+  
   console.log("[codeflow] credentialEndpoint=", credentialEndpoint); try { slog("[codeflow] credentialEndpoint", { credentialEndpoint }); } catch {}
   console.log("[codeflow] requesting credential..."); try { slog("[codeflow] requesting credential"); } catch {}
-  const credReq = { credential_configuration_id: configurationId, proofs: { jwt: [proofJwt] } };
+  const credReq = { 
+    credential_configuration_id: configurationId, 
+    proofs: { 
+      jwt: [proofJwt],
+      ...(wuaJwt ? { attestation: wuaJwt } : {})
+    } 
+  };
   console.log("[codeflow] credential request:", JSON.stringify({ ...credReq, proofs: { jwt: ["<redacted>"] } }, null, 2)); try { slog("[codeflow] credential request body", { hasBody: true }); } catch {}
   const credRes = await fetch(credentialEndpoint, {
     method: "POST",

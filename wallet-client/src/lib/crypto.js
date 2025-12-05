@@ -58,4 +58,88 @@ function base64url(input) {
     .replace(/\//g, "_");
 }
 
+/**
+ * Creates a Wallet Instance Attestation (WIA) JWT
+ * Based on TS3 Wallet Unit Attestation spec:
+ * https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/blob/main/docs/technical-specifications/ts3-wallet-unit-attestation.md
+ * 
+ * @param {object} options
+ * @param {object} options.privateJwk - Private JWK for signing
+ * @param {object} options.publicJwk - Public JWK (for header)
+ * @param {string} options.issuer - Issuer identifier (typically wallet provider DID or URL)
+ * @param {string} options.audience - Audience (token endpoint URL)
+ * @param {string} options.alg - Signing algorithm (default: ES256)
+ * @param {number} options.ttlHours - Time-to-live in hours (default: 1, max: 24)
+ * @returns {Promise<string>} - Signed WIA JWT
+ */
+export async function createWIA({ privateJwk, publicJwk, issuer, audience, alg = "ES256", ttlHours = 1 }) {
+  // Ensure TTL is less than 24 hours per spec
+  const maxTtlHours = 24;
+  const effectiveTtlHours = Math.min(ttlHours, maxTtlHours - 0.01); // Ensure it's strictly less than 24
+  
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + Math.floor(effectiveTtlHours * 3600);
+  
+  const header = { alg, typ: "JWT", jwk: publicJwk };
+  const payload = {
+    iss: issuer,
+    aud: audience,
+    iat: now,
+    exp: exp,
+    jti: base64url(crypto.randomBytes(16)),
+  };
+
+  const key = await importJWK(privateJwk, alg);
+  const jwt = await new SignJWT(payload).setProtectedHeader(header).sign(key);
+  return jwt;
+}
+
+/**
+ * Creates a Wallet Unit Attestation (WUA) JWT
+ * Based on TS3 Wallet Unit Attestation spec:
+ * https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/blob/main/docs/technical-specifications/ts3-wallet-unit-attestation.md
+ * 
+ * @param {object} options
+ * @param {object} options.privateJwk - Private JWK for signing
+ * @param {object} options.publicJwk - Public JWK (for header)
+ * @param {string} options.issuer - Issuer identifier (typically wallet provider DID or URL)
+ * @param {string} options.audience - Audience (credential endpoint URL)
+ * @param {object[]} options.attestedKeys - Array of attested key JWKs
+ * @param {object} options.eudiWalletInfo - EUDI wallet info object with general_info and key_storage_info
+ * @param {object} options.status - Optional status/revocation information
+ * @param {string} options.alg - Signing algorithm (default: ES256)
+ * @param {number} options.ttlHours - Time-to-live in hours (default: 24)
+ * @returns {Promise<string>} - Signed WUA JWT
+ */
+export async function createWUA({ 
+  privateJwk, 
+  publicJwk, 
+  issuer, 
+  audience, 
+  attestedKeys, 
+  eudiWalletInfo,
+  status = null,
+  alg = "ES256", 
+  ttlHours = 24 
+}) {
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + Math.floor(ttlHours * 3600);
+  
+  const header = { alg, typ: "JWT", jwk: publicJwk };
+  const payload = {
+    iss: issuer,
+    aud: audience,
+    iat: now,
+    exp: exp,
+    jti: base64url(crypto.randomBytes(16)),
+    eudi_wallet_info: eudiWalletInfo,
+    attested_keys: attestedKeys || [],
+    ...(status ? { status } : {}),
+  };
+
+  const key = await importJWK(privateJwk, alg);
+  const jwt = await new SignJWT(payload).setProtectedHeader(header).sign(key);
+  return jwt;
+}
+
 
