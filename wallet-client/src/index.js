@@ -2,7 +2,7 @@
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import fetch from "node-fetch";
-import { createProofJwt, generateDidJwkFromPrivateJwk, ensureOrCreateEcKeyPair, createWIA, createWUA } from "./lib/crypto.js";
+import { createProofJwt, generateDidJwkFromPrivateJwk, ensureOrCreateEcKeyPair, createWIA, createWUA, createDPoP } from "./lib/crypto.js";
 import { storeWalletCredentialByType } from "./lib/cache.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -68,6 +68,21 @@ async function main() {
     ...(credential_issuer ? { locations: [credential_issuer] } : {}),
   }] : undefined;
   
+  // Generate DPoP (Demonstrating Proof-of-Possession) for token request
+  let dpopJwt = null;
+  try {
+    const { privateJwk: dpopPrivateJwk, publicJwk: dpopPublicJwk } = await ensureOrCreateEcKeyPair(argv.key, "ES256");
+    dpopJwt = await createDPoP({
+      privateJwk: dpopPrivateJwk,
+      publicJwk: dpopPublicJwk,
+      htu: tokenEndpoint,
+      htm: "POST",
+      alg: "ES256"
+    });
+  } catch (dpopError) {
+    console.warn("Failed to generate DPoP:", dpopError?.message);
+  }
+  
   // Generate WIA (Wallet Instance Attestation) for token request
   let wiaJwt = null;
   try {
@@ -94,7 +109,7 @@ async function main() {
       : {}),
     ...(wiaJwt ? { client_assertion: wiaJwt, client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" } : {}),
   };
-  const tokenRes = await httpPostJson(tokenEndpoint, tokenPayload);
+  const tokenRes = await httpPostJson(tokenEndpoint, tokenPayload, dpopJwt);
 
   if (!tokenRes.ok) {
     const err = await tokenRes.json().catch(() => ({}));
@@ -287,10 +302,14 @@ async function promptTxCode(cfg) {
   return undefined;
 }
 
-async function httpPostJson(url, body) {
+async function httpPostJson(url, body, dpopHeader = null) {
+  const headers = { "content-type": "application/json" };
+  if (dpopHeader) {
+    headers["DPoP"] = dpopHeader;
+  }
   return fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify(body || {}),
   });
 }

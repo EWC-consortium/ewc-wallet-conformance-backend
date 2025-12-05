@@ -62,6 +62,62 @@ function base64url(input) {
 }
 
 /**
+ * Creates a DPoP (Demonstrating Proof-of-Possession) proof JWT
+ * Based on RFC 9449: https://www.rfc-editor.org/rfc/rfc9449.html
+ * 
+ * @param {object} options
+ * @param {object} options.privateJwk - Private JWK for signing
+ * @param {object} options.publicJwk - Public JWK (for header)
+ * @param {string} options.htu - HTTP URI (the token endpoint URL, normalized)
+ * @param {string} options.htm - HTTP method (default: "POST")
+ * @param {string} options.ath - Optional access token hash (for subsequent requests)
+ * @param {string} options.alg - Signing algorithm (default: ES256)
+ * @returns {Promise<string>} - Signed DPoP JWT
+ */
+export async function createDPoP({ privateJwk, publicJwk, htu, htm = "POST", ath = null, alg = "ES256" }) {
+  // Normalize the URI per RFC 9449 (remove fragment, normalize path, etc.)
+  const normalizedHtu = normalizeUri(htu);
+  
+  const now = Math.floor(Date.now() / 1000);
+  const header = { 
+    alg, 
+    typ: "dpop+jwt", 
+    jwk: publicJwk 
+  };
+  const payload = {
+    htm,
+    htu: normalizedHtu,
+    iat: now,
+    jti: base64url(crypto.randomBytes(16)),
+    ...(ath ? { ath } : {}),
+  };
+
+  const key = await importJWK(privateJwk, alg);
+  const jwt = await new SignJWT(payload).setProtectedHeader(header).sign(key);
+  return jwt;
+}
+
+/**
+ * Normalizes a URI per RFC 9449 section 4.2
+ * Removes fragment, normalizes path, etc.
+ */
+function normalizeUri(uri) {
+  try {
+    const url = new URL(uri);
+    // Remove fragment
+    url.hash = "";
+    // Normalize path (remove trailing slash unless it's the root)
+    if (url.pathname !== "/" && url.pathname.endsWith("/")) {
+      url.pathname = url.pathname.slice(0, -1);
+    }
+    return url.toString();
+  } catch (e) {
+    // If URL parsing fails, return as-is
+    return uri;
+  }
+}
+
+/**
  * Creates a Wallet Instance Attestation (WIA) JWT
  * Based on TS3 Wallet Unit Attestation spec:
  * https://github.com/eu-digital-identity-wallet/eudi-doc-standards-and-technical-specifications/blob/main/docs/technical-specifications/ts3-wallet-unit-attestation.md

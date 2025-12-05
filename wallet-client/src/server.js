@@ -1,6 +1,6 @@
 import express from "express";
 import fetch from "node-fetch";
-import { createProofJwt, generateDidJwkFromPrivateJwk, ensureOrCreateEcKeyPair, createPkcePair, createWIA, createWUA } from "./lib/crypto.js";
+import { createProofJwt, generateDidJwkFromPrivateJwk, ensureOrCreateEcKeyPair, createPkcePair, createWIA, createWUA, createDPoP } from "./lib/crypto.js";
 import { performPresentation, resolveDeepLinkFromEndpoint } from "./lib/presentation.js";
 import { storeWalletCredentialByType, walletRedisClient, appendWalletLog, getWalletLogs } from "./lib/cache.js";
 import { jwtVerify, decodeJwt, decodeProtectedHeader, createLocalJWKSet, importJWK, importX509 } from "jose";
@@ -526,14 +526,18 @@ async function httpPostJson(url, body, logSessionId) {
   return res;
 }
 
-async function httpPostForm(url, params, logSessionId) {
+async function httpPostForm(url, params, logSessionId, dpopHeader = null) {
   const slog = logSessionId ? makeSessionLogger(logSessionId) : (() => {});
   const form = new URLSearchParams();
   Object.entries(params || {}).forEach(([k, v]) => { if (typeof v !== 'undefined' && v !== null) form.set(k, String(v)); });
   const start = Date.now();
   try { console.log("[http] POST FORM ->", url); } catch {}
   try { slog("[http] POST FORM", { url }); } catch {}
-  const res = await fetch(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString() });
+  const headers = { "content-type": "application/x-www-form-urlencoded" };
+  if (dpopHeader) {
+    headers["DPoP"] = dpopHeader;
+  }
+  const res = await fetch(url, { method: "POST", headers, body: form.toString() });
   const duration = Date.now() - start;
   try { console.log("[http] <-", url, res.status, duration + "ms"); } catch {}
   try { slog("[http] response", { url, status: res.status, duration }); } catch {}
@@ -640,6 +644,22 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   console.log("[preauth] tokenEndpoint=", tokenEndpoint); try { slog("[preauth] tokenEndpoint", { tokenEndpoint }); } catch {}
   console.log("[preauth] requesting token..."); try { slog("[preauth] requesting token"); } catch {}
   
+  // Generate DPoP (Demonstrating Proof-of-Possession) for token request
+  let dpopJwt = null;
+  try {
+    const { privateJwk: dpopPrivateJwk, publicJwk: dpopPublicJwk } = await ensureOrCreateEcKeyPair(keyPath, "ES256");
+    dpopJwt = await createDPoP({
+      privateJwk: dpopPrivateJwk,
+      publicJwk: dpopPublicJwk,
+      htu: tokenEndpoint,
+      htm: "POST",
+      alg: "ES256"
+    });
+    console.log("[preauth] DPoP generated for token request"); try { slog("[preauth] DPoP generated", { hasDPoP: !!dpopJwt }); } catch {}
+  } catch (dpopError) {
+    console.warn("[preauth] Failed to generate DPoP:", dpopError?.message); try { slog("[preauth] DPoP generation failed", { error: dpopError?.message }); } catch {}
+  }
+  
   // Generate WIA (Wallet Instance Attestation) for token request
   let wiaJwt = null;
   try {
@@ -672,7 +692,7 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
     authorization_details: JSON.stringify(tokenAuthzDetails),
     ...(wiaJwt ? { client_assertion: wiaJwt, client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" } : {}),
   };
-  const tokenRes = await httpPostForm(tokenEndpoint, tokenPayload, logSessionId);
+  const tokenRes = await httpPostForm(tokenEndpoint, tokenPayload, logSessionId, dpopJwt);
   console.log("[preauth] tokenRes.status=", tokenRes.status); 
   try { slog("[preauth] tokenRes.status", { status: tokenRes.status }); } catch {}
   console.log("[preauth] tokenRes.headers:", Object.fromEntries(tokenRes.headers.entries())); 
@@ -1098,6 +1118,22 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   console.log("[codeflow] tokenEndpoint=", tokenEndpoint); try { slog("[codeflow] tokenEndpoint", { tokenEndpoint }); } catch {}
   console.log("[codeflow] requesting token..."); try { slog("[codeflow] requesting token"); } catch {}
   
+  // Generate DPoP (Demonstrating Proof-of-Possession) for token request
+  let dpopJwt = null;
+  try {
+    const { privateJwk: dpopPrivateJwk, publicJwk: dpopPublicJwk } = await ensureOrCreateEcKeyPair(keyPath, "ES256");
+    dpopJwt = await createDPoP({
+      privateJwk: dpopPrivateJwk,
+      publicJwk: dpopPublicJwk,
+      htu: tokenEndpoint,
+      htm: "POST",
+      alg: "ES256"
+    });
+    console.log("[codeflow] DPoP generated for token request"); try { slog("[codeflow] DPoP generated", { hasDPoP: !!dpopJwt }); } catch {}
+  } catch (dpopError) {
+    console.warn("[codeflow] Failed to generate DPoP:", dpopError?.message); try { slog("[codeflow] DPoP generation failed", { error: dpopError?.message }); } catch {}
+  }
+  
   // Generate WIA (Wallet Instance Attestation) for token request
   let wiaJwt = null;
   try {
@@ -1132,7 +1168,7 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
     redirect_uri: redirectUri,
     authorization_details: JSON.stringify(tokenAuthzDetails),
     ...(wiaJwt ? { client_assertion: wiaJwt, client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" } : {}),
-  }, logSessionId);
+  }, logSessionId, dpopJwt);
   console.log("[codeflow] tokenRes.status=", tokenRes.status); try { slog("[codeflow] tokenRes.status", { status: tokenRes.status }); } catch {}
   if (!tokenRes.ok) {
     const text = await tokenRes.text().catch(() => "");
