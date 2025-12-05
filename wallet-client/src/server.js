@@ -738,8 +738,6 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   console.log("[preauth] proof audience:", aud, issuerMeta?.credential_issuer ? "(from issuerMeta.credential_issuer)" : "(fallback apiBase)"); try { slog("[preauth] proof audience", { aud }); } catch {}
   const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(keyPath, selectedAlg);
   const didJwk = generateDidJwkFromPrivateJwk(publicJwk);
-  const proofJwt = await createProofJwt({ privateJwk, publicJwk, audience: aud, nonce: c_nonce, issuer: didJwk, typ: "openid4vci-proof+jwt", alg: selectedAlg });
-  try { console.log("[preauth] proof JWT created. len=", proofJwt?.length || 0); slog("[preauth] proof created", { length: proofJwt?.length || 0 }); } catch {}
 
   const credentialEndpoint = issuerMeta.credential_endpoint || `${apiBase}/credential`;
   
@@ -773,13 +771,26 @@ async function runPreAuthorizedIssuance({ apiBase, issuerMeta, configurationId, 
   } catch (wuaError) {
     console.warn("[preauth] Failed to generate WUA:", wuaError?.message); try { slog("[preauth] WUA generation failed", { error: wuaError?.message }); } catch {}
   }
+  
+  // Include WUA in the proof JWT header as key_attestation (per spec)
+  const proofJwt = await createProofJwt({ 
+    privateJwk, 
+    publicJwk, 
+    audience: aud, 
+    nonce: c_nonce, 
+    issuer: didJwk, 
+    typ: "openid4vci-proof+jwt", 
+    alg: selectedAlg,
+    key_attestation: wuaJwt || undefined
+  });
+  try { console.log("[preauth] proof JWT created. len=", proofJwt?.length || 0); slog("[preauth] proof created", { length: proofJwt?.length || 0 }); } catch {}
+  
   console.log("[preauth] credentialEndpoint=", credentialEndpoint); try { slog("[preauth] credentialEndpoint", { credentialEndpoint }); } catch {}
   console.log("[preauth] requesting credential..."); try { slog("[preauth] requesting credential"); } catch {}
   const credReq = { 
     credential_configuration_id: configurationId, 
     proofs: { 
-      jwt: [proofJwt],
-      ...(wuaJwt ? { attestation: wuaJwt } : {})
+      jwt: [proofJwt]
     } 
   };
   console.log("[preauth] credential request:", JSON.stringify({ ...credReq, proofs: { jwt: ["<redacted>"] } }, null, 2)); try { slog("[preauth] credential request body", { hasBody: true }); } catch {}
@@ -1169,7 +1180,6 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
   console.log("[codeflow] proof audience:", aud2, issuerMeta?.credential_issuer ? "(from issuerMeta.credential_issuer)" : "(fallback apiBase)"); try { slog("[codeflow] proof audience", { aud: aud2 }); } catch {}
   const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(keyPath, selectedAlg2);
   const didJwk = generateDidJwkFromPrivateJwk(publicJwk);
-  const proofJwt = await createProofJwt({ privateJwk, publicJwk, audience: aud2, nonce: c_nonce, issuer: didJwk, typ: "openid4vci-proof+jwt", alg: selectedAlg2 });
 
   const credentialEndpoint = issuerMeta.credential_endpoint || `${apiBase}/credential`;
   
@@ -1204,13 +1214,24 @@ async function runAuthorizationCodeIssuance({ apiBase, issuerMeta, configuration
     console.warn("[codeflow] Failed to generate WUA:", wuaError?.message); try { slog("[codeflow] WUA generation failed", { error: wuaError?.message }); } catch {}
   }
   
+  // Include WUA in the proof JWT header as key_attestation (per spec)
+  const proofJwt = await createProofJwt({ 
+    privateJwk, 
+    publicJwk, 
+    audience: aud2, 
+    nonce: c_nonce, 
+    issuer: didJwk, 
+    typ: "openid4vci-proof+jwt", 
+    alg: selectedAlg2,
+    key_attestation: wuaJwt || undefined
+  });
+  
   console.log("[codeflow] credentialEndpoint=", credentialEndpoint); try { slog("[codeflow] credentialEndpoint", { credentialEndpoint }); } catch {}
   console.log("[codeflow] requesting credential..."); try { slog("[codeflow] requesting credential"); } catch {}
   const credReq = { 
     credential_configuration_id: configurationId, 
     proofs: { 
-      jwt: [proofJwt],
-      ...(wuaJwt ? { attestation: wuaJwt } : {})
+      jwt: [proofJwt]
     } 
   };
   console.log("[codeflow] credential request:", JSON.stringify({ ...credReq, proofs: { jwt: ["<redacted>"] } }, null, 2)); try { slog("[codeflow] credential request body", { hasBody: true }); } catch {}

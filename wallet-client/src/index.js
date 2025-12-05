@@ -126,17 +126,6 @@ async function main() {
   const { privateJwk, publicJwk } = await ensureOrCreateEcKeyPair(argv.key, "ES256");
   const didJwk = generateDidJwkFromPrivateJwk(publicJwk);
 
-  // build proof JWT
-  const proofJwt = await createProofJwt({
-    privateJwk,
-    publicJwk,
-    audience: credential_issuer || issuerBase,
-    nonce: c_nonce,
-    issuer: didJwk,
-    typ: "openid4vci-proof+jwt",
-    alg: "ES256",
-  });
-
   // credential request
   const credentialEndpoint = `${apiBase}/credential`;
   
@@ -167,12 +156,23 @@ async function main() {
   } catch (wuaError) {
     console.warn("Failed to generate WUA:", wuaError?.message);
   }
+
+  // build proof JWT with WUA in header as key_attestation (per spec)
+  const proofJwt = await createProofJwt({
+    privateJwk,
+    publicJwk,
+    audience: credential_issuer || issuerBase,
+    nonce: c_nonce,
+    issuer: didJwk,
+    typ: "openid4vci-proof+jwt",
+    alg: "ES256",
+    key_attestation: wuaJwt || undefined
+  });
   
   const credReq = {
     credential_configuration_id: configurationId,
     proofs: { 
-      jwt: [proofJwt],
-      ...(wuaJwt ? { attestation: wuaJwt } : {})
+      jwt: [proofJwt]
     },
   };
 

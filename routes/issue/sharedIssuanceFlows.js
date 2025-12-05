@@ -576,7 +576,7 @@ const handleAuthorizationCodeFlow = async (
     existingCodeSession,
     code_verifier,
     existingCodeSession.requests?.challenge,
-    sessionId
+    issuanceSessionId
   );
 
   if (!pkceVerified) {

@@ -25,8 +25,11 @@ export function generateDidJwkFromPrivateJwk(publicJwk) {
   return `did:jwk:${jwkStr}`;
 }
 
-export async function createProofJwt({ privateJwk, publicJwk, audience, nonce, issuer, typ = "JWT", alg = "ES256" }) {
+export async function createProofJwt({ privateJwk, publicJwk, audience, nonce, issuer, typ = "JWT", alg = "ES256", key_attestation = null }) {
   const header = { alg, typ, jwk: publicJwk };
+  if (key_attestation) {
+    header.key_attestation = key_attestation;
+  }
   const now = Math.floor(Date.now() / 1000);
   const payload = {
     iss: issuer,
