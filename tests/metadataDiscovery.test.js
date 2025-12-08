@@ -837,10 +837,11 @@ describe('OIDC4VCI V1.0 - Metadata Discovery Compliance', () => {
       
       Object.entries(configurations).forEach(([configId, config]) => {
         // Display information helps wallets present credentials to users
-        if (config.display) {
-          expect(config.display).to.be.an('array');
+        // According to OpenID4VCI spec, display is wrapped in credential_metadata
+        if (config.credential_metadata && config.credential_metadata.display) {
+          expect(config.credential_metadata.display).to.be.an('array');
           
-          config.display.forEach(displayInfo => {
+          config.credential_metadata.display.forEach(displayInfo => {
             // Should have name at minimum
             expect(displayInfo).to.have.property('name');
             
