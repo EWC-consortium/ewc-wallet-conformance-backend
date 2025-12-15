@@ -37,6 +37,7 @@ import {
   DEFAULT_REDIRECT_URI,
   QR_CONFIG,
   CLIENT_METADATA,
+  URL_SCHEMES,
   ERROR_MESSAGES,
   
   // Cryptographic utilities
@@ -277,7 +278,8 @@ function handleX509Scheme(existingCodeSession, requestData) {
   }
 
   const request_uri = `${SERVER_URL}/x509VPrequest_dynamic/${issuerState}`;
-  const clientId = "dss.aegean.gr";
+  // Extract hostname from SERVER_URL for x509_san_dns client_id
+  const clientId = new URL(SERVER_URL).hostname;
   const vpRequest = `openid4vp://?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(request_uri)}&request_uri_method=get`;
 
   return vpRequest;
@@ -318,7 +320,8 @@ function handlePaymentScheme(existingCodeSession, requestData) {
   
   console.log("client_id_scheme payment");
   const request_uri = `${SERVER_URL}/payment-request/${issuerState}`;
-  const clientId = "dss.aegean.gr";
+  // Extract hostname from SERVER_URL for x509_san_dns client_id
+  const clientId = new URL(SERVER_URL).hostname;
   const vpRequest = `openid4vp://?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(request_uri)}&request_uri_method=get`;
 
   return vpRequest;
@@ -345,7 +348,8 @@ async function handleNonDynamicAuthorization(existingCodeSession, requestData) {
 async function buildVPRequestJWTForX509(uuid) {
   const response_uri = `${SERVER_URL}/direct_post_vci/${uuid}`;
   const presentation_definition_sdJwt = loadPresentationDefinition();
-  const clientId = "dss.aegean.gr";
+  // Extract hostname from SERVER_URL for x509_san_dns client_id
+  const clientId = new URL(SERVER_URL).hostname;
   
   return await buildVpRequestJWT(
     clientId,
@@ -380,7 +384,8 @@ async function buildVPRequestJWTForDid(uuid) {
 
 async function buildIdTokenRequestJWTForX509(uuid, existingCodeSession) {
   const response_uri = `${SERVER_URL}/direct_post_vci/${existingCodeSession.requests.state}`;
-  const clientId = "dss.aegean.gr";
+  // Extract hostname from SERVER_URL for x509_san_dns client_id
+  const clientId = new URL(SERVER_URL).hostname;
   
   return await buildVpRequestJWT(
     clientId,
@@ -431,7 +436,17 @@ codeFlowRouterSDJWT.get(["/offer-code-sd-jwt"], async (req, res) => {
     const sessionData = createCodeFlowSession(client_id_scheme, "code", false, false, signatureType);
     await manageSession(sessionId, sessionData);
 
-    const credentialOffer = createCodeFlowCredentialOfferResponse(sessionId, credentialType, client_id_scheme, true);
+    // Allow caller to control wallet invocation scheme (openid-credential-offer:// by default, haip:// if requested)
+    const invocationScheme =
+      req.query.url_scheme === "haip" ? URL_SCHEMES.HAIP : URL_SCHEMES.STANDARD;
+
+    const credentialOffer = createCodeFlowCredentialOfferResponse(
+      sessionId,
+      credentialType,
+      client_id_scheme,
+      true,
+      invocationScheme
+    );
     const encodedQR = await generateQRCode(credentialOffer, sessionId);
     
     res.json({
@@ -456,7 +471,16 @@ codeFlowRouterSDJWT.get(["/offer-code-sd-jwt-dynamic"], async (req, res) => {
     const sessionData = createCodeFlowSession(client_id_scheme, "code", true);
     await manageSession(sessionId, sessionData);
 
-    const credentialOffer = createCodeFlowCredentialOfferResponse(sessionId, credentialType, client_id_scheme, false);
+    const invocationScheme =
+      req.query.url_scheme === "haip" ? URL_SCHEMES.HAIP : URL_SCHEMES.STANDARD;
+
+    const credentialOffer = createCodeFlowCredentialOfferResponse(
+      sessionId,
+      credentialType,
+      client_id_scheme,
+      false,
+      invocationScheme
+    );
     const encodedQR = await generateQRCode(credentialOffer, sessionId);
     
     res.json({
@@ -481,7 +505,16 @@ codeFlowRouterSDJWT.get(["/offer-code-defered"], async (req, res) => {
     const sessionData = createCodeFlowSession(client_id_scheme, "code", false, true);
     await manageSession(sessionId, sessionData);
 
-    const credentialOffer = createCodeFlowCredentialOfferResponse(sessionId, credentialType, client_id_scheme, false);
+    const invocationScheme =
+      req.query.url_scheme === "haip" ? URL_SCHEMES.HAIP : URL_SCHEMES.STANDARD;
+
+    const credentialOffer = createCodeFlowCredentialOfferResponse(
+      sessionId,
+      credentialType,
+      client_id_scheme,
+      false,
+      invocationScheme
+    );
     const encodedQR = await generateQRCode(credentialOffer, sessionId);
     
     res.json({

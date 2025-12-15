@@ -5,6 +5,7 @@ import {
   getSessionId,
   getCredentialType,
   getSignatureType,
+  URL_SCHEMES,
   createCodeFlowSession,
   createBaseSession,
   generateQRCode,
@@ -88,11 +89,18 @@ vciStandardRouter.get("/vci/offer", async (req, res) => {
       
       await storeCodeFlowSession(sessionId, sessionData);
 
+      // Allow caller to control wallet invocation scheme for authorization_code offers.
+      // Default: openid-credential-offer://
+      // If url_scheme=haip, use haip:// as required by HAIP profile.
+      const invocationScheme =
+        req.query.url_scheme === "haip" ? URL_SCHEMES.HAIP : URL_SCHEMES.STANDARD;
+
       const credentialOffer = createCodeFlowCredentialOfferResponse(
         sessionId,
         credentialType,
         clientIdScheme,
-        true // includeCredentialType
+        true, // includeCredentialType
+        invocationScheme
       );
       
       const encodedQR = await generateQRCode(credentialOffer, sessionId);

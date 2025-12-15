@@ -5,7 +5,11 @@
   "require_pushed_authorization_requests": true,
   "token_endpoint": "https://server.example.com/token",
   "jwks_uri": "https://server.example.com/jwks",
-  "scopes_supported": ["openid"],
+  "scopes_supported": [
+    "openid",
+    "urn:eu.europa.ec.eudi:pid:1",
+    "urn:eu.europa.ec.eudi:pid:1:mso_mdoc"
+  ],
   "response_types_supported": ["code", "vp_token", "id_token"],
   "response_modes_supported": ["query"],
   "grant_types_supported": ["authorization_code","urn:ietf:params:oauth:grant-type:pre-authorized_code"],
@@ -18,10 +22,15 @@
   "request_object_signing_alg_values_supported": ["ES256"],
   "request_parameter_supported": true,
   "request_uri_parameter_supported": true,
-  "token_endpoint_auth_methods_supported": ["none"],
+  "token_endpoint_auth_signing_alg_values_supported": ["ES256"],
+  "token_endpoint_auth_methods_supported": ["attest_jwt_client_auth"],
+  "client_assertion_types_supported": ["urn:ietf:params:oauth:client-assertion-type:jwt-client-attestation"],
+  "dpop_signing_alg_values_supported": ["ES256"],
   "request_authentication_methods_supported": {
-    "authorization_endpoint": ["request_object"]
+    "authorization_endpoint": ["request_object", "attest_jwt_client_auth"]
   },
+  "pushed_authorization_request_endpoint_auth_methods_supported": ["attest_jwt_client_auth"],
+  "pushed_authorization_request_endpoint_auth_signing_alg_values_supported": ["ES256"],
   "vp_formats_supported": {
     "jwt_vp": {
       "alg_values_supported": ["ES256"]
@@ -31,6 +40,7 @@
     }
   },
   "subject_syntax_types_supported": [
+    "urn:ietf:params:oauth:jwk-thumbprint",
     "did:key:jwk_jcs-pub",
     "did:ebsi:v1",
     "did:ebsi:v2",

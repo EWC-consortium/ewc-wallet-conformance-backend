@@ -89,8 +89,14 @@ export const ERROR_MESSAGES = {
 // Configuration constants for x509 routes
 export const CONFIG = {
   SERVER_URL: process.env.SERVER_URL || "http://localhost:3000",
-  CLIENT_ID: "x509_san_dns:dss.aegean.gr",
-  VERIFIER_ATTESTATION_CLIENT_ID: "verifier_attestation:dss.aegean.gr",
+  get CLIENT_ID() {
+    const hostname = new URL(this.SERVER_URL).hostname;
+    return `x509_san_dns:${hostname}`;
+  },
+  get VERIFIER_ATTESTATION_CLIENT_ID() {
+    const hostname = new URL(this.SERVER_URL).hostname;
+    return `verifier_attestation:${hostname}`;
+  },
   DEFAULT_RESPONSE_MODE: "direct_post",
   DEFAULT_NONCE_LENGTH: 16,
   QR_CONFIG: {
@@ -522,6 +528,7 @@ export const createCredentialOfferConfig = (credentialType, sessionId, includeTx
   // For authorization code flow, use issuer_state
   if (grantType === "authorization_code") {
     config.grants[grantType].issuer_state = sessionId;
+    config.grants[grantType].scope = credentialType
   } else {
     // For pre-authorized code flow, use pre-authorized_code
     config.grants[grantType]["pre-authorized_code"] = sessionId;
@@ -563,11 +570,23 @@ export const buildCodeFlowCredentialOfferUrl = (uuid, credentialType, client_id_
  * @param {string} credentialType - Credential type
  * @param {string} client_id_scheme - Client ID scheme
  * @param {boolean} includeCredentialType - Whether to include credential type in URL
+ * @param {string} urlScheme - Wallet invocation scheme (e.g., openid-credential-offer://, haip://)
  * @returns {string} Credential offer string
  */
-export const createCodeFlowCredentialOfferResponse = (uuid, credentialType, client_id_scheme, includeCredentialType = true) => {
-  const encodedCredentialOfferUri = buildCodeFlowCredentialOfferUrl(uuid, credentialType, client_id_scheme, includeCredentialType);
-  const credentialOffer = `openid-credential-offer://?credential_offer_uri=${encodedCredentialOfferUri}`;
+export const createCodeFlowCredentialOfferResponse = (
+  uuid,
+  credentialType,
+  client_id_scheme,
+  includeCredentialType = true,
+  urlScheme = URL_SCHEMES.STANDARD
+) => {
+  const encodedCredentialOfferUri = buildCodeFlowCredentialOfferUrl(
+    uuid,
+    credentialType,
+    client_id_scheme,
+    includeCredentialType
+  );
+  const credentialOffer = `${urlScheme}?credential_offer_uri=${encodedCredentialOfferUri}`;
   return credentialOffer;
 };
 
