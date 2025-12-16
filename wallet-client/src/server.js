@@ -495,8 +495,23 @@ async function discoverAuthorizationServerMetadata(authorizationServerBase, logS
       console.log("[as-meta]", url, "->", res.status); try { slog("[as-meta] fetch", { url, status: res.status }); } catch {}
       if (res.ok) { 
         console.log("[as-meta] selected:", url); 
+        let meta;
+        try {
+          meta = await res.json();
+        } catch (e) {
+          lastErr = "invalid_json: " + (e?.message || String(e));
+          continue;
+        }
+        try {
+          validateAuthorizationServerMetadata(meta);
+        } catch (e) {
+          console.error("[as-meta] metadata validation failed:", e?.message || e);
+          try { slog("[as-meta] validation_failed", { error: e?.message || String(e), meta }); } catch {}
+          lastErr = e?.message || String(e);
+          continue;
+        }
         try { slog("[as-meta] selected", { url }); } catch {}
-        return res.json(); 
+        return meta; 
       }
       lastErr = res.status;
     } catch (e) {
@@ -505,6 +520,70 @@ async function discoverAuthorizationServerMetadata(authorizationServerBase, logS
   }
   try { slog("[as-meta] failed", { lastErr }); } catch {}
   throw new Error(`AS metadata fetch error ${lastErr}`);
+}
+
+/**
+ * Basic HAIP-aligned sanity checks on the Authorization Server metadata.
+ * This is intentionally strict so the wallet-client will catch regressions
+ * similar to the ones that broke interoperability with the EUDI Wallet.
+ */
+function validateAuthorizationServerMetadata(meta) {
+  if (!meta || typeof meta !== "object") {
+    throw new Error("invalid_as_metadata: metadata must be a JSON object");
+  }
+
+  // token_endpoint is mandatory for any usable AS
+  if (!meta.token_endpoint || typeof meta.token_endpoint !== "string") {
+    throw new Error("invalid_as_metadata: missing required 'token_endpoint'");
+  }
+
+  const methods = meta.token_endpoint_auth_methods_supported;
+  if (!Array.isArray(methods) || methods.length === 0) {
+    throw new Error("invalid_as_metadata: 'token_endpoint_auth_methods_supported' must be a non-empty array");
+  }
+
+  // For our HAIP / EUDI interoperability we rely on the AS supporting BOTH:
+  // - "public"                  : for non-attested / dev wallets
+  // - "attest_jwt_client_auth"  : for HAIP-compliant attested wallets
+  const requiredMethods = ["public", "attest_jwt_client_auth"];
+  for (const m of requiredMethods) {
+    if (!methods.includes(m)) {
+      throw new Error(
+        `invalid_as_metadata: 'token_endpoint_auth_methods_supported' must include '${m}' (found: ${JSON.stringify(methods)})`
+      );
+    }
+  }
+
+  // Ensure basic client attestation algorithm advertising is present and supports ES256,
+  // matching what the EUDI reference issuer exposes.
+  const attestationAlgs = meta.client_attestation_signing_alg_values_supported;
+  const attestationPopAlgs = meta.client_attestation_pop_signing_alg_values_supported;
+  if (!Array.isArray(attestationAlgs) || !attestationAlgs.includes("ES256")) {
+    throw new Error(
+      "invalid_as_metadata: 'client_attestation_signing_alg_values_supported' must include 'ES256'"
+    );
+  }
+  if (!Array.isArray(attestationPopAlgs) || !attestationPopAlgs.includes("ES256")) {
+    throw new Error(
+      "invalid_as_metadata: 'client_attestation_pop_signing_alg_values_supported' must include 'ES256'"
+    );
+  }
+
+  // We expect at least the "openid" scope to be advertised. Additional scopes are fine.
+  const scopes = meta.scopes_supported;
+  if (!Array.isArray(scopes) || !scopes.includes("openid")) {
+    throw new Error(
+      "invalid_as_metadata: 'scopes_supported' must be an array including 'openid'"
+    );
+  }
+
+  // Authorization Code grant is required for code flow tests.
+  const grants = meta.grant_types_supported;
+  if (Array.isArray(grants) && !grants.includes("authorization_code")) {
+    throw new Error(
+      "invalid_as_metadata: 'grant_types_supported' must include 'authorization_code' for authorization code flows"
+    );
+  }
 }
 
 function makeTxCode(cfg) {
