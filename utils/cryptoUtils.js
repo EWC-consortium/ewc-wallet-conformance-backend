@@ -161,7 +161,8 @@ export async function buildVpRequestJWT(
   wallet_nonce = null,
   wallet_metadata = null,
   va_jwt = null, // Optional Verifier Attestation JWT for verifier_attestation scheme
-  state = null // Add state parameter (last param to match test ordering)
+  state = null, // Add state parameter (last param to match test ordering)
+  jar_alg = null // Optional JAR signature algorithm override (e.g., 'ES256') for x509 schemes
 ) {
   if (!nonce) nonce = generateNonce(16);
   if (!state) {
@@ -296,9 +297,20 @@ export async function buildVpRequestJWT(
     effectiveClientId.startsWith("x509_san_dns:") ||
     effectiveClientId.startsWith("x509_san_uri:")
   ) {
-    privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
+    // Allow overriding the default RS256 JAR signature with ES256 using EC keys
+    const useEs256 =
+      typeof jar_alg === "string" && jar_alg.toUpperCase() === "ES256";
+
+    if (useEs256) {
+      privateKey = fs.readFileSync("./x509EC/ec_private_pkcs8.key", "utf8");
+    } else {
+      privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
+    }
+
     const certificate = fs.readFileSync(
-      "./x509/client_certificate.crt",
+      useEs256
+        ? "./x509EC/client_certificate.crt"
+        : "./x509/client_certificate.crt",
       "utf8"
     );
     // Convert certificate to Base64 without headers
@@ -308,18 +320,29 @@ export async function buildVpRequestJWT(
       .replace(/\s+/g, "");
 
     const header = {
-      alg: "RS256",
+      alg: useEs256 ? "ES256" : "RS256",
       typ: "oauth-authz-req+jwt",
       x5c: [certBase64],
     };
 
     signedJwt = await new jose.SignJWT(jwtPayload)
       .setProtectedHeader(header)
-      .sign(await jose.importPKCS8(privateKey, "RS256"));
+      .sign(await jose.importPKCS8(privateKey, useEs256 ? "ES256" : "RS256"));
   } else if (effectiveClientId.startsWith("x509_hash:")) {
-    privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
+    // Allow overriding the default RS256 JAR signature with ES256 using EC keys
+    const useEs256 =
+      typeof jar_alg === "string" && jar_alg.toUpperCase() === "ES256";
+
+    if (useEs256) {
+      privateKey = fs.readFileSync("./x509EC/ec_private_pkcs8.key", "utf8");
+    } else {
+      privateKey = fs.readFileSync("./x509/client_private_pkcs8.key", "utf8");
+    }
+
     const certificate = fs.readFileSync(
-      "./x509/client_certificate.crt",
+      useEs256
+        ? "./x509EC/client_certificate.crt"
+        : "./x509/client_certificate.crt",
       "utf8"
     );
     // Compute Base64URL-encoded SHA-256 of leaf cert (DER)
@@ -338,14 +361,14 @@ export async function buildVpRequestJWT(
     }
 
     const header = {
-      alg: "RS256",
+      alg: useEs256 ? "ES256" : "RS256",
       typ: "oauth-authz-req+jwt",
       x5c: [certBase64],
     };
 
     signedJwt = await new jose.SignJWT(jwtPayload)
       .setProtectedHeader(header)
-      .sign(await jose.importPKCS8(privateKey, "RS256"));
+      .sign(await jose.importPKCS8(privateKey, useEs256 ? "ES256" : "RS256"));
   } else if (effectiveClientId.startsWith("did:")) {
     // Check if this is a did:jwk identifier
     if (effectiveClientId.startsWith("did:jwk:")) {

@@ -98,6 +98,9 @@ export const CONFIG = {
     return `verifier_attestation:${hostname}`;
   },
   DEFAULT_RESPONSE_MODE: "direct_post",
+  // Default JAR signature algorithm for VP requests (x509 flows)
+  // RS256 is kept as default for backward compatibility; can be overridden per-request.
+  DEFAULT_JAR_ALG: "ES256",
   DEFAULT_NONCE_LENGTH: 16,
   QR_CONFIG: {
     type: "png",
@@ -756,6 +759,7 @@ export async function generateVPRequest(params) {
   const {
     sessionId,
     responseMode,
+    jarAlg,
     presentationDefinition,
     clientId,
     clientMetadata,
@@ -769,6 +773,7 @@ export async function generateVPRequest(params) {
 
   await logInfo(sessionId, "Starting VP request generation in routeUtils", {
     responseMode,
+    jarAlg: jarAlg || CONFIG.DEFAULT_JAR_ALG,
     clientId,
     hasDcqlQuery: !!dcqlQuery,
     hasTransactionData: !!transactionData,
@@ -791,6 +796,7 @@ export async function generateVPRequest(params) {
     nonce,
     response_mode: responseMode,
     state,
+    jar_alg: jarAlg || CONFIG.DEFAULT_JAR_ALG,
   };
 
   if (presentationDefinition) {
@@ -837,7 +843,8 @@ export async function generateVPRequest(params) {
     responseMode,
     undefined,
     undefined,
-    state
+    state,
+    jarAlg || CONFIG.DEFAULT_JAR_ALG
   );
   await logInfo(sessionId, "VP request JWT built successfully");
 
@@ -930,7 +937,8 @@ export async function processVPRequest(params) {
       walletNonce,
       walletMetadata,
       null, // va_jwt - Verifier Attestation JWT (not used in response processing)
-      vpSession.state
+      vpSession.state,
+      vpSession.jar_alg || CONFIG.DEFAULT_JAR_ALG
     );
     
     await logInfo(sessionId, "VP request JWT built successfully", {

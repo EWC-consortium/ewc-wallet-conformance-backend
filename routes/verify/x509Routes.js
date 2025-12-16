@@ -66,15 +66,18 @@ x509Router.get("/generateVPRequest", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
+    const jarAlg = req.query.jar_alg || CONFIG.DEFAULT_JAR_ALG;
     
     await logInfo(sessionId, "Starting VP request generation", { 
       endpoint: "/generateVPRequest", 
-      responseMode 
+      responseMode,
+      jarAlg
     });
 
     const result = await generateVPRequest({
       sessionId,
       responseMode,
+      jarAlg,
       presentationDefinition,
       clientId: CONFIG.CLIENT_ID,
       clientMetadata,
@@ -100,15 +103,18 @@ x509Router.get("/generateVPRequestGet", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
+    const jarAlg = req.query.jar_alg || CONFIG.DEFAULT_JAR_ALG;
     
     await logInfo(sessionId, "Starting VP request generation (GET method)", { 
       endpoint: "/generateVPRequestGet", 
-      responseMode 
+      responseMode,
+      jarAlg
     });
 
     const result = await generateVPRequest({
       sessionId,
       responseMode,
+      jarAlg,
       presentationDefinition,
       clientId: CONFIG.CLIENT_ID,
       clientMetadata,
@@ -134,15 +140,18 @@ x509Router.get("/generateVPRequestDCQL", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
+    const jarAlg = req.query.jar_alg || CONFIG.DEFAULT_JAR_ALG;
     
     await logInfo(sessionId, "Starting VP request generation with DCQL", { 
       endpoint: "/generateVPRequestDCQL", 
-      responseMode 
+      responseMode,
+      jarAlg
     });
 
     const result = await generateVPRequest({
       sessionId,
       responseMode,
+      jarAlg,
       presentationDefinition: null,
       clientId: CONFIG.CLIENT_ID,
       clientMetadata,
@@ -169,15 +178,18 @@ x509Router.get("/generateVPRequestDCQLGET", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
+    const jarAlg = req.query.jar_alg || CONFIG.DEFAULT_JAR_ALG;
     
     await logInfo(sessionId, "Starting VP request generation with DCQL (GET method)", { 
       endpoint: "/generateVPRequestDCQLGET", 
-      responseMode 
+      responseMode,
+      jarAlg
     });
 
     const result = await generateVPRequest({
       sessionId,
       responseMode,
+      jarAlg,
       presentationDefinition: null,
       clientId: CONFIG.CLIENT_ID,
       clientMetadata,
@@ -204,10 +216,12 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
   try {
     const sessionId = req.query.sessionId || uuidv4();
     const responseMode = req.query.response_mode || CONFIG.DEFAULT_RESPONSE_MODE;
+    const jarAlg = req.query.jar_alg || CONFIG.DEFAULT_JAR_ALG;
     
     await logInfo(sessionId, "Starting VP request generation with transaction data", { 
       endpoint: "/generateVPRequestTransaction", 
-      responseMode 
+      responseMode,
+      jarAlg
     });
 
     const transactionDataObj = createTransactionData(presentationDefinition);
@@ -217,6 +231,7 @@ x509Router.get("/generateVPRequestTransaction", async (req, res) => {
     const result = await generateVPRequest({
       sessionId,
       responseMode,
+      jarAlg,
       presentationDefinition: null,
       clientId: CONFIG.CLIENT_ID,
       clientMetadata,
